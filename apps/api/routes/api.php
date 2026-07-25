@@ -1,37 +1,25 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
-    Route::get('/health', function () {
-        try {
-            DB::select('SELECT 1');
-
+    Route::get(
+        '/health',
+        function (): JsonResponse {
             return response()->json([
                 'status' => 'ok',
-                'application' => 'Samarakoon Agricultural POS API',
-                'shop' => 'Samarakoon',
-                'database' => 'connected',
-                'version' => '0.2.0',
+                'application' => 'Samarakoon Agro POS API',
+                'timestamp' => now()->toISOString(),
             ]);
-        } catch (\Throwable $exception) {
-            return response()->json([
-                'status' => 'error',
-                'application' => 'Samarakoon Agricultural POS API',
-                'shop' => 'Samarakoon',
-                'database' => 'disconnected',
-                'message' => $exception->getMessage(),
-            ], 503);
-        }
-    });
+        },
+    );
 
     Route::post(
         '/auth/login',
         [AuthController::class, 'login'],
-    )->middleware('throttle:5,1');
+    )->middleware('throttle:10,1');
 
     Route::middleware('auth:sanctum')
         ->group(function (): void {
@@ -45,26 +33,30 @@ Route::prefix('v1')->group(function (): void {
                 [AuthController::class, 'logout'],
             );
 
-            Route::get(
-                '/admin/access-check',
-                function (Request $request) {
-                    return response()->json([
-                        'message' => 'Admin access confirmed.',
-                        'user' => $request->user(),
-                    ]);
-                },
-            )->middleware('role:admin');
+            Route::middleware('role:admin')
+                ->prefix('admin')
+                ->group(function (): void {
+                    Route::get(
+                        '/access-check',
+                        function (): JsonResponse {
+                            return response()->json([
+                                'message' => 'Admin access confirmed.',
+                            ]);
+                        },
+                    );
+                });
 
-            Route::get(
-                '/cashier/access-check',
-                function (Request $request) {
-                    return response()->json([
-                        'message' => 'POS access confirmed.',
-                        'user' => $request->user(),
-                    ]);
-                },
-            )->middleware(
-                'role:admin,cashier',
-            );
+            Route::middleware('role:admin,cashier')
+                ->prefix('cashier')
+                ->group(function (): void {
+                    Route::get(
+                        '/access-check',
+                        function (): JsonResponse {
+                            return response()->json([
+                                'message' => 'Cashier access confirmed.',
+                            ]);
+                        },
+                    );
+                });
         });
 });

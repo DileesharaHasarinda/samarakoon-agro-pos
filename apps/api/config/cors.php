@@ -1,10 +1,6 @@
 <?php
 
 return [
-    /*
-     * These settings are suitable for local development
-     * with Electron and Vite.
-     */
     'paths' => [
         'api/*',
         'sanctum/csrf-cookie',
@@ -28,9 +24,5 @@ return [
 
     'max_age' => 0,
 
-    /*
-     * This authentication implementation uses
-     * bearer tokens instead of cookies.
-     */
     'supports_credentials' => false,
 ];

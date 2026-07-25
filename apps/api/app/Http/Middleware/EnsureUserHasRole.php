@@ -2,7 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -15,16 +17,11 @@ class EnsureUserHasRole
     ): Response {
         $user = $request->user();
 
-        if ($user === null) {
-            return response()->json([
+        if (! $user instanceof User) {
+            return new JsonResponse([
                 'message' => 'Unauthenticated.',
             ], 401);
         }
-
-        $allowedRoles = array_map(
-            static fn(string $role): string => strtolower($role),
-            $allowedRoles,
-        );
 
         if (
             ! in_array(
@@ -33,7 +30,7 @@ class EnsureUserHasRole
                 true,
             )
         ) {
-            return response()->json([
+            return new JsonResponse([
                 'message' => 'You do not have permission to access this resource.',
             ], 403);
         }

@@ -15,11 +15,9 @@ class UserSeeder extends Seeder
                 'username' => 'admin',
             ],
             [
-                'name' => 'Samarakoon Owner',
-                'email' => 'owner@samarakoon.lk',
-                'password' => Hash::make(
-                    'Admin@12345',
-                ),
+                'name' => 'System Administrator',
+                'email' => 'admin@samarakoon.local',
+                'password' => Hash::make('Admin@12345'),
                 'role' => User::ROLE_ADMIN,
                 'is_active' => true,
             ],
@@ -30,11 +28,9 @@ class UserSeeder extends Seeder
                 'username' => 'cashier',
             ],
             [
-                'name' => 'Samarakoon Cashier',
-                'email' => 'cashier@samarakoon.lk',
-                'password' => Hash::make(
-                    'Cashier@12345',
-                ),
+                'name' => 'Main Cashier',
+                'email' => 'cashier@samarakoon.local',
+                'password' => Hash::make('Cashier@12345'),
                 'role' => User::ROLE_CASHIER,
                 'is_active' => true,
             ],

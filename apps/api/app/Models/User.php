@@ -17,6 +17,9 @@ class User extends Authenticatable
 
     public const ROLE_CASHIER = 'cashier';
 
+    /**
+     * @var array<int, string>
+     */
     protected $fillable = [
         'name',
         'username',
@@ -27,18 +30,24 @@ class User extends Authenticatable
         'last_login_at',
     ];
 
+    /**
+     * @var array<int, string>
+     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
+    /**
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
+            'email_verified_at' => 'datetime',
         ];
     }
 

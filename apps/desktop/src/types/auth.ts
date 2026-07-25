@@ -4,7 +4,7 @@ export interface AuthUser {
   id: number;
   name: string;
   username: string;
-  email: string;
+  email: string | null;
   role: UserRole;
   is_active: boolean;
   last_login_at: string | null;
@@ -18,10 +18,18 @@ export interface LoginCredentials {
 export interface LoginResponse {
   message: string;
   token: string;
-  token_type: "Bearer";
+  token_type: string;
   user: AuthUser;
 }
 
 export interface CurrentUserResponse {
   user: AuthUser;
+}
+
+export interface LogoutResponse {
+  message: string;
+}
+
+export interface ValidationErrors {
+  [field: string]: string[] | undefined;
 }

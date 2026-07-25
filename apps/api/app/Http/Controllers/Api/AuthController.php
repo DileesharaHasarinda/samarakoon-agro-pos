@@ -48,8 +48,8 @@ class AuthController extends Controller
         }
 
         /*
-         * Remove previous tokens so each user has
-         * only one active POS session.
+         * Remove previous tokens so one user account
+         * has only one active POS session.
          */
         $user->tokens()->delete();
 
@@ -117,6 +117,9 @@ class AuthController extends Controller
         ]);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function userData(
         User $user,
     ): array {

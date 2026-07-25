@@ -1,23 +1,23 @@
 import {
     useState,
-    type FormEvent,
+} from 'react';
+
+import type {
+    FormEvent,
 } from 'react';
 
 import {
     useNavigate,
 } from 'react-router';
 
-import {
-    useAuth,
-} from '../auth/AuthContext';
+import { useAuth }
+    from '../auth/AuthContext';
 
-import {
-    dashboardPathForRole,
-} from '../auth/ProtectedRoute';
+import { getRoleHome }
+    from '../auth/roleHome';
 
-import {
-    ApiError,
-} from '../lib/api';
+import { ApiError }
+    from '../lib/api';
 
 export default function LoginPage() {
     const navigate = useNavigate();
@@ -37,11 +37,6 @@ export default function LoginPage() {
     ] = useState('');
 
     const [
-        showPassword,
-        setShowPassword,
-    ] = useState(false);
-
-    const [
         errorMessage,
         setErrorMessage,
     ] = useState('');
@@ -51,181 +46,212 @@ export default function LoginPage() {
         setIsSubmitting,
     ] = useState(false);
 
-    const handleSubmit = async (
-        event: FormEvent<HTMLFormElement>,
-    ) => {
-        event.preventDefault();
+    const handleSubmit =
+        async (
+            event: FormEvent<HTMLFormElement>,
+        ): Promise<void> => {
+            event.preventDefault();
 
-        setErrorMessage('');
-        setIsSubmitting(true);
+            if (isSubmitting) {
+                return;
+            }
 
-        try {
-            const authenticatedUser =
-                await login({
+            setErrorMessage('');
+            setIsSubmitting(true);
+
+            try {
+                const user = await login({
                     username,
                     password,
                 });
 
-            navigate(
-                dashboardPathForRole(
-                    authenticatedUser.role,
-                ),
-                {
-                    replace: true,
-                },
-            );
-        } catch (error: unknown) {
-            if (error instanceof ApiError) {
-                setErrorMessage(error.message);
-            } else {
-                setErrorMessage(
-                    'An unexpected login error occurred.',
+                navigate(
+                    getRoleHome(user.role),
+                    {
+                        replace: true,
+                    },
                 );
+            } catch (error) {
+                if (error instanceof ApiError) {
+                    const usernameError =
+                        error.errors
+                            ?.username
+                        ?.[0];
+
+                    setErrorMessage(
+                        usernameError ??
+                        error.message,
+                    );
+                } else {
+                    setErrorMessage(
+                        'An unexpected error occurred while logging in.',
+                    );
+                }
+            } finally {
+                setIsSubmitting(false);
             }
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+        };
 
     return (
-        <main className="auth-page">
-            <section className="auth-shell">
-                <aside className="brand-panel">
-                    <div className="brand-logo">
+        <main className="login-page">
+            <section className="login-presentation">
+                <div className="login-brand">
+                    <div className="login-brand-mark">
                         S
                     </div>
 
-                    <p className="brand-eyebrow">
+                    <div>
+                        <strong>Samarakoon</strong>
+                        <span>Agro POS System</span>
+                    </div>
+                </div>
+
+                <div className="login-presentation-content">
+                    <span className="login-tag">
                         Agricultural Retail Management
+                    </span>
+
+                    <h1>
+                        Manage your agro business
+                        from one reliable system.
+                    </h1>
+
+                    <p>
+                        Sales, products, purchases,
+                        stock, suppliers, customers
+                        and reports in one desktop
+                        application.
                     </p>
 
-                    <h1>Samarakoon POS</h1>
+                    <div className="login-feature-grid">
+                        <article>
+                            <strong>Fast sales</strong>
+                            <span>
+                                Simple cashier workflow
+                            </span>
+                        </article>
 
-                    <p className="brand-description">
-                        Manage agricultural product sales,
-                        inventory, customers and business
-                        operations from one secure system.
-                    </p>
+                        <article>
+                            <strong>Stock control</strong>
+                            <span>
+                                Monitor agro inventory
+                            </span>
+                        </article>
 
-                    <div className="brand-feature">
-                        <span>✓</span>
-                        Secure Admin and Cashier access
+                        <article>
+                            <strong>Secure access</strong>
+                            <span>
+                                Admin and cashier roles
+                            </span>
+                        </article>
+
+                        <article>
+                            <strong>Clear reports</strong>
+                            <span>
+                                Understand performance
+                            </span>
+                        </article>
                     </div>
+                </div>
 
-                    <div className="brand-feature">
-                        <span>✓</span>
-                        Role-based system permissions
-                    </div>
+                <small>
+                    Samarakoon Agro POS
+                </small>
+            </section>
 
-                    <div className="brand-feature">
-                        <span>✓</span>
-                        Connected to the Laravel API
-                    </div>
-                </aside>
+            <section className="login-form-section">
+                <div className="login-card">
+                    <header className="login-card-header">
+                        <span>Welcome back</span>
 
-                <section className="login-panel">
-                    <div className="login-heading">
-                        <p className="login-eyebrow">
-                            Secure access
-                        </p>
-
-                        <h2>Sign in</h2>
+                        <h2>Sign in to continue</h2>
 
                         <p>
-                            Enter your Samarakoon POS
-                            account details.
+                            Enter your username and
+                            password to access the POS.
                         </p>
-                    </div>
-
-                    {errorMessage && (
-                        <div
-                            className="error-alert"
-                            role="alert"
-                        >
-                            {errorMessage}
-                        </div>
-                    )}
+                    </header>
 
                     <form
                         className="login-form"
-                        onSubmit={handleSubmit}
+                        onSubmit={(event) => {
+                            void handleSubmit(event);
+                        }}
                     >
-                        <label className="form-field">
+                        {errorMessage && (
+                            <div
+                                className="form-alert"
+                                role="alert"
+                            >
+                                {errorMessage}
+                            </div>
+                        )}
+
+                        <label>
                             <span>Username</span>
 
                             <input
                                 type="text"
                                 value={username}
+                                autoComplete="username"
+                                placeholder="Enter username"
+                                disabled={isSubmitting}
                                 onChange={(event) => {
                                     setUsername(
                                         event.target.value,
                                     );
                                 }}
-                                placeholder="Enter your username"
-                                autoComplete="username"
-                                autoFocus
-                                disabled={isSubmitting}
+                                required
                             />
                         </label>
 
-                        <label className="form-field">
+                        <label>
                             <span>Password</span>
 
-                            <div className="password-input">
-                                <input
-                                    type={
-                                        showPassword
-                                            ? 'text'
-                                            : 'password'
-                                    }
-                                    value={password}
-                                    onChange={(event) => {
-                                        setPassword(
-                                            event.target.value,
-                                        );
-                                    }}
-                                    placeholder="Enter your password"
-                                    autoComplete="current-password"
-                                    disabled={isSubmitting}
-                                />
-
-                                <button
-                                    type="button"
-                                    className="password-toggle"
-                                    onClick={() => {
-                                        setShowPassword(
-                                            (current) => !current,
-                                        );
-                                    }}
-                                    disabled={isSubmitting}
-                                >
-                                    {showPassword
-                                        ? 'Hide'
-                                        : 'Show'}
-                                </button>
-                            </div>
+                            <input
+                                type="password"
+                                value={password}
+                                autoComplete="current-password"
+                                placeholder="Enter password"
+                                disabled={isSubmitting}
+                                onChange={(event) => {
+                                    setPassword(
+                                        event.target.value,
+                                    );
+                                }}
+                                required
+                            />
                         </label>
 
                         <button
                             type="submit"
-                            className="primary-button"
-                            disabled={
-                                isSubmitting ||
-                                !username.trim() ||
-                                !password
-                            }
+                            className="primary-button login-button"
+                            disabled={isSubmitting}
                         >
                             {isSubmitting
                                 ? 'Signing in...'
-                                : 'Sign in to POS'}
+                                : 'Sign In'}
                         </button>
                     </form>
 
-                    <p className="login-footer">
-                        Samarakoon Agricultural POS
-                        System
-                    </p>
-                </section>
+                    <div className="test-credentials">
+                        <strong>
+                            Development test accounts
+                        </strong>
+
+                        <div>
+                            <span>
+                                Admin: admin /
+                                Admin@12345
+                            </span>
+
+                            <span>
+                                Cashier: cashier /
+                                Cashier@12345
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </section>
         </main>
     );

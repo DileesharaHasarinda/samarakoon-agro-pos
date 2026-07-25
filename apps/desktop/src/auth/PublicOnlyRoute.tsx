@@ -6,22 +6,13 @@ import {
 import LoadingScreen
     from '../components/LoadingScreen';
 
-import type { UserRole }
-    from '../types/auth';
+import { useAuth }
+    from './AuthContext';
 
 import { getRoleHome }
     from './roleHome';
 
-import { useAuth }
-    from './AuthContext';
-
-interface ProtectedRouteProps {
-    allowedRoles: UserRole[];
-}
-
-export default function ProtectedRoute({
-    allowedRoles,
-}: ProtectedRouteProps) {
+export default function PublicOnlyRoute() {
     const {
         user,
         isLoading,
@@ -33,21 +24,8 @@ export default function ProtectedRoute({
     }
 
     if (
-        !isAuthenticated ||
-        !user
-    ) {
-        return (
-            <Navigate
-                to="/login"
-                replace
-            />
-        );
-    }
-
-    if (
-        !allowedRoles.includes(
-            user.role,
-        )
+        isAuthenticated &&
+        user
     ) {
         return (
             <Navigate

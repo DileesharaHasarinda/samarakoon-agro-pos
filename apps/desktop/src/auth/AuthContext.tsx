@@ -5,73 +5,103 @@ import {
     useEffect,
     useMemo,
     useState,
-    type ReactNode,
 } from 'react';
 
+import type {
+    PropsWithChildren,
+} from 'react';
+
+import { apiRequest }
+    from '../lib/api';
+
 import {
-    apiRequest,
-    authTokenStorage,
-} from '../lib/api';
+    clearAuthToken,
+    getAuthToken,
+    saveAuthToken,
+} from '../lib/authStorage';
 
 import type {
     AuthUser,
     CurrentUserResponse,
     LoginCredentials,
     LoginResponse,
+    LogoutResponse,
+    UserRole,
 } from '../types/auth';
 
 interface AuthContextValue {
     user: AuthUser | null;
+    token: string | null;
     isLoading: boolean;
+    isAuthenticated: boolean;
     login: (
         credentials: LoginCredentials,
     ) => Promise<AuthUser>;
     logout: () => Promise<void>;
-    refreshUser: () => Promise<void>;
-}
-
-interface AuthProviderProps {
-    children: ReactNode;
+    hasRole: (
+        allowedRoles: UserRole[],
+    ) => boolean;
 }
 
 const AuthContext =
-    createContext<AuthContextValue | undefined>(
-        undefined,
-    );
+    createContext<
+        AuthContextValue | undefined
+    >(undefined);
 
 export function AuthProvider({
     children,
-}: AuthProviderProps) {
+}: PropsWithChildren) {
     const [
         user,
         setUser,
     ] = useState<AuthUser | null>(null);
 
     const [
+        token,
+        setToken,
+    ] = useState<string | null>(
+        getAuthToken,
+    );
+
+    const [
         isLoading,
         setIsLoading,
     ] = useState(true);
 
-    const refreshUser =
+    const restoreSession =
         useCallback(async (): Promise<void> => {
-            const token = authTokenStorage.get();
+            const savedToken =
+                getAuthToken();
 
-            if (!token) {
+            if (!savedToken) {
                 setUser(null);
+                setToken(null);
                 setIsLoading(false);
 
                 return;
             }
 
+            setToken(savedToken);
+
             try {
                 const response =
-                    await apiRequest<CurrentUserResponse>(
-                        '/auth/me',
+                    await apiRequest<
+                        CurrentUserResponse
+                    >('/auth/me', {
+                        method: 'GET',
+                        token: savedToken,
+                    });
+
+                if (!response.user.is_active) {
+                    throw new Error(
+                        'User account is inactive.',
                     );
+                }
 
                 setUser(response.user);
             } catch {
-                authTokenStorage.clear();
+                clearAuthToken();
+                setToken(null);
                 setUser(null);
             } finally {
                 setIsLoading(false);
@@ -79,8 +109,8 @@ export function AuthProvider({
         }, []);
 
     useEffect(() => {
-        void refreshUser();
-    }, [refreshUser]);
+        void restoreSession();
+    }, [restoreSession]);
 
     const login = useCallback(
         async (
@@ -93,7 +123,7 @@ export function AuthProvider({
                         method: 'POST',
                         body: JSON.stringify({
                             username:
-                                credentials.username.trim(),
+                                credentials.username,
                             password:
                                 credentials.password,
                             device_name:
@@ -102,7 +132,9 @@ export function AuthProvider({
                     },
                 );
 
-            authTokenStorage.set(response.token);
+            saveAuthToken(response.token);
+
+            setToken(response.token);
             setUser(response.user);
 
             return response.user;
@@ -112,49 +144,77 @@ export function AuthProvider({
 
     const logout =
         useCallback(async (): Promise<void> => {
+            const activeToken =
+                token ?? getAuthToken();
+
             try {
-                if (authTokenStorage.get()) {
-                    await apiRequest<{
-                        message: string;
-                    }>(
+                if (activeToken) {
+                    await apiRequest<LogoutResponse>(
                         '/auth/logout',
                         {
                             method: 'POST',
+                            token: activeToken,
                         },
                     );
                 }
             } finally {
-                authTokenStorage.clear();
+                clearAuthToken();
+                setToken(null);
                 setUser(null);
             }
-        }, []);
+        }, [token]);
 
-    const value = useMemo(
-        () => ({
-            user,
-            isLoading,
-            login,
-            logout,
-            refreshUser,
-        }),
-        [
-            user,
-            isLoading,
-            login,
-            logout,
-            refreshUser,
-        ],
+    const hasRole = useCallback(
+        (
+            allowedRoles: UserRole[],
+        ): boolean => {
+            if (!user) {
+                return false;
+            }
+
+            return allowedRoles.includes(
+                user.role,
+            );
+        },
+        [user],
     );
 
+    const value =
+        useMemo<AuthContextValue>(
+            () => ({
+                user,
+                token,
+                isLoading,
+                isAuthenticated:
+                    user !== null &&
+                    token !== null,
+                login,
+                logout,
+                hasRole,
+            }),
+            [
+                user,
+                token,
+                isLoading,
+                login,
+                logout,
+                hasRole,
+            ],
+        );
+
     return (
-        <AuthContext.Provider value={value}>
+        <AuthContext.Provider
+            value={value}
+        >
             {children}
         </AuthContext.Provider>
     );
 }
 
-export function useAuth(): AuthContextValue {
-    const context = useContext(AuthContext);
+export function useAuth():
+    AuthContextValue {
+    const context =
+        useContext(AuthContext);
 
     if (!context) {
         throw new Error(

@@ -22,8 +22,6 @@ return Application::configure(
         },
     )
     ->withExceptions(
-        function (Exceptions $exceptions): void {
-            //
-        },
+        function (Exceptions $exceptions): void {},
     )
     ->create();

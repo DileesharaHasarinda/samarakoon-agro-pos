@@ -1,15 +1,14 @@
-interface LoadingScreenProps {
-    message?: string;
-}
-
-export default function LoadingScreen({
-    message = 'Loading Samarakoon POS...',
-}: LoadingScreenProps) {
+export default function LoadingScreen() {
     return (
         <main className="loading-screen">
-            <div className="loading-spinner" />
+            <div
+                className="loading-spinner"
+                aria-hidden="true"
+            />
 
-            <p>{message}</p>
+            <h1>Samarakoon Agro POS</h1>
+
+            <p>Checking your session...</p>
         </main>
     );
 }

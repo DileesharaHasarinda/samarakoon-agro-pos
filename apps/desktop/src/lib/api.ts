@@ -1,23 +1,26 @@
+import { API_BASE_URL } from "../config/app";
+
+import type { ValidationErrors } from "../types/auth";
+
 interface ApiErrorPayload {
   message?: string;
-  errors?: Record<string, string[]>;
+  errors?: ValidationErrors;
 }
 
-const TOKEN_STORAGE_KEY = "samarakoon_pos_access_token";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1"
-).replace(/\/+$/, "");
+interface ApiRequestOptions extends Omit<RequestInit, "headers"> {
+  token?: string | null;
+  headers?: HeadersInit;
+}
 
 export class ApiError extends Error {
-  readonly status: number;
+  public readonly status: number;
 
-  readonly errors: Record<string, string[]> | undefined;
+  public readonly errors?: ValidationErrors;
 
-  constructor(
+  public constructor(
     message: string,
     status: number,
-    errors?: Record<string, string[]>
+    errors?: ValidationErrors
   ) {
     super(message);
 
@@ -27,93 +30,53 @@ export class ApiError extends Error {
   }
 }
 
-export const authTokenStorage = {
-  get(): string | null {
-    return window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
-  },
-
-  set(token: string): void {
-    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-  },
-
-  clear(): void {
-    window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-  },
-};
-
-function buildUrl(path: string): string {
-  const normalisedPath = path.startsWith("/") ? path : `/${path}`;
-
-  return `${API_BASE_URL}${normalisedPath}`;
-}
-
-function findErrorMessage(
-  payload: ApiErrorPayload | null,
-  fallback: string
-): string {
-  if (payload?.errors) {
-    const firstError = Object.values(payload.errors).flat().find(Boolean);
-
-    if (firstError) {
-      return firstError;
-    }
-  }
-
-  return payload?.message || fallback;
-}
-
 export async function apiRequest<T>(
   path: string,
-  options: RequestInit = {}
+  options: ApiRequestOptions = {}
 ): Promise<T> {
-  const headers = new Headers(options.headers);
+  const { token, headers: providedHeaders, ...requestOptions } = options;
+
+  const headers = new Headers(providedHeaders);
 
   headers.set("Accept", "application/json");
 
-  if (options.body && !(options.body instanceof FormData)) {
+  if (requestOptions.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-
-  const token = authTokenStorage.get();
 
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  const normalisedPath = path.startsWith("/") ? path : `/${path}`;
+
   let response: Response;
 
   try {
-    response = await fetch(buildUrl(path), {
-      ...options,
+    response = await fetch(`${API_BASE_URL}${normalisedPath}`, {
+      ...requestOptions,
       headers,
     });
   } catch {
-    throw new ApiError("Cannot connect to the Samarakoon POS server.", 0);
+    throw new ApiError(
+      "Unable to connect to the Samarakoon POS API. Make sure the Laravel server is running.",
+      0
+    );
   }
 
-  const responseText = await response.text();
+  const contentType = response.headers.get("content-type");
 
-  let payload: unknown = null;
+  let payload: ApiErrorPayload | T | null = null;
 
-  if (responseText) {
-    try {
-      payload = JSON.parse(responseText);
-    } catch {
-      payload = responseText;
-    }
+  if (contentType?.includes("application/json")) {
+    payload = await response.json().catch(() => null);
   }
 
   if (!response.ok) {
-    const errorPayload =
-      typeof payload === "object" && payload !== null
-        ? (payload as ApiErrorPayload)
-        : null;
+    const errorPayload = payload as ApiErrorPayload | null;
 
     throw new ApiError(
-      findErrorMessage(
-        errorPayload,
-        `Request failed with status ${response.status}.`
-      ),
+      errorPayload?.message ?? `Request failed with status ${response.status}.`,
       response.status,
       errorPayload?.errors
     );
