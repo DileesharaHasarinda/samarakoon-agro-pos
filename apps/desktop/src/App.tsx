@@ -28,8 +28,14 @@ import AdminDashboardPage
 import CategoriesPage
     from './pages/admin/CategoriesPage';
 
+import InventoryPage
+    from './pages/admin/InventoryPage';
+
 import ProductsPage
     from './pages/admin/ProductsPage';
+
+import PurchasesPage
+    from './pages/admin/PurchasesPage';
 
 import SuppliersPage
     from './pages/admin/SuppliersPage';
@@ -39,6 +45,9 @@ import CashierDashboardPage
 
 import ModulePlaceholderPage
     from './pages/shared/ModulePlaceholderPage';
+
+import PosPage
+    from './pages/shared/PosPage';
 
 export default function App() {
     return (
@@ -82,12 +91,7 @@ export default function App() {
 
                     <Route
                         path="pos"
-                        element={
-                            <ModulePlaceholderPage
-                                title="New Sale"
-                                description="The administrator POS sales screen will be developed here."
-                            />
-                        }
+                        element={<PosPage />}
                     />
 
                     <Route
@@ -107,22 +111,12 @@ export default function App() {
 
                     <Route
                         path="purchases"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Purchases"
-                                description="Record supplier purchases and update inventory."
-                            />
-                        }
+                        element={<PurchasesPage />}
                     />
 
                     <Route
                         path="inventory"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Inventory"
-                                description="Monitor product stock quantities and stock movements."
-                            />
-                        }
+                        element={<InventoryPage />}
                     />
 
                     <Route
@@ -130,7 +124,7 @@ export default function App() {
                         element={
                             <ModulePlaceholderPage
                                 title="Customers"
-                                description="Manage customers and customer credit information."
+                                description="Manage customer details and customer purchase history."
                             />
                         }
                     />
@@ -140,7 +134,7 @@ export default function App() {
                         element={
                             <ModulePlaceholderPage
                                 title="Sales"
-                                description="Review sales transactions, invoices and payments."
+                                description="Review completed sales, receipts and payments."
                             />
                         }
                     />
@@ -170,7 +164,7 @@ export default function App() {
                         element={
                             <ModulePlaceholderPage
                                 title="Cashier Accounts"
-                                description="Create, update, activate and deactivate cashier accounts."
+                                description="Create and manage cashier user accounts."
                             />
                         }
                     />
@@ -217,12 +211,7 @@ export default function App() {
 
                     <Route
                         path="pos"
-                        element={
-                            <ModulePlaceholderPage
-                                title="New Sale"
-                                description="The cashier POS sales screen will be developed here."
-                            />
-                        }
+                        element={<PosPage />}
                     />
 
                     <Route
@@ -230,7 +219,7 @@ export default function App() {
                         element={
                             <ModulePlaceholderPage
                                 title="Customers"
-                                description="Search, create and update customer details."
+                                description="Search and manage customer details."
                             />
                         }
                     />
@@ -240,7 +229,7 @@ export default function App() {
                         element={
                             <ModulePlaceholderPage
                                 title="Sales History"
-                                description="Review the sales transactions available to the cashier."
+                                description="Review completed cashier sales."
                             />
                         }
                     />

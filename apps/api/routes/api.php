@@ -2,7 +2,11 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\PurchaseController;
+use App\Http\Controllers\Api\SaleController;
+use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\SupplierController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +54,59 @@ Route::prefix('v1')
                     ],
                 );
 
+                Route::middleware(
+                    'role:admin,cashier',
+                )->group(function (): void {
+                    Route::get(
+                        '/pos/categories',
+                        [
+                            PosController::class,
+                            'categories',
+                        ],
+                    );
+
+                    Route::get(
+                        '/pos/products',
+                        [
+                            PosController::class,
+                            'index',
+                        ],
+                    );
+
+                    Route::get(
+                        '/pos/products/{product}',
+                        [
+                            PosController::class,
+                            'show',
+                        ],
+                    );
+
+                    Route::get(
+                        '/stock/products',
+                        [
+                            StockController::class,
+                            'index',
+                        ],
+                    );
+
+                    Route::get(
+                        '/stock/products/{product}/price-options',
+                        [
+                            StockController::class,
+                            'priceOptions',
+                        ],
+                    );
+
+                    Route::apiResource(
+                        'sales',
+                        SaleController::class,
+                    )->only([
+                        'index',
+                        'store',
+                        'show',
+                    ]);
+                });
+
                 Route::middleware('role:admin')
                     ->group(function (): void {
                         Route::get(
@@ -71,10 +128,26 @@ Route::prefix('v1')
                         );
 
                         Route::get(
+                            '/products/options',
+                            [
+                                ProductController::class,
+                                'options',
+                            ],
+                        );
+
+                        Route::get(
                             '/suppliers/options',
                             [
                                 SupplierController::class,
                                 'options',
+                            ],
+                        );
+
+                        Route::post(
+                            '/purchases/{purchase}/receive',
+                            [
+                                PurchaseController::class,
+                                'receive',
                             ],
                         );
 
@@ -91,6 +164,11 @@ Route::prefix('v1')
                         Route::apiResource(
                             'suppliers',
                             SupplierController::class,
+                        );
+
+                        Route::apiResource(
+                            'purchases',
+                            PurchaseController::class,
                         );
                     });
 

@@ -206,6 +206,17 @@ class SupplierController extends Controller
     public function destroy(
         Supplier $supplier,
     ): JsonResponse {
+        if (
+            $supplier
+            ->purchases()
+            ->exists()
+        ) {
+            return response()->json([
+                'message' =>
+                'This supplier cannot be deleted because purchases are linked to it.',
+            ], 409);
+        }
+
         $supplierName =
             $supplier->name;
 

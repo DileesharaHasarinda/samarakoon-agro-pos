@@ -145,6 +145,49 @@ class ProductController extends Controller
         ]);
     }
 
+    public function options(): JsonResponse
+    {
+        $products = Product::query()
+            ->with([
+                'category:id,name',
+            ])
+            ->orderBy('name')
+            ->get()
+            ->map(
+                fn(
+                    Product $product,
+                ): array => [
+                    'id' => $product->id,
+
+                    'name' => $product->name,
+
+                    'sku' => $product->sku,
+
+                    'barcode' =>
+                    $product->barcode,
+
+                    'unit' => $product->unit,
+
+                    'category' => [
+                        'id' =>
+                        $product
+                            ->category
+                            ->id,
+
+                        'name' =>
+                        $product
+                            ->category
+                            ->name,
+                    ],
+                ],
+            )
+            ->values();
+
+        return response()->json([
+            'data' => $products,
+        ]);
+    }
+
     public function store(
         StoreProductRequest $request,
     ): JsonResponse {
@@ -205,7 +248,25 @@ class ProductController extends Controller
     public function destroy(
         Product $product,
     ): JsonResponse {
-        $productName = $product->name;
+        if (
+            $product
+            ->purchaseItems()
+            ->exists()
+            || $product
+            ->stockBatches()
+            ->exists()
+            || $product
+            ->saleItems()
+            ->exists()
+        ) {
+            return response()->json([
+                'message' =>
+                'This product cannot be deleted because purchase, stock or sales records are linked to it.',
+            ], 409);
+        }
+
+        $productName =
+            $product->name;
 
         $product->delete();
 

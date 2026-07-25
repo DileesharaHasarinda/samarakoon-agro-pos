@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Product extends Model
+class StockBatch extends Model
 {
     use HasFactory;
 
@@ -15,16 +15,17 @@ class Product extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'category_id',
-        'name',
-        'sku',
-        'barcode',
-        'description',
-        'cost_price',
+        'batch_code',
+        'product_id',
+        'purchase_item_id',
+        'batch_number',
+        'purchase_cost',
         'selling_price',
-        'reorder_level',
-        'unit',
+        'received_quantity',
+        'available_quantity',
+        'manufactured_date',
         'expiry_date',
+        'received_at',
     ];
 
     /**
@@ -33,48 +34,42 @@ class Product extends Model
     protected function casts(): array
     {
         return [
-            'category_id' => 'integer',
-            'cost_price' => 'decimal:2',
+            'product_id' => 'integer',
+            'purchase_item_id' => 'integer',
+            'purchase_cost' => 'decimal:2',
             'selling_price' => 'decimal:2',
-            'reorder_level' => 'integer',
+            'received_quantity' => 'decimal:3',
+            'available_quantity' => 'decimal:3',
+            'manufactured_date' => 'date',
             'expiry_date' => 'date',
+            'received_at' => 'datetime',
         ];
     }
 
     /**
-     * @return BelongsTo<Category, Product>
+     * @return BelongsTo<Product, StockBatch>
      */
-    public function category(): BelongsTo
+    public function product(): BelongsTo
     {
         return $this->belongsTo(
-            Category::class,
+            Product::class,
         );
     }
 
     /**
-     * @return HasMany<PurchaseItem>
+     * @return BelongsTo<PurchaseItem, StockBatch>
      */
-    public function purchaseItems(): HasMany
+    public function purchaseItem(): BelongsTo
     {
-        return $this->hasMany(
+        return $this->belongsTo(
             PurchaseItem::class,
-        );
-    }
-
-    /**
-     * @return HasMany<StockBatch>
-     */
-    public function stockBatches(): HasMany
-    {
-        return $this->hasMany(
-            StockBatch::class,
         );
     }
 
     /**
      * @return HasMany<StockMovement>
      */
-    public function stockMovements(): HasMany
+    public function movements(): HasMany
     {
         return $this->hasMany(
             StockMovement::class,
