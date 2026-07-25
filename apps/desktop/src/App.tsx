@@ -1,157 +1,125 @@
 import {
-    useEffect,
-    useState,
-} from 'react';
+    Navigate,
+    Route,
+    Routes,
+} from 'react-router';
 
-interface HealthResponse {
-    status: string;
-    application: string;
-    shop: string;
-    database: string;
-    version: string;
-}
+import {
+    useAuth,
+} from './auth/AuthContext';
 
-type ConnectionStatus =
-    | 'checking'
-    | 'connected'
-    | 'disconnected';
+import ProtectedRoute, {
+    dashboardPathForRole,
+} from './auth/ProtectedRoute';
 
-const API_URL =
-    'http://127.0.0.1:8000/api/health';
+import LoadingScreen
+    from './components/LoadingScreen';
 
-export default function App() {
-    const [
-        connectionStatus,
-        setConnectionStatus,
-    ] = useState<ConnectionStatus>('checking');
+import AdminDashboard
+    from './pages/AdminDashboard';
 
-    const [
-        health,
-        setHealth,
-    ] = useState<HealthResponse | null>(null);
+import CashierDashboard
+    from './pages/CashierDashboard';
 
-    useEffect(() => {
-        let isMounted = true;
+import LoginPage
+    from './pages/LoginPage';
 
-        const checkApiConnection = async () => {
-            try {
-                const response = await fetch(API_URL);
+function HomeRedirect() {
+    const {
+        user,
+        isLoading,
+    } = useAuth();
 
-                if (!response.ok) {
-                    throw new Error(
-                        `API returned ${response.status}`,
-                    );
-                }
+    if (isLoading) {
+        return <LoadingScreen />;
+    }
 
-                const data =
-                    (await response.json()) as HealthResponse;
-
-                if (isMounted) {
-                    setHealth(data);
-                    setConnectionStatus('connected');
-                }
-            } catch (error) {
-                console.error(
-                    'API connection failed:',
-                    error,
-                );
-
-                if (isMounted) {
-                    setHealth(null);
-                    setConnectionStatus('disconnected');
-                }
-            }
-        };
-
-        void checkApiConnection();
-
-        const intervalId = window.setInterval(
-            () => {
-                void checkApiConnection();
-            },
-            3000,
+    if (!user) {
+        return (
+            <Navigate
+                to="/login"
+                replace
+            />
         );
-
-        return () => {
-            isMounted = false;
-            window.clearInterval(intervalId);
-        };
-    }, []);
+    }
 
     return (
-        <main className="app-shell">
-            <section className="welcome-card">
-                <div className="brand-mark">
-                    S
-                </div>
+        <Navigate
+            to={dashboardPathForRole(user.role)}
+            replace
+        />
+    );
+}
 
-                <p className="eyebrow">
-                    Agricultural Item Selling System
-                </p>
+function LoginRoute() {
+    const {
+        user,
+        isLoading,
+    } = useAuth();
 
-                <h1>Samarakoon POS</h1>
+    if (isLoading) {
+        return <LoadingScreen />;
+    }
 
-                <p className="description">
-                    The project foundation has been
-                    configured successfully.
-                </p>
+    if (user) {
+        return (
+            <Navigate
+                to={dashboardPathForRole(user.role)}
+                replace
+            />
+        );
+    }
 
-                <div
-                    className={`status-box status-${connectionStatus}`}
-                >
-                    <span className="status-dot" />
+    return <LoginPage />;
+}
 
-                    <div>
-                        <strong>
-                            {connectionStatus ===
-                                'checking' &&
-                                'Checking backend...'}
+export default function App() {
+    return (
+        <Routes>
+            <Route
+                path="/"
+                element={<HomeRedirect />}
+            />
 
-                            {connectionStatus ===
-                                'connected' &&
-                                'Backend connected'}
+            <Route
+                path="/login"
+                element={<LoginRoute />}
+            />
 
-                            {connectionStatus ===
-                                'disconnected' &&
-                                'Backend disconnected'}
-                        </strong>
+            <Route
+                path="/admin/dashboard"
+                element={
+                    <ProtectedRoute
+                        allowedRoles={['admin']}
+                    >
+                        <AdminDashboard />
+                    </ProtectedRoute>
+                }
+            />
 
-                        <p>
-                            {connectionStatus ===
-                                'connected'
-                                ? `MySQL: ${health?.database ??
-                                'unknown'
-                                }`
-                                : 'Start the Laravel API on port 8000.'}
-                        </p>
-                    </div>
-                </div>
+            <Route
+                path="/cashier/dashboard"
+                element={
+                    <ProtectedRoute
+                        allowedRoles={[
+                            'admin',
+                            'cashier',
+                        ]}
+                    >
+                        <CashierDashboard />
+                    </ProtectedRoute>
+                }
+            />
 
-                <div className="project-details">
-                    <div>
-                        <span>Shop</span>
-                        <strong>
-                            {health?.shop ??
-                                'Samarakoon'}
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>API Version</span>
-                        <strong>
-                            {health?.version ??
-                                '0.1.0'}
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>Environment</span>
-                        <strong>
-                            Local Development
-                        </strong>
-                    </div>
-                </div>
-            </section>
-        </main>
+            <Route
+                path="*"
+                element={
+                    <Navigate
+                        to="/"
+                        replace
+                    />
+                }
+            />
+        </Routes>
     );
 }
