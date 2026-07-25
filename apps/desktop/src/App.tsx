@@ -31,6 +31,9 @@ import CashierDashboardPage
 import ModulePlaceholderPage
     from './pages/shared/ModulePlaceholderPage';
 
+import CategoriesPage
+    from './pages/admin/CategoriesPage';
+
 export default function App() {
     return (
         <Routes>
@@ -83,12 +86,7 @@ export default function App() {
 
                     <Route
                         path="categories"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Categories"
-                                description="Create and manage agro product categories."
-                            />
-                        }
+                        element={<CategoriesPage />}
                     />
 
                     <Route
