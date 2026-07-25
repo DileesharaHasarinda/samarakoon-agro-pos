@@ -25,17 +25,20 @@ import NotFoundPage
 import AdminDashboardPage
     from './pages/admin/AdminDashboardPage';
 
-import CashierDashboardPage
-    from './pages/cashier/CashierDashboardPage';
-
-import ModulePlaceholderPage
-    from './pages/shared/ModulePlaceholderPage';
-
 import CategoriesPage
     from './pages/admin/CategoriesPage';
 
 import ProductsPage
     from './pages/admin/ProductsPage';
+
+import SuppliersPage
+    from './pages/admin/SuppliersPage';
+
+import CashierDashboardPage
+    from './pages/cashier/CashierDashboardPage';
+
+import ModulePlaceholderPage
+    from './pages/shared/ModulePlaceholderPage';
 
 export default function App() {
     return (
@@ -99,12 +102,7 @@ export default function App() {
 
                     <Route
                         path="suppliers"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Suppliers"
-                                description="Create and manage supplier information."
-                            />
-                        }
+                        element={<SuppliersPage />}
                     />
 
                     <Route
