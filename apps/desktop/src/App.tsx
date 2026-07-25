@@ -34,6 +34,9 @@ import ModulePlaceholderPage
 import CategoriesPage
     from './pages/admin/CategoriesPage';
 
+import ProductsPage
+    from './pages/admin/ProductsPage';
+
 export default function App() {
     return (
         <Routes>
@@ -91,12 +94,7 @@ export default function App() {
 
                     <Route
                         path="products"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Products"
-                                description="Create products, assign categories and maintain pricing."
-                            />
-                        }
+                        element={<ProductsPage />}
                     />
 
                     <Route

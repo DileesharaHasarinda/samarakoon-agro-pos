@@ -29,21 +29,9 @@ class CategorySeeder extends Seeder
             ],
 
             [
-                'name' => 'Tools and Equipment',
+                'name' => 'Agro Tools and Equipment',
                 'description' =>
                 'Agricultural hand tools, machines and equipment.',
-            ],
-
-            [
-                'name' => 'Irrigation Supplies',
-                'description' =>
-                'Pipes, fittings, pumps and irrigation accessories.',
-            ],
-
-            [
-                'name' => 'Animal Feed',
-                'description' =>
-                'Feed products for livestock and poultry.',
             ],
         ];
 

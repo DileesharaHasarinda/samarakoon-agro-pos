@@ -113,6 +113,29 @@ class CategoryController extends Controller
         ]);
     }
 
+    public function options(): JsonResponse
+    {
+        $categories = Category::query()
+            ->orderBy('name')
+            ->get([
+                'id',
+                'name',
+            ])
+            ->map(
+                fn(
+                    Category $category,
+                ): array => [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                ],
+            )
+            ->values();
+
+        return response()->json([
+            'data' => $categories,
+        ]);
+    }
+
     public function store(
         StoreCategoryRequest $request,
     ): JsonResponse {
@@ -161,6 +184,17 @@ class CategoryController extends Controller
     public function destroy(
         Category $category,
     ): JsonResponse {
+        if (
+            $category
+            ->products()
+            ->exists()
+        ) {
+            return response()->json([
+                'message' =>
+                'This category cannot be deleted because products are assigned to it. Delete or move those products first.',
+            ], 409);
+        }
+
         $categoryName =
             $category->name;
 
@@ -180,6 +214,7 @@ class CategoryController extends Controller
     ): array {
         return [
             'id' => $category->id,
+
             'name' => $category->name,
 
             'description' =>

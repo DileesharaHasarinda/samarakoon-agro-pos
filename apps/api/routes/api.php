@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ProductController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -60,9 +61,22 @@ Route::prefix('v1')
                             },
                         );
 
+                        Route::get(
+                            '/categories/options',
+                            [
+                                CategoryController::class,
+                                'options',
+                            ],
+                        );
+
                         Route::apiResource(
                             'categories',
                             CategoryController::class,
+                        );
+
+                        Route::apiResource(
+                            'products',
+                            ProductController::class,
                         );
                     });
 
