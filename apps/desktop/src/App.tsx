@@ -49,6 +49,9 @@ import ModulePlaceholderPage
 import PosPage
     from './pages/shared/PosPage';
 
+import SalesHistoryPage
+    from './pages/shared/SalesHistoryPage';
+
 export default function App() {
     return (
         <Routes>
@@ -131,12 +134,7 @@ export default function App() {
 
                     <Route
                         path="sales"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Sales"
-                                description="Review completed sales, receipts and payments."
-                            />
-                        }
+                        element={<SalesHistoryPage />}
                     />
 
                     <Route
@@ -226,12 +224,7 @@ export default function App() {
 
                     <Route
                         path="sales"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Sales History"
-                                description="Review completed cashier sales."
-                            />
-                        }
+                        element={<SalesHistoryPage />}
                     />
 
                     <Route

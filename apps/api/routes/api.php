@@ -13,21 +13,23 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
     ->group(function (): void {
+        /*
+         * Public API health check.
+         */
         Route::get(
             '/health',
             function (): JsonResponse {
                 return response()->json([
                     'status' => 'ok',
-
-                    'application' =>
-                    'Samarakoon Agro POS API',
-
-                    'timestamp' =>
-                    now()->toISOString(),
+                    'application' => 'Samarakoon Agro POS API',
+                    'timestamp' => now()->toISOString(),
                 ]);
             },
         );
 
+        /*
+         * Public authentication routes.
+         */
         Route::post(
             '/auth/login',
             [
@@ -36,6 +38,9 @@ Route::prefix('v1')
             ],
         )->middleware('throttle:10,1');
 
+        /*
+         * Authenticated routes.
+         */
         Route::middleware('auth:sanctum')
             ->group(function (): void {
                 Route::get(
@@ -54,9 +59,16 @@ Route::prefix('v1')
                     ],
                 );
 
+                /*
+                 * Routes available to both
+                 * administrators and cashiers.
+                 */
                 Route::middleware(
                     'role:admin,cashier',
                 )->group(function (): void {
+                    /*
+                     * POS routes.
+                     */
                     Route::get(
                         '/pos/categories',
                         [
@@ -81,6 +93,10 @@ Route::prefix('v1')
                         ],
                     );
 
+                    /*
+                     * Inventory and stock-price
+                     * batch routes.
+                     */
                     Route::get(
                         '/stock/products',
                         [
@@ -97,6 +113,18 @@ Route::prefix('v1')
                         ],
                     );
 
+                    /*
+                     * Sales routes.
+                     *
+                     * Administrators can view all
+                     * sales.
+                     *
+                     * Cashiers can only view sales
+                     * created using their account.
+                     *
+                     * This access control is handled
+                     * inside SaleController.
+                     */
                     Route::apiResource(
                         'sales',
                         SaleController::class,
@@ -107,18 +135,28 @@ Route::prefix('v1')
                     ]);
                 });
 
+                /*
+                 * Administrator-only routes.
+                 */
                 Route::middleware('role:admin')
                     ->group(function (): void {
                         Route::get(
                             '/admin/access-check',
                             function (): JsonResponse {
                                 return response()->json([
-                                    'message' =>
-                                    'Admin access confirmed.',
+                                    'message' => 'Admin access confirmed.',
                                 ]);
                             },
                         );
 
+                        /*
+                         * Dropdown option routes.
+                         *
+                         * These routes must be placed
+                         * before the API resource
+                         * routes so "options" is not
+                         * treated as a model ID.
+                         */
                         Route::get(
                             '/categories/options',
                             [
@@ -143,6 +181,9 @@ Route::prefix('v1')
                             ],
                         );
 
+                        /*
+                         * Purchase stock-intake route.
+                         */
                         Route::post(
                             '/purchases/{purchase}/receive',
                             [
@@ -151,6 +192,9 @@ Route::prefix('v1')
                             ],
                         );
 
+                        /*
+                         * Administrator CRUD routes.
+                         */
                         Route::apiResource(
                             'categories',
                             CategoryController::class,
@@ -172,6 +216,9 @@ Route::prefix('v1')
                         );
                     });
 
+                /*
+                 * Cashier access-check route.
+                 */
                 Route::middleware(
                     'role:admin,cashier',
                 )
@@ -181,8 +228,7 @@ Route::prefix('v1')
                             '/access-check',
                             function (): JsonResponse {
                                 return response()->json([
-                                    'message' =>
-                                    'Cashier access confirmed.',
+                                    'message' => 'Cashier access confirmed.',
                                 ]);
                             },
                         );

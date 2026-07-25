@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class SaleController extends Controller
@@ -21,11 +22,40 @@ class SaleController extends Controller
     public function index(
         Request $request,
     ): JsonResponse {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
         $validated = $request->validate([
             'search' => [
                 'nullable',
                 'string',
-                'max:100',
+                'max:160',
+            ],
+
+            'payment_method' => [
+                'nullable',
+
+                Rule::in([
+                    SalePayment::METHOD_CASH,
+                    SalePayment::METHOD_CARD,
+                    SalePayment::METHOD_BANK_TRANSFER,
+                ]),
+            ],
+
+            'date_from' => [
+                'nullable',
+                'date_format:Y-m-d',
+            ],
+
+            'date_to' => [
+                'nullable',
+                'date_format:Y-m-d',
+                'after_or_equal:date_from',
             ],
 
             'page' => [
@@ -49,23 +79,43 @@ class SaleController extends Controller
             ),
         );
 
+        $paymentMethod =
+            $validated['payment_method']
+            ?? null;
+
+        $dateFrom =
+            $validated['date_from']
+            ?? null;
+
+        $dateTo =
+            $validated['date_to']
+            ?? null;
+
         $perPage = (int) (
             $validated['per_page']
             ?? 20
         );
 
-        $sales = Sale::query()
-            ->with([
-                'createdBy:id,name',
-                'payments:id,sale_id,payment_method,amount',
-            ])
-            ->withCount('items')
+        $query = Sale::query();
+
+        /*
+         * Cashiers can only view their own
+         * sales. Admins can view every sale.
+         */
+        if ($user->isCashier()) {
+            $query->where(
+                'created_by',
+                $user->id,
+            );
+        }
+
+        $query
             ->when(
                 $search !== '',
                 function (
-                    Builder $query,
+                    Builder $saleQuery,
                 ) use ($search): void {
-                    $query->where(
+                    $saleQuery->where(
                         function (
                             Builder $searchQuery,
                         ) use ($search): void {
@@ -77,23 +127,170 @@ class SaleController extends Controller
                                 )
                                 ->orWhereHas(
                                     'createdBy',
-                                    fn(
+                                    function (
                                         Builder $userQuery,
-                                    ) =>
-                                    $userQuery
-                                        ->where(
-                                            'name',
-                                            'like',
-                                            "%{$search}%",
-                                        ),
+                                    ) use ($search): void {
+                                        $userQuery
+                                            ->where(
+                                                'name',
+                                                'like',
+                                                "%{$search}%",
+                                            )
+                                            ->orWhere(
+                                                'username',
+                                                'like',
+                                                "%{$search}%",
+                                            );
+                                    },
+                                )
+                                ->orWhereHas(
+                                    'items.product',
+                                    function (
+                                        Builder $productQuery,
+                                    ) use ($search): void {
+                                        $productQuery
+                                            ->where(
+                                                'name',
+                                                'like',
+                                                "%{$search}%",
+                                            )
+                                            ->orWhere(
+                                                'sku',
+                                                'like',
+                                                "%{$search}%",
+                                            )
+                                            ->orWhere(
+                                                'barcode',
+                                                'like',
+                                                "%{$search}%",
+                                            );
+                                    },
+                                )
+                                ->orWhereHas(
+                                    'items.stockBatch',
+                                    function (
+                                        Builder $batchQuery,
+                                    ) use ($search): void {
+                                        $batchQuery
+                                            ->where(
+                                                'batch_code',
+                                                'like',
+                                                "%{$search}%",
+                                            )
+                                            ->orWhere(
+                                                'batch_number',
+                                                'like',
+                                                "%{$search}%",
+                                            );
+                                    },
                                 );
                         },
                     );
                 },
             )
+            ->when(
+                $paymentMethod !== null,
+                fn(
+                    Builder $saleQuery,
+                ) => $saleQuery->whereHas(
+                    'payments',
+                    fn(
+                        Builder $paymentQuery,
+                    ) => $paymentQuery->where(
+                        'payment_method',
+                        $paymentMethod,
+                    ),
+                ),
+            )
+            ->when(
+                $dateFrom !== null,
+                fn(
+                    Builder $saleQuery,
+                ) => $saleQuery->whereDate(
+                    'sale_date',
+                    '>=',
+                    $dateFrom,
+                ),
+            )
+            ->when(
+                $dateTo !== null,
+                fn(
+                    Builder $saleQuery,
+                ) => $saleQuery->whereDate(
+                    'sale_date',
+                    '<=',
+                    $dateTo,
+                ),
+            );
+
+        /*
+         * Calculate totals using the same
+         * filters as the history list.
+         */
+        $summaryRecord = (clone $query)
+            ->selectRaw(
+                '
+                    COUNT(*) AS total_sales,
+                    COALESCE(
+                        SUM(grand_total),
+                        0
+                    ) AS total_revenue,
+                    COALESCE(
+                        SUM(
+                            item_discount_total
+                            + discount
+                        ),
+                        0
+                    ) AS total_discount,
+                    COALESCE(
+                        SUM(gross_profit),
+                        0
+                    ) AS gross_profit,
+                    COALESCE(
+                        SUM(net_profit),
+                        0
+                    ) AS net_profit
+                ',
+            )
+            ->first();
+
+        $filteredSaleIds = (clone $query)
+            ->select('sales.id');
+
+        $totalItems = (float) SaleItem::query()
+            ->whereIn(
+                'sale_id',
+                $filteredSaleIds,
+            )
+            ->sum('quantity');
+
+        $sales = $query
+            ->with([
+                'createdBy:id,name,username',
+
+                'payments' =>
+                fn($paymentQuery) =>
+                $paymentQuery
+                    ->select([
+                        'id',
+                        'sale_id',
+                        'payment_method',
+                        'amount',
+                        'reference_number',
+                    ])
+                    ->orderBy('id'),
+            ])
+            ->withCount('items')
+            ->withSum(
+                'items as total_quantity',
+                'quantity',
+            )
             ->latest('sale_date')
             ->latest('id')
             ->paginate($perPage);
+
+        $includeProfit =
+            $user->isAdmin();
 
         $data = collect(
             $sales->items(),
@@ -104,12 +301,57 @@ class SaleController extends Controller
                 ): array =>
                 $this->saleSummaryData(
                     $sale,
+                    $includeProfit,
                 ),
             )
             ->values();
 
         return response()->json([
             'data' => $data,
+
+            'summary' => [
+                'total_sales' =>
+                (int) (
+                    $summaryRecord
+                    ?->total_sales
+                    ?? 0
+                ),
+
+                'total_revenue' =>
+                (float) (
+                    $summaryRecord
+                    ?->total_revenue
+                    ?? 0
+                ),
+
+                'total_discount' =>
+                (float) (
+                    $summaryRecord
+                    ?->total_discount
+                    ?? 0
+                ),
+
+                'total_items' =>
+                $totalItems,
+
+                'gross_profit' =>
+                $includeProfit
+                    ? (float) (
+                        $summaryRecord
+                        ?->gross_profit
+                        ?? 0
+                    )
+                    : null,
+
+                'net_profit' =>
+                $includeProfit
+                    ? (float) (
+                        $summaryRecord
+                        ?->net_profit
+                        ?? 0
+                    )
+                    : null,
+            ],
 
             'meta' => [
                 'current_page' =>
@@ -626,19 +868,41 @@ class SaleController extends Controller
                 $this->loadSale(
                     $sale,
                 ),
+                $user->isAdmin(),
             ),
         ], 201);
     }
 
     public function show(
+        Request $request,
         Sale $sale,
     ): JsonResponse {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        if (
+            $user->isCashier()
+            && $sale->created_by
+            !== $user->id
+        ) {
+            return response()->json([
+                'message' =>
+                'You are not allowed to view this sale.',
+            ], 403);
+        }
+
         return response()->json([
             'data' =>
             $this->saleData(
                 $this->loadSale(
                     $sale,
                 ),
+                $user->isAdmin(),
             ),
         ]);
     }
@@ -663,7 +927,18 @@ class SaleController extends Controller
 
             'payments' =>
             fn($query) =>
-            $query->orderBy('id'),
+            $query
+                ->select([
+                    'id',
+                    'sale_id',
+                    'payment_method',
+                    'amount',
+                    'reference_number',
+                    'notes',
+                    'created_by',
+                    'created_at',
+                ])
+                ->orderBy('id'),
 
             'items' =>
             fn($query) =>
@@ -680,9 +955,17 @@ class SaleController extends Controller
      */
     private function saleSummaryData(
         Sale $sale,
+        bool $includeProfit,
     ): array {
         $firstPayment =
             $sale->payments->first();
+
+        $paymentMethods =
+            $sale->payments
+            ->pluck('payment_method')
+            ->filter()
+            ->unique()
+            ->values();
 
         return [
             'id' => $sale->id,
@@ -717,6 +1000,18 @@ class SaleController extends Controller
             (float) $sale
                 ->change_amount,
 
+            'gross_profit' =>
+            $includeProfit
+                ? (float) $sale
+                    ->gross_profit
+                : null,
+
+            'net_profit' =>
+            $includeProfit
+                ? (float) $sale
+                    ->net_profit
+                : null,
+
             'payment_status' =>
             $sale->payment_status,
 
@@ -730,11 +1025,23 @@ class SaleController extends Controller
                 ->count()
             ),
 
+            'total_quantity' =>
+            (float) (
+                $sale
+                ->total_quantity
+                ?? $sale
+                ->items()
+                ->sum('quantity')
+            ),
+
             'payment_method' =>
             $firstPayment
                 ? $firstPayment
                 ->payment_method
                 : null,
+
+            'payment_methods' =>
+            $paymentMethods,
 
             'created_by' => [
                 'id' =>
@@ -744,11 +1051,21 @@ class SaleController extends Controller
                 $sale
                     ->createdBy
                     ->name,
+
+                'username' =>
+                $sale
+                    ->createdBy
+                    ->username,
             ],
 
             'created_at' =>
             $sale
                 ->created_at
+                ?->toISOString(),
+
+            'updated_at' =>
+            $sale
+                ->updated_at
                 ?->toISOString(),
         ];
     }
@@ -758,10 +1075,12 @@ class SaleController extends Controller
      */
     private function saleData(
         Sale $sale,
+        bool $includeProfit,
     ): array {
         return [
             ...$this->saleSummaryData(
                 $sale,
+                $includeProfit,
             ),
 
             'items' =>
@@ -784,6 +1103,12 @@ class SaleController extends Controller
                         (float) $item
                             ->quantity,
 
+                        'purchase_cost' =>
+                        $includeProfit
+                            ? (float) $item
+                                ->purchase_cost
+                            : null,
+
                         'selling_price' =>
                         (float) $item
                             ->selling_price,
@@ -795,6 +1120,12 @@ class SaleController extends Controller
                         'line_total' =>
                         (float) $item
                             ->line_total,
+
+                        'gross_profit' =>
+                        $includeProfit
+                            ? (float) $item
+                                ->gross_profit
+                            : null,
 
                         'product' => [
                             'id' =>
@@ -871,6 +1202,14 @@ class SaleController extends Controller
                         'reference_number' =>
                         $payment
                             ->reference_number,
+
+                        'notes' =>
+                        $payment->notes,
+
+                        'created_at' =>
+                        $payment
+                            ->created_at
+                            ?->toISOString(),
                     ],
                 )
                 ->values(),
