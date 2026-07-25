@@ -1,62 +1,85 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CategoryController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('v1')->group(function (): void {
-    Route::get(
-        '/health',
-        function (): JsonResponse {
-            return response()->json([
-                'status' => 'ok',
-                'application' => 'Samarakoon Agro POS API',
-                'timestamp' => now()->toISOString(),
-            ]);
-        },
-    );
+Route::prefix('v1')
+    ->group(function (): void {
+        Route::get(
+            '/health',
+            function (): JsonResponse {
+                return response()->json([
+                    'status' => 'ok',
 
-    Route::post(
-        '/auth/login',
-        [AuthController::class, 'login'],
-    )->middleware('throttle:10,1');
+                    'application' =>
+                    'Samarakoon Agro POS API',
 
-    Route::middleware('auth:sanctum')
-        ->group(function (): void {
-            Route::get(
-                '/auth/me',
-                [AuthController::class, 'me'],
-            );
+                    'timestamp' =>
+                    now()->toISOString(),
+                ]);
+            },
+        );
 
-            Route::post(
-                '/auth/logout',
-                [AuthController::class, 'logout'],
-            );
+        Route::post(
+            '/auth/login',
+            [
+                AuthController::class,
+                'login',
+            ],
+        )->middleware('throttle:10,1');
 
-            Route::middleware('role:admin')
-                ->prefix('admin')
-                ->group(function (): void {
-                    Route::get(
-                        '/access-check',
-                        function (): JsonResponse {
-                            return response()->json([
-                                'message' => 'Admin access confirmed.',
-                            ]);
-                        },
-                    );
-                });
+        Route::middleware('auth:sanctum')
+            ->group(function (): void {
+                Route::get(
+                    '/auth/me',
+                    [
+                        AuthController::class,
+                        'me',
+                    ],
+                );
 
-            Route::middleware('role:admin,cashier')
-                ->prefix('cashier')
-                ->group(function (): void {
-                    Route::get(
-                        '/access-check',
-                        function (): JsonResponse {
-                            return response()->json([
-                                'message' => 'Cashier access confirmed.',
-                            ]);
-                        },
-                    );
-                });
-        });
-});
+                Route::post(
+                    '/auth/logout',
+                    [
+                        AuthController::class,
+                        'logout',
+                    ],
+                );
+
+                Route::middleware('role:admin')
+                    ->group(function (): void {
+                        Route::get(
+                            '/admin/access-check',
+                            function (): JsonResponse {
+                                return response()->json([
+                                    'message' =>
+                                    'Admin access confirmed.',
+                                ]);
+                            },
+                        );
+
+                        Route::apiResource(
+                            'categories',
+                            CategoryController::class,
+                        );
+                    });
+
+                Route::middleware(
+                    'role:admin,cashier',
+                )
+                    ->prefix('cashier')
+                    ->group(function (): void {
+                        Route::get(
+                            '/access-check',
+                            function (): JsonResponse {
+                                return response()->json([
+                                    'message' =>
+                                    'Cashier access confirmed.',
+                                ]);
+                            },
+                        );
+                    });
+            });
+    });
