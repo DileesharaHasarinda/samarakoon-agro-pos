@@ -7190,3 +7190,605 @@ a {
     flex-direction: column;
   }
 }
+/* Cashier account management */
+
+.cashier-account-header,
+.shift-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.cashier-account-header h2,
+.shift-page-header h2 {
+  margin: 6px 0;
+  font-size: 30px;
+}
+
+.cashier-account-header p,
+.shift-page-header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.cashier-account-summary,
+.shift-history-summary,
+.shift-current-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.cashier-account-summary article,
+.shift-history-summary article,
+.shift-current-summary article {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.cashier-account-summary span,
+.shift-history-summary span,
+.shift-current-summary span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.cashier-account-summary strong,
+.shift-history-summary strong,
+.shift-current-summary strong {
+  font-size: 20px;
+}
+
+.shift-current-summary small {
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
+.cashier-account-toolbar,
+.shift-history-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cashier-account-toolbar > input,
+.shift-history-toolbar > input {
+  min-width: 280px;
+  flex: 1;
+}
+
+.cashier-account-toolbar input,
+.cashier-account-toolbar select,
+.shift-history-toolbar input,
+.shift-history-toolbar select {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.shift-history-toolbar label {
+  display: grid;
+  gap: 5px;
+}
+
+.shift-history-toolbar label span {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.cashier-account-list {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+}
+
+.cashier-account-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #ffffff;
+}
+
+.cashier-account-card > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cashier-account-card > header > div:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.cashier-account-card > header strong,
+.cashier-account-card > header span {
+  display: block;
+}
+
+.cashier-account-card > header span {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.cashier-avatar {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #ecfdf3;
+  color: #067647;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.cashier-account-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 20px;
+}
+
+.cashier-account-details > div {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fafcfa;
+}
+
+.cashier-account-details span {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.cashier-account-details strong {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+
+.cashier-date-value {
+  font-size: 9px !important;
+}
+
+.cashier-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  padding: 0 20px 20px;
+}
+
+.cashier-danger-button,
+.cashier-activate-button {
+  min-height: 39px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.cashier-danger-button {
+  border: 1px solid #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.cashier-activate-button {
+  border: 1px solid #abefc6;
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.cashier-danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.cashier-form-modal,
+.cashier-password-modal,
+.shift-details-modal {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 30px);
+  overflow: hidden;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(4, 26, 12, 0.25);
+}
+
+.cashier-password-modal {
+  width: min(520px, 100%);
+}
+
+.cashier-form,
+.cashier-password-form {
+  display: grid;
+  gap: 16px;
+  max-height: calc(100vh - 110px);
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.cashier-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.cashier-form-grid label,
+.cashier-password-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.cashier-form-grid label > span,
+.cashier-password-form label > span {
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.cashier-form-grid input,
+.cashier-password-form input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.cashier-active-field {
+  grid-column: 1 / -1;
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.cashier-active-field input {
+  width: auto;
+  min-height: auto;
+}
+
+.password-help {
+  color: var(--text-muted);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+/* Cashier shift and cash register */
+
+.current-shift-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 18px;
+  border: 1px solid #abefc6;
+  border-radius: 13px;
+  background: #ecfdf3;
+}
+
+.current-shift-banner span,
+.current-shift-banner strong,
+.current-shift-banner small {
+  display: block;
+}
+
+.current-shift-banner > div > span {
+  color: #067647;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.current-shift-banner > div > strong {
+  margin-top: 5px;
+  color: #05603a;
+  font-size: 18px;
+}
+
+.current-shift-banner > div > small {
+  margin-top: 4px;
+  color: #067647;
+  font-size: 8px;
+}
+
+.shift-status-open,
+.shift-status-closed {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.shift-status-open {
+  background: #dcfae6;
+  color: #067647;
+}
+
+.shift-status-closed {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.shift-positive {
+  color: #067647 !important;
+}
+
+.shift-negative {
+  color: #b42318 !important;
+}
+
+.shift-open-panel {
+  display: grid;
+  grid-template-columns:
+    minmax(230px, 0.7fr)
+    minmax(320px, 1.3fr);
+  gap: 24px;
+}
+
+.shift-open-panel header h3 {
+  margin: 6px 0;
+  font-size: 20px;
+}
+
+.shift-open-panel header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.shift-open-form {
+  display: grid;
+  gap: 12px;
+}
+
+.shift-open-form label,
+.shift-movement-form label,
+.shift-close-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.shift-open-form label > span,
+.shift-movement-form label > span,
+.shift-close-form label > span {
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.shift-open-form input,
+.shift-open-form textarea,
+.shift-movement-form input,
+.shift-movement-form select,
+.shift-close-form input,
+.shift-close-form textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.shift-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.shift-card-heading {
+  margin-bottom: 15px;
+}
+
+.shift-card-heading h3 {
+  margin: 5px 0 0;
+  font-size: 18px;
+}
+
+.shift-movement-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.shift-wide-field {
+  grid-column: 1 / -1;
+}
+
+.shift-close-form {
+  display: grid;
+  gap: 12px;
+}
+
+.shift-expected-box,
+.shift-difference-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 13px;
+  padding: 13px;
+  border-radius: 9px;
+}
+
+.shift-expected-box {
+  border: 1px solid #abefc6;
+  background: #ecfdf3;
+}
+
+.shift-difference-preview {
+  border: 1px solid var(--border);
+  background: #f8faf8;
+}
+
+.shift-expected-box span,
+.shift-difference-preview span {
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.shift-expected-box strong {
+  color: #067647;
+  font-size: 18px;
+}
+
+.shift-close-button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 9px;
+  background: #b42318;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.shift-table-container {
+  overflow-x: auto;
+}
+
+.shift-table {
+  width: 100%;
+  min-width: 1250px;
+  border-collapse: collapse;
+}
+
+.shift-table th {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+  background: #f8faf8;
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.shift-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 9px;
+  vertical-align: top;
+}
+
+.shift-table td strong,
+.shift-table td small {
+  display: block;
+}
+
+.shift-table td small {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
+.shift-details-content {
+  display: grid;
+  gap: 20px;
+  max-height: calc(100vh - 110px);
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.shift-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.shift-detail-grid > div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fafcfa;
+}
+
+.shift-detail-grid span {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.shift-movement-list {
+  display: grid;
+  gap: 8px;
+}
+
+.shift-movement-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.shift-movement-list article span {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
+@media (max-width: 900px) {
+  .shift-action-grid,
+  .shift-open-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .cashier-account-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .cashier-account-header,
+  .shift-page-header {
+    flex-direction: column;
+  }
+
+  .cashier-form-grid,
+  .cashier-account-details,
+  .shift-detail-grid,
+  .shift-movement-form {
+    grid-template-columns: 1fr;
+  }
+
+  .cashier-active-field,
+  .shift-wide-field {
+    grid-column: auto;
+  }
+
+  .cashier-account-actions {
+    display: grid;
+  }
+
+  .cashier-account-actions button {
+    width: 100%;
+  }
+}

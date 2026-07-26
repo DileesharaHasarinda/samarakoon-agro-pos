@@ -7,6 +7,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -15,24 +16,35 @@ class AuthController extends Controller
     public function login(
         LoginRequest $request,
     ): JsonResponse {
-        $validated = $request->validated();
+        $validated =
+            $request->validated();
 
-        $user = User::query()
+        $username =
+            strtolower(
+                trim(
+                    (string) $validated['username'],
+                ),
+            );
+
+        $user =
+            User::query()
             ->where(
                 'username',
-                $validated['username'],
+                $username,
             )
             ->first();
 
         if (
-            ! $user ||
-            ! Hash::check(
+            ! $user
+            || ! Hash::check(
                 $validated['password'],
                 $user->password,
             )
         ) {
             return response()->json([
-                'message' => 'Invalid username or password.',
+                'message' =>
+                'Invalid username or password.',
+
                 'errors' => [
                     'username' => [
                         'Invalid username or password.',
@@ -41,79 +53,153 @@ class AuthController extends Controller
             ], 422);
         }
 
-        if (! $user->is_active) {
+        /*
+         * Prevent deactivated users from logging in.
+         * Existing access tokens are also removed.
+         */
+        if (! (bool) $user->is_active) {
+            $user
+                ->tokens()
+                ->delete();
+
             return response()->json([
-                'message' => 'This account has been deactivated.',
+                'message' =>
+                'This account has been deactivated.',
+
+                'errors' => [
+                    'username' => [
+                        'This account has been deactivated. Contact the administrator.',
+                    ],
+                ],
             ], 403);
         }
 
         /*
-         * Remove previous tokens so one user account
-         * has only one active POS session.
+         * Keep only one active POS session
+         * for each user account.
          */
-        $user->tokens()->delete();
+        $user
+            ->tokens()
+            ->delete();
 
-        $abilities = $user->isAdmin()
-            ? ['admin', 'cashier']
-            : ['cashier'];
+        $abilities =
+            $user->isAdmin()
+            ? [
+                'admin',
+                'cashier',
+            ]
+            : [
+                'cashier',
+            ];
 
-        $token = $user
+        $deviceName =
+            trim(
+                (string) (
+                    $validated['device_name']
+                    ?? 'Samarakoon POS Desktop'
+                ),
+            );
+
+        if ($deviceName === '') {
+            $deviceName =
+                'Samarakoon POS Desktop';
+        }
+
+        $token =
+            $user
             ->createToken(
-                $validated['device_name']
-                    ?? 'Samarakoon POS Desktop',
+                $deviceName,
                 $abilities,
             )
             ->plainTextToken;
 
         $user->forceFill([
-            'last_login_at' => now(),
-        ])->save();
+            'last_login_at' =>
+            now(),
+        ]);
 
+        $user->save();
         $user->refresh();
 
         return response()->json([
-            'message' => 'Login successful.',
-            'token' => $token,
-            'token_type' => 'Bearer',
-            'user' => $this->userData($user),
+            'message' =>
+            'Login successful.',
+
+            'token' =>
+            $token,
+
+            'token_type' =>
+            'Bearer',
+
+            'user' =>
+            $this->userData(
+                $user,
+            ),
         ]);
     }
 
     public function me(
         Request $request,
     ): JsonResponse {
-        $user = $request->user();
+        $user =
+            $request->user();
 
         if (! $user instanceof User) {
             return response()->json([
-                'message' => 'Unauthenticated.',
+                'message' =>
+                'Unauthenticated.',
             ], 401);
         }
 
+        /*
+         * Immediately reject users whose
+         * account was deactivated after login.
+         */
+        if (! (bool) $user->is_active) {
+            $user
+                ->tokens()
+                ->delete();
+
+            return response()->json([
+                'message' =>
+                'This account has been deactivated.',
+            ], 403);
+        }
+
         return response()->json([
-            'user' => $this->userData($user),
+            'user' =>
+            $this->userData(
+                $user,
+            ),
         ]);
     }
 
     public function logout(
         Request $request,
     ): JsonResponse {
-        $user = $request->user();
+        $user =
+            $request->user();
 
         if (! $user instanceof User) {
             return response()->json([
-                'message' => 'Unauthenticated.',
+                'message' =>
+                'Unauthenticated.',
             ], 401);
         }
 
-        $currentToken = $user->currentAccessToken();
+        $currentToken =
+            $user->currentAccessToken();
 
-        if ($currentToken instanceof PersonalAccessToken) {
+        if (
+            $currentToken
+            instanceof PersonalAccessToken
+        ) {
             $currentToken->delete();
         }
 
         return response()->json([
-            'message' => 'Logout successful.',
+            'message' =>
+            'Logout successful.',
         ]);
     }
 
@@ -124,15 +210,47 @@ class AuthController extends Controller
         User $user,
     ): array {
         return [
-            'id' => $user->id,
-            'name' => $user->name,
-            'username' => $user->username,
-            'email' => $user->email,
-            'role' => $user->role,
-            'is_active' => $user->is_active,
-            'last_login_at' => $user
-                ->last_login_at
-                ?->toISOString(),
+            'id' =>
+            $user->id,
+
+            'name' =>
+            $user->name,
+
+            'username' =>
+            $user->username,
+
+            'email' =>
+            $user->email,
+
+            'phone' =>
+            $user->phone,
+
+            'role' =>
+            $user->role,
+
+            'is_active' =>
+            (bool) $user->is_active,
+
+            'last_login_at' =>
+            $user->last_login_at
+                ? Carbon::parse(
+                    $user->last_login_at,
+                )->toISOString()
+                : null,
+
+            'created_at' =>
+            $user->created_at
+                ? Carbon::parse(
+                    $user->created_at,
+                )->toISOString()
+                : null,
+
+            'updated_at' =>
+            $user->updated_at
+                ? Carbon::parse(
+                    $user->updated_at,
+                )->toISOString()
+                : null,
         ];
     }
 }

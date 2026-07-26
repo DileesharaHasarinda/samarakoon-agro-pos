@@ -107,6 +107,11 @@ const adminNavigation:
             path: '/admin/users',
         },
         {
+            label: 'Cashier Shifts',
+            shortLabel: 'CS',
+            path: '/admin/shifts',
+        },
+        {
             label: 'Settings',
             shortLabel: 'SE',
             path: '/admin/settings',
@@ -119,6 +124,11 @@ const cashierNavigation:
             label: 'Dashboard',
             shortLabel: 'D',
             path: '/cashier/dashboard',
+        },
+        {
+            label: 'Cash Register',
+            shortLabel: 'CR',
+            path: '/cashier/shift',
         },
         {
             label: 'New Sale',

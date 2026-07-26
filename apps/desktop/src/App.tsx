@@ -73,6 +73,12 @@ import SalesHistoryPage
 import SalesReturnsPage
     from './pages/shared/SalesReturnsPage';
 
+import CashierAccountsPage
+    from './pages/admin/CashierAccountsPage';
+
+import ShiftRegisterPage
+    from './pages/shared/ShiftRegisterPage';
+
 export default function App() {
     return (
         <Routes>
@@ -214,10 +220,14 @@ export default function App() {
                     <Route
                         path="users"
                         element={
-                            <ModulePlaceholderPage
-                                title="Cashier Accounts"
-                                description="Create and manage cashier user accounts."
-                            />
+                            <CashierAccountsPage />
+                        }
+                    />
+
+                    <Route
+                        path="shifts"
+                        element={
+                            <ShiftRegisterPage />
                         }
                     />
 
@@ -293,6 +303,13 @@ export default function App() {
                         path="dues"
                         element={
                             <DueManagementPage />
+                        }
+                    />
+
+                    <Route
+                        path="shift"
+                        element={
+                            <ShiftRegisterPage />
                         }
                     />
                 </Route>
