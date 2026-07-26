@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sale\StoreSaleRequest;
+use App\Models\Customer;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
@@ -26,7 +27,8 @@ class SaleController extends Controller
 
         if (! $user instanceof User) {
             return response()->json([
-                'message' => 'Unauthenticated.',
+                'message' =>
+                'Unauthenticated.',
             ], 401);
         }
 
@@ -44,6 +46,16 @@ class SaleController extends Controller
                     SalePayment::METHOD_CASH,
                     SalePayment::METHOD_CARD,
                     SalePayment::METHOD_BANK_TRANSFER,
+                ]),
+            ],
+
+            'payment_status' => [
+                'nullable',
+
+                Rule::in([
+                    Sale::PAYMENT_STATUS_PAID,
+                    Sale::PAYMENT_STATUS_PARTIAL,
+                    Sale::PAYMENT_STATUS_DUE,
                 ]),
             ],
 
@@ -80,8 +92,10 @@ class SaleController extends Controller
         );
 
         $paymentMethod =
-            $validated['payment_method']
-            ?? null;
+            $validated['payment_method'] ?? null;
+
+        $paymentStatus =
+            $validated['payment_status'] ?? null;
 
         $dateFrom =
             $validated['date_from']
@@ -98,10 +112,6 @@ class SaleController extends Controller
 
         $query = Sale::query();
 
-        /*
-         * Cashiers can only view their own
-         * sales. Admins can view every sale.
-         */
         if ($user->isCashier()) {
             $query->where(
                 'created_by',
@@ -126,63 +136,62 @@ class SaleController extends Controller
                                     "%{$search}%",
                                 )
                                 ->orWhereHas(
+                                    'customer',
+                                    fn(
+                                        Builder $customerQuery,
+                                    ) => $customerQuery
+                                        ->where(
+                                            'name',
+                                            'like',
+                                            "%{$search}%",
+                                        )
+                                        ->orWhere(
+                                            'mobile',
+                                            'like',
+                                            "%{$search}%",
+                                        )
+                                        ->orWhere(
+                                            'customer_code',
+                                            'like',
+                                            "%{$search}%",
+                                        ),
+                                )
+                                ->orWhereHas(
                                     'createdBy',
-                                    function (
+                                    fn(
                                         Builder $userQuery,
-                                    ) use ($search): void {
-                                        $userQuery
-                                            ->where(
-                                                'name',
-                                                'like',
-                                                "%{$search}%",
-                                            )
-                                            ->orWhere(
-                                                'username',
-                                                'like',
-                                                "%{$search}%",
-                                            );
-                                    },
+                                    ) => $userQuery
+                                        ->where(
+                                            'name',
+                                            'like',
+                                            "%{$search}%",
+                                        )
+                                        ->orWhere(
+                                            'username',
+                                            'like',
+                                            "%{$search}%",
+                                        ),
                                 )
                                 ->orWhereHas(
                                     'items.product',
-                                    function (
+                                    fn(
                                         Builder $productQuery,
-                                    ) use ($search): void {
-                                        $productQuery
-                                            ->where(
-                                                'name',
-                                                'like',
-                                                "%{$search}%",
-                                            )
-                                            ->orWhere(
-                                                'sku',
-                                                'like',
-                                                "%{$search}%",
-                                            )
-                                            ->orWhere(
-                                                'barcode',
-                                                'like',
-                                                "%{$search}%",
-                                            );
-                                    },
-                                )
-                                ->orWhereHas(
-                                    'items.stockBatch',
-                                    function (
-                                        Builder $batchQuery,
-                                    ) use ($search): void {
-                                        $batchQuery
-                                            ->where(
-                                                'batch_code',
-                                                'like',
-                                                "%{$search}%",
-                                            )
-                                            ->orWhere(
-                                                'batch_number',
-                                                'like',
-                                                "%{$search}%",
-                                            );
-                                    },
+                                    ) => $productQuery
+                                        ->where(
+                                            'name',
+                                            'like',
+                                            "%{$search}%",
+                                        )
+                                        ->orWhere(
+                                            'sku',
+                                            'like',
+                                            "%{$search}%",
+                                        )
+                                        ->orWhere(
+                                            'barcode',
+                                            'like',
+                                            "%{$search}%",
+                                        ),
                                 );
                         },
                     );
@@ -200,6 +209,15 @@ class SaleController extends Controller
                         'payment_method',
                         $paymentMethod,
                     ),
+                ),
+            )
+            ->when(
+                $paymentStatus !== null,
+                fn(
+                    Builder $saleQuery,
+                ) => $saleQuery->where(
+                    'payment_status',
+                    $paymentStatus,
                 ),
             )
             ->when(
@@ -223,18 +241,14 @@ class SaleController extends Controller
                 ),
             );
 
-        /*
-         * Calculate totals using the same
-         * filters as the history list.
-         */
         $summaryRecord = (clone $query)
             ->selectRaw(
                 '
                     COUNT(*) AS total_sales,
-                    COALESCE(
-                        SUM(grand_total),
-                        0
-                    ) AS total_revenue,
+                    COALESCE(SUM(grand_total), 0)
+                        AS total_revenue,
+                    COALESCE(SUM(due_amount), 0)
+                        AS outstanding_due,
                     COALESCE(
                         SUM(
                             item_discount_total
@@ -242,30 +256,30 @@ class SaleController extends Controller
                         ),
                         0
                     ) AS total_discount,
-                    COALESCE(
-                        SUM(gross_profit),
-                        0
-                    ) AS gross_profit,
-                    COALESCE(
-                        SUM(net_profit),
-                        0
-                    ) AS net_profit
+                    COALESCE(SUM(gross_profit), 0)
+                        AS gross_profit,
+                    COALESCE(SUM(net_profit), 0)
+                        AS net_profit
                 ',
             )
             ->first();
 
-        $filteredSaleIds = (clone $query)
+        $filteredSaleIds =
+            (clone $query)
             ->select('sales.id');
 
-        $totalItems = (float) SaleItem::query()
-            ->whereIn(
-                'sale_id',
-                $filteredSaleIds,
-            )
-            ->sum('quantity');
+        $totalItems =
+            (float) SaleItem::query()
+                ->whereIn(
+                    'sale_id',
+                    $filteredSaleIds,
+                )
+                ->sum('quantity');
 
         $sales = $query
             ->with([
+                'customer:id,customer_code,name,mobile',
+
                 'createdBy:id,name,username',
 
                 'payments' =>
@@ -275,6 +289,7 @@ class SaleController extends Controller
                         'id',
                         'sale_id',
                         'payment_method',
+                        'payment_type',
                         'amount',
                         'reference_number',
                     ])
@@ -292,22 +307,21 @@ class SaleController extends Controller
         $includeProfit =
             $user->isAdmin();
 
-        $data = collect(
-            $sales->items(),
-        )
-            ->map(
-                fn(
-                    Sale $sale,
-                ): array =>
-                $this->saleSummaryData(
-                    $sale,
-                    $includeProfit,
-                ),
-            )
-            ->values();
-
         return response()->json([
-            'data' => $data,
+            'data' =>
+            collect(
+                $sales->items(),
+            )
+                ->map(
+                    fn(
+                        Sale $sale,
+                    ): array =>
+                    $this->saleSummaryData(
+                        $sale,
+                        $includeProfit,
+                    ),
+                )
+                ->values(),
 
             'summary' => [
                 'total_sales' =>
@@ -321,6 +335,13 @@ class SaleController extends Controller
                 (float) (
                     $summaryRecord
                     ?->total_revenue
+                    ?? 0
+                ),
+
+                'outstanding_due' =>
+                (float) (
+                    $summaryRecord
+                    ?->outstanding_due
                     ?? 0
                 ),
 
@@ -382,7 +403,8 @@ class SaleController extends Controller
 
         if (! $user instanceof User) {
             return response()->json([
-                'message' => 'Unauthenticated.',
+                'message' =>
+                'Unauthenticated.',
             ], 401);
         }
 
@@ -394,6 +416,28 @@ class SaleController extends Controller
                 $validated,
                 $user,
             ): Sale {
+                $customer = null;
+
+                if (
+                    ! empty($validated['customer_id'])
+                ) {
+                    $customer =
+                        Customer::query()
+                        ->whereKey(
+                            $validated['customer_id'],
+                        )
+                        ->lockForUpdate()
+                        ->firstOrFail();
+
+                    if (! $customer->is_active) {
+                        throw ValidationException::withMessages([
+                                'customer_id' => [
+                                    'The selected customer is inactive.',
+                                ],
+                            ]);
+                    }
+                }
+
                 $requestedItems =
                     collect(
                         $validated['items'],
@@ -437,12 +481,8 @@ class SaleController extends Controller
                 }
 
                 $computedItems = [];
-
                 $subtotal = 0.0;
-
-                $itemDiscountTotal =
-                    0.0;
-
+                $itemDiscountTotal = 0.0;
                 $grossProfit = 0.0;
 
                 foreach (
@@ -499,35 +539,39 @@ class SaleController extends Controller
                     ) {
                         throw ValidationException::withMessages([
                                 "items.{$index}.quantity" => [
-                                    "Only {$availableQuantity} {$batch->product->unit} are available at this price.",
+                                    "Only {$availableQuantity} {$batch->product->unit} are available.",
                                 ],
                             ]);
                     }
 
-                    $sellingPrice = round(
-                        (float) $batch
-                            ->selling_price,
-                        2,
-                    );
+                    $sellingPrice =
+                        round(
+                            (float) $batch
+                                ->selling_price,
+                            2,
+                        );
 
-                    $purchaseCost = round(
-                        (float) $batch
-                            ->purchase_cost,
-                        2,
-                    );
+                    $purchaseCost =
+                        round(
+                            (float) $batch
+                                ->purchase_cost,
+                            2,
+                        );
 
-                    $itemDiscount = round(
-                        (float) (
-                            $requestedItem['discount'] ?? 0
-                        ),
-                        2,
-                    );
+                    $itemDiscount =
+                        round(
+                            (float) (
+                                $requestedItem['discount'] ?? 0
+                            ),
+                            2,
+                        );
 
-                    $lineSubtotal = round(
-                        $quantity
-                            * $sellingPrice,
-                        2,
-                    );
+                    $lineSubtotal =
+                        round(
+                            $quantity
+                                * $sellingPrice,
+                            2,
+                        );
 
                     if (
                         $itemDiscount
@@ -540,17 +584,19 @@ class SaleController extends Controller
                             ]);
                     }
 
-                    $lineTotal = round(
-                        $lineSubtotal
-                            - $itemDiscount,
-                        2,
-                    );
+                    $lineTotal =
+                        round(
+                            $lineSubtotal
+                                - $itemDiscount,
+                            2,
+                        );
 
-                    $lineCost = round(
-                        $quantity
-                            * $purchaseCost,
-                        2,
-                    );
+                    $lineCost =
+                        round(
+                            $quantity
+                                * $purchaseCost,
+                            2,
+                        );
 
                     $lineGrossProfit =
                         round(
@@ -570,24 +616,12 @@ class SaleController extends Controller
 
                     $computedItems[] = [
                         'batch' => $batch,
-
-                        'quantity' =>
-                        $quantity,
-
-                        'purchase_cost' =>
-                        $purchaseCost,
-
-                        'selling_price' =>
-                        $sellingPrice,
-
-                        'discount' =>
-                        $itemDiscount,
-
-                        'line_total' =>
-                        $lineTotal,
-
-                        'gross_profit' =>
-                        $lineGrossProfit,
+                        'quantity' => $quantity,
+                        'purchase_cost' => $purchaseCost,
+                        'selling_price' => $sellingPrice,
+                        'discount' => $itemDiscount,
+                        'line_total' => $lineTotal,
+                        'gross_profit' => $lineGrossProfit,
                     ];
                 }
 
@@ -600,12 +634,13 @@ class SaleController extends Controller
                         2,
                     );
 
-                $saleDiscount = round(
-                    (float) $validated['discount'],
-                    2,
-                );
+                $saleDiscount =
+                    round(
+                        (float) $validated['discount'],
+                        2,
+                    );
 
-                $maximumSaleDiscount =
+                $maximumDiscount =
                     round(
                         $subtotal
                             - $itemDiscountTotal,
@@ -614,7 +649,7 @@ class SaleController extends Controller
 
                 if (
                     $saleDiscount
-                    > $maximumSaleDiscount
+                    > $maximumDiscount
                 ) {
                     throw ValidationException::withMessages([
                             'discount' => [
@@ -623,71 +658,187 @@ class SaleController extends Controller
                         ]);
                 }
 
-                $grandTotal = round(
-                    $subtotal
-                        - $itemDiscountTotal
-                        - $saleDiscount,
-                    2,
-                );
+                $grandTotal =
+                    round(
+                        $subtotal
+                            - $itemDiscountTotal
+                            - $saleDiscount,
+                        2,
+                    );
+
+                $settlementType =
+                    $validated['settlement_type'];
 
                 $paymentMethod =
-                    $validated['payment_method'];
+                    $validated['payment_method'] ?? null;
 
-                $amountReceived = round(
-                    (float) $validated['amount_received'],
-                    2,
-                );
+                $amountReceived =
+                    round(
+                        (float) $validated['amount_received'],
+                        2,
+                    );
 
-                if (
-                    $paymentMethod
-                    === SalePayment::METHOD_CASH
-                    && $amountReceived
-                    < $grandTotal
-                ) {
-                    throw ValidationException::withMessages([
-                            'amount_received' => [
-                                'The received cash amount is less than the sale total.',
-                            ],
-                        ]);
-                }
+                $paidAmount = 0.0;
+                $dueAmount = 0.0;
+                $changeAmount = 0.0;
+                $paymentStatus =
+                    Sale::PAYMENT_STATUS_PAID;
 
                 if (
-                    $paymentMethod
-                    !== SalePayment::METHOD_CASH
-                    && abs(
-                        $amountReceived
-                            - $grandTotal,
-                    ) > 0.01
+                    $settlementType
+                    === Sale::SETTLEMENT_FULL
                 ) {
-                    throw ValidationException::withMessages([
-                            'amount_received' => [
-                                'Card and bank-transfer payments must equal the sale total.',
-                            ],
-                        ]);
-                }
+                    if (! $paymentMethod) {
+                        throw ValidationException::withMessages([
+                                'payment_method' => [
+                                    'Please select a payment method.',
+                                ],
+                            ]);
+                    }
 
-                $changeAmount =
-                    $paymentMethod
-                    === SalePayment::METHOD_CASH
-                    ? round(
-                        max(
-                            0,
+                    if (
+                        $paymentMethod
+                        === SalePayment::METHOD_CASH
+                    ) {
+                        if (
+                            $amountReceived
+                            < $grandTotal
+                        ) {
+                            throw ValidationException::withMessages([
+                                    'amount_received' => [
+                                        'The received cash amount is less than the sale total.',
+                                    ],
+                                ]);
+                        }
+
+                        $changeAmount =
+                            round(
+                                $amountReceived
+                                    - $grandTotal,
+                                2,
+                            );
+                    } elseif (
+                        abs(
                             $amountReceived
                                 - $grandTotal,
-                        ),
+                        ) > 0.01
+                    ) {
+                        throw ValidationException::withMessages([
+                                'amount_received' => [
+                                    'Card and bank-transfer payments must equal the sale total.',
+                                ],
+                            ]);
+                    }
+
+                    $paidAmount =
+                        $grandTotal;
+                } elseif (
+                    $settlementType
+                    === Sale::SETTLEMENT_PARTIAL
+                ) {
+                    if (! $customer) {
+                        throw ValidationException::withMessages([
+                                'customer_id' => [
+                                    'A customer is required for a partial payment sale.',
+                                ],
+                            ]);
+                    }
+
+                    if (
+                        ! $paymentMethod
+                        || $amountReceived <= 0
+                        || $amountReceived
+                        >= $grandTotal
+                    ) {
+                        throw ValidationException::withMessages([
+                                'amount_received' => [
+                                    'The partial payment must be greater than zero and less than the sale total.',
+                                ],
+                            ]);
+                    }
+
+                    $paidAmount =
+                        $amountReceived;
+
+                    $dueAmount =
+                        round(
+                            $grandTotal
+                                - $paidAmount,
+                            2,
+                        );
+
+                    $paymentStatus =
+                        Sale::PAYMENT_STATUS_PARTIAL;
+                } else {
+                    if (! $customer) {
+                        throw ValidationException::withMessages([
+                                'customer_id' => [
+                                    'A customer is required for a due sale.',
+                                ],
+                            ]);
+                    }
+
+                    if ($amountReceived > 0) {
+                        throw ValidationException::withMessages([
+                                'amount_received' => [
+                                    'Use partial payment when an initial amount is received.',
+                                ],
+                            ]);
+                    }
+
+                    $paidAmount = 0;
+                    $dueAmount =
+                        $grandTotal;
+
+                    $paymentStatus =
+                        Sale::PAYMENT_STATUS_DUE;
+                }
+
+                if (
+                    $customer
+                    && $dueAmount > 0
+                    && (float) $customer
+                        ->credit_limit > 0
+                ) {
+                    $existingDue =
+                        (float) Sale::query()
+                            ->where(
+                                'customer_id',
+                                $customer->id,
+                            )
+                            ->sum(
+                                'due_amount',
+                            );
+
+                    if (
+                        $existingDue
+                        + $dueAmount
+                        > (float) $customer
+                            ->credit_limit
+                    ) {
+                        throw ValidationException::withMessages([
+                                'customer_id' => [
+                                    'This sale would exceed the customer credit limit.',
+                                ],
+                            ]);
+                    }
+                }
+
+                $netProfit =
+                    round(
+                        $grossProfit
+                            - $saleDiscount,
                         2,
-                    )
-                    : 0;
+                    );
 
-                $netProfit = round(
-                    $grossProfit
-                        - $saleDiscount,
-                    2,
-                );
-
-                $sale = Sale::query()
+                $sale =
+                    Sale::query()
                     ->create([
-                        'sale_date' => now(),
+                        'customer_id' =>
+                        $customer?->id,
+
+                        'sale_date' =>
+                        now(),
 
                         'subtotal' =>
                         $subtotal,
@@ -702,7 +853,15 @@ class SaleController extends Controller
                         $grandTotal,
 
                         'paid_amount' =>
-                        $grandTotal,
+                        $paidAmount,
+
+                        'due_amount' =>
+                        $dueAmount,
+
+                        'due_date' =>
+                        $dueAmount > 0
+                            ? $validated['due_date']
+                            : null,
 
                         'change_amount' =>
                         $changeAmount,
@@ -717,11 +876,13 @@ class SaleController extends Controller
                         $netProfit,
 
                         'payment_status' =>
-                        Sale::PAYMENT_STATUS_PAID,
+                        $paymentStatus,
+
+                        'settlement_type' =>
+                        $settlementType,
 
                         'notes' =>
-                        $validated['notes']
-                            ?? null,
+                        $validated['notes'] ?? null,
 
                         'created_by' =>
                         $user->id,
@@ -729,10 +890,15 @@ class SaleController extends Controller
 
                 $sale->update([
                     'sale_number' =>
-                    $this
-                        ->generateSaleNumber(
-                            $sale,
-                        ),
+                    sprintf(
+                        'SAL-%s-%06d',
+                        $sale
+                            ->sale_date
+                            ->format(
+                                'Ymd',
+                            ),
+                        $sale->id,
+                    ),
                 ]);
 
                 foreach (
@@ -832,27 +998,31 @@ class SaleController extends Controller
                         ]);
                 }
 
-                SalePayment::query()
-                    ->create([
-                        'sale_id' =>
-                        $sale->id,
+                if ($paidAmount > 0) {
+                    SalePayment::query()
+                        ->create([
+                            'sale_id' =>
+                            $sale->id,
 
-                        'payment_method' =>
-                        $paymentMethod,
+                            'payment_method' =>
+                            $paymentMethod,
 
-                        'amount' =>
-                        $grandTotal,
+                            'payment_type' =>
+                            SalePayment::TYPE_INITIAL,
 
-                        'reference_number' =>
-                        $validated['reference_number'] ?? null,
+                            'amount' =>
+                            $paidAmount,
 
-                        'notes' =>
-                        $validated['notes']
-                            ?? null,
+                            'reference_number' =>
+                            $validated['reference_number'] ?? null,
 
-                        'created_by' =>
-                        $user->id,
-                    ]);
+                            'notes' =>
+                            $validated['notes'] ?? null,
+
+                            'created_by' =>
+                            $user->id,
+                        ]);
+                }
 
                 return $sale;
             },
@@ -881,7 +1051,8 @@ class SaleController extends Controller
 
         if (! $user instanceof User) {
             return response()->json([
-                'message' => 'Unauthenticated.',
+                'message' =>
+                'Unauthenticated.',
             ], 401);
         }
 
@@ -907,37 +1078,20 @@ class SaleController extends Controller
         ]);
     }
 
-    private function generateSaleNumber(
-        Sale $sale,
-    ): string {
-        return sprintf(
-            'SAL-%s-%06d',
-            $sale
-                ->sale_date
-                ->format('Ymd'),
-            $sale->id,
-        );
-    }
-
     private function loadSale(
         Sale $sale,
     ): Sale {
         return $sale->load([
+            'customer:id,customer_code,name,mobile,secondary_mobile,email,address',
+
             'createdBy:id,name,username',
 
             'payments' =>
             fn($query) =>
             $query
-                ->select([
-                    'id',
-                    'sale_id',
-                    'payment_method',
-                    'amount',
-                    'reference_number',
-                    'notes',
-                    'created_by',
-                    'created_at',
-                ])
+                ->with(
+                    'createdBy:id,name,username',
+                )
                 ->orderBy('id'),
 
             'items' =>
@@ -960,15 +1114,9 @@ class SaleController extends Controller
         $firstPayment =
             $sale->payments->first();
 
-        $paymentMethods =
-            $sale->payments
-            ->pluck('payment_method')
-            ->filter()
-            ->unique()
-            ->values();
-
         return [
-            'id' => $sale->id,
+            'id' =>
+            $sale->id,
 
             'sale_number' =>
             $sale->sale_number,
@@ -979,14 +1127,16 @@ class SaleController extends Controller
                 ->toISOString(),
 
             'subtotal' =>
-            (float) $sale->subtotal,
+            (float) $sale
+                ->subtotal,
 
             'item_discount_total' =>
             (float) $sale
                 ->item_discount_total,
 
             'discount' =>
-            (float) $sale->discount,
+            (float) $sale
+                ->discount,
 
             'grand_total' =>
             (float) $sale
@@ -995,6 +1145,15 @@ class SaleController extends Controller
             'paid_amount' =>
             (float) $sale
                 ->paid_amount,
+
+            'due_amount' =>
+            (float) $sale
+                ->due_amount,
+
+            'due_date' =>
+            $sale
+                ->due_date
+                ?->format('Y-m-d'),
 
             'change_amount' =>
             (float) $sale
@@ -1015,7 +1174,42 @@ class SaleController extends Controller
             'payment_status' =>
             $sale->payment_status,
 
-            'notes' => $sale->notes,
+            'settlement_type' =>
+            $sale->settlement_type,
+
+            'payment_method' =>
+            $firstPayment
+                ? $firstPayment
+                ->payment_method
+                : null,
+
+            'customer' =>
+            $sale->customer
+                ? [
+                    'id' =>
+                    $sale
+                        ->customer
+                        ->id,
+
+                    'customer_code' =>
+                    $sale
+                        ->customer
+                        ->customer_code,
+
+                    'name' =>
+                    $sale
+                        ->customer
+                        ->name,
+
+                    'mobile' =>
+                    $sale
+                        ->customer
+                        ->mobile,
+                ]
+                : null,
+
+            'notes' =>
+            $sale->notes,
 
             'items_count' =>
             (int) (
@@ -1027,21 +1221,11 @@ class SaleController extends Controller
 
             'total_quantity' =>
             (float) (
-                $sale
-                ->total_quantity
+                $sale->total_quantity
                 ?? $sale
                 ->items()
                 ->sum('quantity')
             ),
-
-            'payment_method' =>
-            $firstPayment
-                ? $firstPayment
-                ->payment_method
-                : null,
-
-            'payment_methods' =>
-            $paymentMethods,
 
             'created_by' => [
                 'id' =>
@@ -1089,7 +1273,8 @@ class SaleController extends Controller
                     fn(
                         SaleItem $item,
                     ): array => [
-                        'id' => $item->id,
+                        'id' =>
+                        $item->id,
 
                         'product_id' =>
                         $item
@@ -1195,6 +1380,10 @@ class SaleController extends Controller
                         $payment
                             ->payment_method,
 
+                        'payment_type' =>
+                        $payment
+                            ->payment_type,
+
                         'amount' =>
                         (float) $payment
                             ->amount,
@@ -1205,6 +1394,22 @@ class SaleController extends Controller
 
                         'notes' =>
                         $payment->notes,
+
+                        'created_by' =>
+                        $payment
+                            ->createdBy
+                            ? [
+                                'id' =>
+                                $payment
+                                    ->createdBy
+                                    ->id,
+
+                                'name' =>
+                                $payment
+                                    ->createdBy
+                                    ->name,
+                            ]
+                            : null,
 
                         'created_at' =>
                         $payment

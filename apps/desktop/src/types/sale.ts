@@ -1,5 +1,7 @@
 export type PosPaymentMethod = "cash" | "card" | "bank_transfer";
 
+export type SaleSettlementType = "full" | "partial" | "due";
+
 export interface PosCategory {
   id: number;
   name: string;
@@ -71,11 +73,21 @@ export interface PosCartItem {
 }
 
 export interface CompleteSaleValues {
+  customer_id: number | null;
+  settlement_type: SaleSettlementType;
   discount: number;
-  payment_method: PosPaymentMethod;
+  payment_method: PosPaymentMethod | null;
   amount_received: number;
+  due_date: string;
   reference_number: string;
   notes: string;
+}
+
+export interface SaleCustomer {
+  id: number;
+  customer_code: string;
+  name: string;
+  mobile: string | null;
 }
 
 export interface SaleCashier {
@@ -114,9 +126,16 @@ export interface SaleReceiptItem {
 export interface SaleReceiptPayment {
   id: number;
   payment_method: PosPaymentMethod;
+  payment_type: string;
   amount: number;
   reference_number: string | null;
   notes: string | null;
+
+  created_by: {
+    id: number;
+    name: string;
+  } | null;
+
   created_at: string;
 }
 
@@ -129,12 +148,15 @@ export interface SaleReceipt {
   discount: number;
   grand_total: number;
   paid_amount: number;
+  due_amount: number;
+  due_date: string | null;
   change_amount: number;
   gross_profit: number | null;
   net_profit: number | null;
   payment_status: string;
-  payment_method: PosPaymentMethod;
-  payment_methods: PosPaymentMethod[];
+  settlement_type: SaleSettlementType;
+  payment_method: PosPaymentMethod | null;
+  customer: SaleCustomer | null;
   notes: string | null;
   items_count: number;
   total_quantity: number;
@@ -166,12 +188,15 @@ export interface SaleHistoryItem {
   discount: number;
   grand_total: number;
   paid_amount: number;
+  due_amount: number;
+  due_date: string | null;
   change_amount: number;
   gross_profit: number | null;
   net_profit: number | null;
   payment_status: string;
+  settlement_type: SaleSettlementType;
   payment_method: PosPaymentMethod | null;
-  payment_methods: PosPaymentMethod[];
+  customer: SaleCustomer | null;
   notes: string | null;
   items_count: number;
   total_quantity: number;
@@ -183,6 +208,7 @@ export interface SaleHistoryItem {
 export interface SaleHistorySummary {
   total_sales: number;
   total_revenue: number;
+  outstanding_due: number;
   total_discount: number;
   total_items: number;
   gross_profit: number | null;
@@ -202,6 +228,7 @@ export interface SaleDetailsResponse {
 export interface SaleHistoryParameters {
   search?: string;
   paymentMethod?: string;
+  paymentStatus?: string;
   dateFrom?: string;
   dateTo?: string;
   page?: number;

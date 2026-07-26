@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\CustomerDueController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\PurchaseController;
@@ -97,9 +99,55 @@ Route::prefix('v1')
                     );
 
                     /*
-                     * Sales return routes must be
-                     * declared before the sales
-                     * API resource routes.
+                     * Customer routes.
+                     */
+                    Route::get(
+                        '/customers/options',
+                        [
+                            CustomerController::class,
+                            'options',
+                        ],
+                    );
+
+                    Route::apiResource(
+                        'customers',
+                        CustomerController::class,
+                    )->only([
+                        'index',
+                        'store',
+                        'show',
+                        'update',
+                    ]);
+
+                    /*
+                     * Due-management routes.
+                     */
+                    Route::get(
+                        '/customer-dues',
+                        [
+                            CustomerDueController::class,
+                            'index',
+                        ],
+                    );
+
+                    Route::get(
+                        '/customer-dues/{sale}',
+                        [
+                            CustomerDueController::class,
+                            'show',
+                        ],
+                    );
+
+                    Route::post(
+                        '/sales/{sale}/due-payments',
+                        [
+                            CustomerDueController::class,
+                            'store',
+                        ],
+                    );
+
+                    /*
+                     * Sales return routes.
                      */
                     Route::get(
                         '/sales/{sale}/return-options',
@@ -145,6 +193,14 @@ Route::prefix('v1')
 
                 Route::middleware('role:admin')
                     ->group(function (): void {
+                        Route::delete(
+                            '/customers/{customer}',
+                            [
+                                CustomerController::class,
+                                'destroy',
+                            ],
+                        );
+
                         Route::get(
                             '/admin/access-check',
                             function (): JsonResponse {

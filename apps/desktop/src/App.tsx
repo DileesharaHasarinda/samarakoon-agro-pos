@@ -43,6 +43,12 @@ import SuppliersPage
 import CashierDashboardPage
     from './pages/cashier/CashierDashboardPage';
 
+import CustomersPage
+    from './pages/shared/CustomersPage';
+
+import DueManagementPage
+    from './pages/shared/DueManagementPage';
+
 import ModulePlaceholderPage
     from './pages/shared/ModulePlaceholderPage';
 
@@ -58,7 +64,6 @@ import SalesReturnsPage
 export default function App() {
     return (
         <Routes>
-            {/* Public routes */}
             <Route
                 element={<PublicOnlyRoute />}
             >
@@ -68,7 +73,6 @@ export default function App() {
                 />
             </Route>
 
-            {/* Admin routes */}
             <Route
                 element={
                     <ProtectedRoute
@@ -119,6 +123,20 @@ export default function App() {
                     />
 
                     <Route
+                        path="customers"
+                        element={
+                            <CustomersPage />
+                        }
+                    />
+
+                    <Route
+                        path="dues"
+                        element={
+                            <DueManagementPage />
+                        }
+                    />
+
+                    <Route
                         path="categories"
                         element={
                             <CategoriesPage />
@@ -150,16 +168,6 @@ export default function App() {
                         path="inventory"
                         element={
                             <InventoryPage />
-                        }
-                    />
-
-                    <Route
-                        path="customers"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Customers"
-                                description="Manage customer details and customer purchase history."
-                            />
                         }
                     />
 
@@ -205,7 +213,6 @@ export default function App() {
                 </Route>
             </Route>
 
-            {/* Cashier routes */}
             <Route
                 element={
                     <ProtectedRoute
@@ -258,22 +265,24 @@ export default function App() {
                     <Route
                         path="customers"
                         element={
-                            <ModulePlaceholderPage
-                                title="Customers"
-                                description="Search and manage customer details."
-                            />
+                            <CustomersPage />
+                        }
+                    />
+
+                    <Route
+                        path="dues"
+                        element={
+                            <DueManagementPage />
                         }
                     />
                 </Route>
             </Route>
 
-            {/* Role-based home redirect */}
             <Route
                 path="/"
                 element={<RoleHomeRedirect />}
             />
 
-            {/* Unknown routes */}
             <Route
                 path="*"
                 element={<NotFoundPage />}

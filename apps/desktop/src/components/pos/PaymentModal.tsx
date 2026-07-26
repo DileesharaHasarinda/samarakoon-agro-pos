@@ -8,17 +8,25 @@ import type {
     FormEvent,
 } from 'react';
 
+import CustomerSelectModal
+    from '../customers/CustomerSelectModal';
+
+import type {
+    Customer,
+} from '../../types/customer';
+
 import type {
     CompleteSaleValues,
     PosPaymentMethod,
+    SaleSettlementType,
 } from '../../types/sale';
 
 interface PaymentModalProps {
     isOpen: boolean;
     grandTotal: number;
+    discount: number;
     isSubmitting: boolean;
     errorMessage: string;
-
     onClose: () => void;
 
     onSubmit: (
@@ -36,14 +44,64 @@ const currencyFormatter =
         },
     );
 
+function parsePaymentMethod(
+    value: string,
+): PosPaymentMethod {
+    switch (value) {
+        case 'card':
+            return 'card';
+
+        case 'bank_transfer':
+            return 'bank_transfer';
+
+        default:
+            return 'cash';
+    }
+}
+
+function parseSettlementType(
+    value: string,
+): SaleSettlementType {
+    switch (value) {
+        case 'partial':
+            return 'partial';
+
+        case 'due':
+            return 'due';
+
+        default:
+            return 'full';
+    }
+}
+
 export default function PaymentModal({
     isOpen,
     grandTotal,
+    discount,
     isSubmitting,
     errorMessage,
     onClose,
     onSubmit,
 }: PaymentModalProps) {
+    const [
+        selectedCustomer,
+        setSelectedCustomer,
+    ] = useState<Customer | null>(
+        null,
+    );
+
+    const [
+        customerModalOpen,
+        setCustomerModalOpen,
+    ] = useState(false);
+
+    const [
+        settlementType,
+        setSettlementType,
+    ] = useState<SaleSettlementType>(
+        'full',
+    );
+
     const [
         paymentMethod,
         setPaymentMethod,
@@ -54,6 +112,11 @@ export default function PaymentModal({
     const [
         amountReceived,
         setAmountReceived,
+    ] = useState('');
+
+    const [
+        dueDate,
+        setDueDate,
     ] = useState('');
 
     const [
@@ -76,18 +139,21 @@ export default function PaymentModal({
             return;
         }
 
+        setSelectedCustomer(null);
+        setSettlementType('full');
         setPaymentMethod('cash');
 
         setAmountReceived(
             grandTotal.toFixed(2),
         );
 
+        setDueDate('');
         setReferenceNumber('');
         setNotes('');
         setLocalError('');
     }, [
-        isOpen,
         grandTotal,
+        isOpen,
     ]);
 
     useEffect(() => {
@@ -95,51 +161,39 @@ export default function PaymentModal({
             return;
         }
 
-        const handleKeyDown = (
-            event: KeyboardEvent,
-        ): void => {
-            if (
-                event.key === 'Escape'
-                && !isSubmitting
-            ) {
-                onClose();
-            }
-        };
-
-        window.addEventListener(
-            'keydown',
-            handleKeyDown,
-        );
-
-        return () => {
-            window.removeEventListener(
-                'keydown',
-                handleKeyDown,
+        if (settlementType === 'full') {
+            setAmountReceived(
+                grandTotal.toFixed(2),
             );
-        };
+
+            setDueDate('');
+        } else if (
+            settlementType === 'due'
+        ) {
+            setAmountReceived('0');
+        }
     }, [
+        grandTotal,
         isOpen,
-        isSubmitting,
-        onClose,
+        settlementType,
     ]);
 
-    const receivedAmount =
-        Number(amountReceived || 0);
+    const numericAmount =
+        Number(
+            amountReceived || 0,
+        );
 
-    const changeAmount =
+    const calculatedDue =
         useMemo(
             () =>
-                paymentMethod === 'cash'
-                    ? Math.max(
-                        0,
-                        receivedAmount
-                        - grandTotal,
-                    )
-                    : 0,
+                Math.max(
+                    0,
+                    grandTotal
+                    - numericAmount,
+                ),
             [
-                paymentMethod,
-                receivedAmount,
                 grandTotal,
+                numericAmount,
             ],
         );
 
@@ -147,223 +201,307 @@ export default function PaymentModal({
         return null;
     }
 
-    const handlePaymentMethodChange = (
-        method: PosPaymentMethod,
-    ): void => {
-        setPaymentMethod(method);
-        setLocalError('');
-
-        setAmountReceived(
-            grandTotal.toFixed(2),
-        );
-    };
-
     const handleSubmit = (
         event: FormEvent<HTMLFormElement>,
     ): void => {
         event.preventDefault();
 
         if (
-            !Number.isFinite(
-                receivedAmount,
+            (
+                settlementType
+                === 'partial'
+                || settlementType
+                === 'due'
             )
-            || receivedAmount < 0
+            && !selectedCustomer
         ) {
             setLocalError(
-                'Enter a valid received amount.',
+                'Select a registered customer for partial or due sales.',
             );
 
             return;
         }
 
         if (
-            paymentMethod === 'cash'
-            && receivedAmount
-            < grandTotal
+            settlementType !== 'full'
+            && !dueDate
         ) {
             setLocalError(
-                'The received cash amount is less than the sale total.',
+                'Please select the due date.',
             );
 
             return;
         }
 
         if (
-            paymentMethod !== 'cash'
+            settlementType === 'partial'
+            && (
+                numericAmount <= 0
+                || numericAmount
+                >= grandTotal
+            )
+        ) {
+            setLocalError(
+                'Partial payment must be greater than zero and less than the total.',
+            );
+
+            return;
+        }
+
+        if (
+            settlementType === 'full'
+            && paymentMethod !== 'cash'
             && Math.abs(
-                receivedAmount
+                numericAmount
                 - grandTotal,
             ) > 0.01
         ) {
             setLocalError(
-                'Card and bank-transfer payments must equal the sale total.',
+                'Card and bank-transfer payments must equal the total.',
+            );
+
+            return;
+        }
+
+        if (
+            settlementType === 'full'
+            && paymentMethod === 'cash'
+            && numericAmount < grandTotal
+        ) {
+            setLocalError(
+                'The received cash amount is less than the total.',
             );
 
             return;
         }
 
         onSubmit({
-            discount: 0,
+            customer_id:
+                selectedCustomer?.id
+                ?? null,
+
+            settlement_type:
+                settlementType,
+
+            discount,
+
             payment_method:
-                paymentMethod,
+                settlementType === 'due'
+                    ? null
+                    : paymentMethod,
 
             amount_received:
-                receivedAmount,
+                settlementType === 'due'
+                    ? 0
+                    : numericAmount,
+
+            due_date:
+                settlementType === 'full'
+                    ? ''
+                    : dueDate,
 
             reference_number:
-                referenceNumber,
+                referenceNumber.trim(),
 
-            notes,
+            notes:
+                notes.trim(),
         });
     };
 
     return (
-        <div
-            className="modal-backdrop"
-            role="presentation"
-        >
-            <section
-                className="pos-payment-modal"
-                role="dialog"
-                aria-modal="true"
-            >
-                <header className="modal-header">
-                    <div>
-                        <span className="page-kicker">
-                            Complete sale
-                        </span>
+        <>
+            <div className="modal-backdrop">
+                <section className="payment-modal">
+                    <header className="modal-header">
+                        <div>
+                            <span className="page-kicker">
+                                Checkout
+                            </span>
 
-                        <h2>Payment</h2>
-                    </div>
+                            <h2>
+                                Complete Sale
+                            </h2>
+                        </div>
 
-                    <button
-                        type="button"
-                        className="modal-close-button"
-                        disabled={isSubmitting}
-                        onClick={onClose}
+                        <button
+                            type="button"
+                            className="modal-close-button"
+                            disabled={isSubmitting}
+                            onClick={onClose}
+                        >
+                            ×
+                        </button>
+                    </header>
+
+                    <form
+                        className="payment-form"
+                        onSubmit={handleSubmit}
                     >
-                        ×
-                    </button>
-                </header>
+                        {(localError
+                            || errorMessage) && (
+                                <div className="form-alert">
+                                    {localError
+                                        || errorMessage}
+                                </div>
+                            )}
 
-                <form
-                    className="pos-payment-form"
-                    onSubmit={handleSubmit}
-                >
-                    {(localError
-                        || errorMessage) && (
-                            <div
-                                className="form-alert"
-                                role="alert"
-                            >
-                                {localError
-                                    || errorMessage}
+                        <section className="payment-customer-card">
+                            <div>
+                                <span>Customer</span>
+
+                                <strong>
+                                    {selectedCustomer
+                                        ?.name
+                                        ?? 'Walk-in Customer'}
+                                </strong>
+
+                                <small>
+                                    {selectedCustomer
+                                        ?.mobile
+                                        ?? 'No customer account selected'}
+                                </small>
                             </div>
-                        )}
 
-                    <div className="pos-payment-total">
-                        <span>
-                            Amount to Pay
-                        </span>
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => {
+                                    setCustomerModalOpen(
+                                        true,
+                                    );
+                                }}
+                            >
+                                Select Customer
+                            </button>
+                        </section>
 
-                        <strong>
-                            {currencyFormatter
-                                .format(
-                                    grandTotal,
-                                )}
-                        </strong>
-                    </div>
+                        <label>
+                            <span>
+                                Sale Settlement
+                            </span>
 
-                    <div className="pos-payment-methods">
-                        <button
-                            type="button"
-                            className={
-                                paymentMethod
-                                    === 'cash'
-                                    ? 'selected'
-                                    : ''
-                            }
-                            onClick={() => {
-                                handlePaymentMethodChange(
-                                    'cash',
-                                );
-                            }}
-                        >
-                            Cash
-                        </button>
+                            <select
+                                value={settlementType}
+                                disabled={isSubmitting}
+                                onChange={(event) => {
+                                    setSettlementType(
+                                        parseSettlementType(
+                                            event
+                                                .target
+                                                .value,
+                                        ),
+                                    );
 
-                        <button
-                            type="button"
-                            className={
-                                paymentMethod
-                                    === 'card'
-                                    ? 'selected'
-                                    : ''
-                            }
-                            onClick={() => {
-                                handlePaymentMethodChange(
-                                    'card',
-                                );
-                            }}
-                        >
-                            Card
-                        </button>
+                                    setLocalError('');
+                                }}
+                            >
+                                <option value="full">
+                                    Full Payment
+                                </option>
 
-                        <button
-                            type="button"
-                            className={
-                                paymentMethod
-                                    === 'bank_transfer'
-                                    ? 'selected'
-                                    : ''
-                            }
-                            onClick={() => {
-                                handlePaymentMethodChange(
-                                    'bank_transfer',
-                                );
-                            }}
-                        >
-                            Bank Transfer
-                        </button>
-                    </div>
+                                <option value="partial">
+                                    Partial Payment
+                                </option>
 
-                    <label>
-                        <span>
-                            {paymentMethod === 'cash'
-                                ? 'Cash Received'
-                                : 'Payment Amount'}
-                        </span>
+                                <option value="due">
+                                    Entire Sale on Due
+                                </option>
+                            </select>
+                        </label>
 
-                        <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={amountReceived}
-                            readOnly={
-                                paymentMethod
-                                !== 'cash'
-                            }
-                            onChange={(event) => {
-                                setAmountReceived(
-                                    event.target.value,
-                                );
+                        {settlementType
+                            !== 'due' && (
+                                <label>
+                                    <span>
+                                        Payment Method
+                                    </span>
 
-                                setLocalError('');
-                            }}
-                        />
-                    </label>
+                                    <select
+                                        value={paymentMethod}
+                                        disabled={isSubmitting}
+                                        onChange={(event) => {
+                                            setPaymentMethod(
+                                                parsePaymentMethod(
+                                                    event
+                                                        .target
+                                                        .value,
+                                                ),
+                                            );
+                                        }}
+                                    >
+                                        <option value="cash">
+                                            Cash
+                                        </option>
 
-                    {paymentMethod !== 'cash' && (
+                                        <option value="card">
+                                            Card
+                                        </option>
+
+                                        <option value="bank_transfer">
+                                            Bank Transfer
+                                        </option>
+                                    </select>
+                                </label>
+                            )}
+
+                        <label>
+                            <span>
+                                Amount Received
+                            </span>
+
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={amountReceived}
+                                disabled={
+                                    isSubmitting
+                                    || settlementType
+                                    === 'due'
+                                }
+                                onChange={(event) => {
+                                    setAmountReceived(
+                                        event.target.value,
+                                    );
+
+                                    setLocalError('');
+                                }}
+                            />
+                        </label>
+
+                        {settlementType
+                            !== 'full' && (
+                                <label>
+                                    <span>
+                                        Due Date *
+                                    </span>
+
+                                    <input
+                                        type="date"
+                                        value={dueDate}
+                                        min={
+                                            new Date()
+                                                .toISOString()
+                                                .slice(0, 10)
+                                        }
+                                        disabled={isSubmitting}
+                                        onChange={(event) => {
+                                            setDueDate(
+                                                event.target.value,
+                                            );
+                                        }}
+                                    />
+                                </label>
+                            )}
+
                         <label>
                             <span>
                                 Reference Number
                             </span>
 
                             <input
-                                type="text"
                                 value={referenceNumber}
-                                maxLength={150}
-                                placeholder="Optional transaction reference"
+                                disabled={isSubmitting}
                                 onChange={(event) => {
                                     setReferenceNumber(
                                         event.target.value,
@@ -371,59 +509,105 @@ export default function PaymentModal({
                                 }}
                             />
                         </label>
-                    )}
 
-                    <label>
-                        <span>Sale Notes</span>
+                        <label>
+                            <span>Notes</span>
 
-                        <textarea
-                            rows={3}
-                            value={notes}
-                            maxLength={1000}
-                            placeholder="Optional"
-                            onChange={(event) => {
-                                setNotes(
-                                    event.target.value,
-                                );
-                            }}
-                        />
-                    </label>
+                            <textarea
+                                rows={2}
+                                value={notes}
+                                disabled={isSubmitting}
+                                onChange={(event) => {
+                                    setNotes(
+                                        event.target.value,
+                                    );
+                                }}
+                            />
+                        </label>
 
-                    <div className="pos-change-panel">
-                        <span>
-                            Change to Customer
-                        </span>
+                        <section className="payment-summary">
+                            <div>
+                                <span>Grand Total</span>
 
-                        <strong>
-                            {currencyFormatter
-                                .format(
-                                    changeAmount,
-                                )}
-                        </strong>
-                    </div>
+                                <strong>
+                                    {currencyFormatter
+                                        .format(
+                                            grandTotal,
+                                        )}
+                                </strong>
+                            </div>
 
-                    <footer className="modal-actions">
-                        <button
-                            type="button"
-                            className="secondary-button"
-                            disabled={isSubmitting}
-                            onClick={onClose}
-                        >
-                            Cancel
-                        </button>
+                            <div>
+                                <span>
+                                    Amount Received
+                                </span>
 
-                        <button
-                            type="submit"
-                            className="primary-button"
-                            disabled={isSubmitting}
-                        >
-                            {isSubmitting
-                                ? 'Completing Sale...'
-                                : 'Complete Sale'}
-                        </button>
-                    </footer>
-                </form>
-            </section>
-        </div>
+                                <strong>
+                                    {currencyFormatter
+                                        .format(
+                                            settlementType
+                                                === 'due'
+                                                ? 0
+                                                : numericAmount,
+                                        )}
+                                </strong>
+                            </div>
+
+                            <div className="payment-due-row">
+                                <span>
+                                    Due Amount
+                                </span>
+
+                                <strong>
+                                    {currencyFormatter
+                                        .format(
+                                            settlementType
+                                                === 'full'
+                                                ? 0
+                                                : calculatedDue,
+                                        )}
+                                </strong>
+                            </div>
+                        </section>
+
+                        <footer className="modal-actions">
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                disabled={isSubmitting}
+                                onClick={onClose}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                type="submit"
+                                className="primary-button"
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting
+                                    ? 'Completing...'
+                                    : 'Complete Sale'}
+                            </button>
+                        </footer>
+                    </form>
+                </section>
+            </div>
+
+            <CustomerSelectModal
+                isOpen={customerModalOpen}
+                selectedCustomer={
+                    selectedCustomer
+                }
+                onClose={() => {
+                    setCustomerModalOpen(
+                        false,
+                    );
+                }}
+                onSelect={
+                    setSelectedCustomer
+                }
+            />
+        </>
     );
 }

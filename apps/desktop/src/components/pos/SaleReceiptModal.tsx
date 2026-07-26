@@ -33,7 +33,7 @@ function formatDateTime(
 }
 
 function paymentName(
-    method: string,
+    method: string | null,
 ): string {
     switch (method) {
         case 'bank_transfer':
@@ -42,8 +42,14 @@ function paymentName(
         case 'card':
             return 'Card';
 
-        default:
+        case 'cash':
             return 'Cash';
+
+        case null:
+            return 'On Due';
+
+        default:
+            return 'Not Recorded';
     }
 }
 

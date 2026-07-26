@@ -2,9 +2,11 @@
 
 namespace App\Http\Requests\Sale;
 
+use App\Models\Sale;
 use App\Models\SalePayment;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreSaleRequest extends FormRequest
 {
@@ -15,6 +17,14 @@ class StoreSaleRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $reference =
+            $this->input(
+                'reference_number',
+            );
+
+        $notes =
+            $this->input('notes');
+
         $items = collect(
             $this->input('items', []),
         )
@@ -22,7 +32,8 @@ class StoreSaleRequest extends FormRequest
                 function (
                     mixed $item,
                 ): array {
-                    $item = is_array($item)
+                    $item =
+                        is_array($item)
                         ? $item
                         : [];
 
@@ -37,25 +48,26 @@ class StoreSaleRequest extends FormRequest
             )
             ->all();
 
-        $referenceNumber =
-            $this->input(
-                'reference_number',
-            );
-
-        $notes =
-            $this->input('notes');
-
         $this->merge([
-            'reference_number' =>
-            is_string(
-                $referenceNumber,
+            'customer_id' =>
+            $this->filled(
+                'customer_id',
             )
-                && trim(
-                    $referenceNumber,
-                ) !== ''
-                ? trim(
-                    $referenceNumber,
+                ? (int) $this->input(
+                    'customer_id',
                 )
+                : null,
+
+            'amount_received' =>
+            $this->input(
+                'amount_received',
+                0,
+            ),
+
+            'reference_number' =>
+            is_string($reference)
+                && trim($reference) !== ''
+                ? trim($reference)
                 : null,
 
             'notes' =>
@@ -64,7 +76,8 @@ class StoreSaleRequest extends FormRequest
                 ? trim($notes)
                 : null,
 
-            'items' => $items,
+            'items' =>
+            $items,
         ]);
     }
 
@@ -74,14 +87,24 @@ class StoreSaleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'discount' => [
+            'customer_id' => [
+                'nullable',
+                'integer',
+                'exists:customers,id',
+            ],
+
+            'settlement_type' => [
                 'required',
-                'numeric',
-                'min:0',
+
+                Rule::in([
+                    Sale::SETTLEMENT_FULL,
+                    Sale::SETTLEMENT_PARTIAL,
+                    Sale::SETTLEMENT_DUE,
+                ]),
             ],
 
             'payment_method' => [
-                'required',
+                'nullable',
 
                 Rule::in([
                     SalePayment::METHOD_CASH,
@@ -96,16 +119,27 @@ class StoreSaleRequest extends FormRequest
                 'min:0',
             ],
 
+            'due_date' => [
+                'nullable',
+                'date_format:Y-m-d',
+            ],
+
+            'discount' => [
+                'required',
+                'numeric',
+                'min:0',
+            ],
+
             'reference_number' => [
                 'nullable',
                 'string',
-                'max:150',
+                'max:160',
             ],
 
             'notes' => [
                 'nullable',
                 'string',
-                'max:1000',
+                'max:1500',
             ],
 
             'items' => [
@@ -136,38 +170,89 @@ class StoreSaleRequest extends FormRequest
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
-    public function messages(): array
+    public function after(): array
     {
         return [
-            'items.required' =>
-            'Please add at least one product to the cart.',
+            function (
+                Validator $validator,
+            ): void {
+                $type =
+                    $this->input(
+                        'settlement_type',
+                    );
 
-            'items.min' =>
-            'Please add at least one product to the cart.',
+                $customerId =
+                    $this->input(
+                        'customer_id',
+                    );
 
-            'items.*.stock_batch_id.required' =>
-            'Please select a stock price batch.',
+                $paymentMethod =
+                    $this->input(
+                        'payment_method',
+                    );
 
-            'items.*.stock_batch_id.distinct' =>
-            'The same stock batch cannot appear twice in the cart.',
+                $dueDate =
+                    $this->input(
+                        'due_date',
+                    );
 
-            'items.*.quantity.required' =>
-            'Please enter the sale quantity.',
+                if (
+                    in_array(
+                        $type,
+                        [
+                            Sale::SETTLEMENT_PARTIAL,
+                            Sale::SETTLEMENT_DUE,
+                        ],
+                        true,
+                    )
+                    && ! $customerId
+                ) {
+                    $validator
+                        ->errors()
+                        ->add(
+                            'customer_id',
+                            'A registered customer is required for partial or due sales.',
+                        );
+                }
 
-            'items.*.quantity.min' =>
-            'The sale quantity must be greater than zero.',
+                if (
+                    in_array(
+                        $type,
+                        [
+                            Sale::SETTLEMENT_PARTIAL,
+                            Sale::SETTLEMENT_DUE,
+                        ],
+                        true,
+                    )
+                    && ! $dueDate
+                ) {
+                    $validator
+                        ->errors()
+                        ->add(
+                            'due_date',
+                            'Please enter the due date.',
+                        );
+                }
 
-            'discount.min' =>
-            'The sale discount cannot be negative.',
-
-            'payment_method.required' =>
-            'Please select a payment method.',
-
-            'amount_received.required' =>
-            'Please enter the received amount.',
+                if (
+                    in_array(
+                        $type,
+                        [
+                            Sale::SETTLEMENT_FULL,
+                            Sale::SETTLEMENT_PARTIAL,
+                        ],
+                        true,
+                    )
+                    && ! $paymentMethod
+                ) {
+                    $validator
+                        ->errors()
+                        ->add(
+                            'payment_method',
+                            'Please select the payment method.',
+                        );
+                }
+            },
         ];
     }
 }

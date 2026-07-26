@@ -70,11 +70,41 @@ export async function completePosSale(
     token,
 
     body: JSON.stringify({
+      /*
+       * Null means this is a
+       * walk-in customer sale.
+       */
+      customer_id: values.customer_id,
+
+      /*
+       * full:
+       * Entire amount is paid.
+       *
+       * partial:
+       * Customer pays part of
+       * the total and the rest
+       * becomes due.
+       *
+       * due:
+       * Entire total becomes due.
+       */
+      settlement_type: values.settlement_type,
+
       discount: values.discount,
 
+      /*
+       * Due sales do not have an
+       * initial payment method.
+       */
       payment_method: values.payment_method,
 
       amount_received: values.amount_received,
+
+      /*
+       * Only partial and due
+       * settlements need a due date.
+       */
+      due_date: values.due_date.trim() || null,
 
       reference_number: values.reference_number.trim() || null,
 

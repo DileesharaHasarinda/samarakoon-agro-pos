@@ -68,8 +68,13 @@ const adminNavigation:
 
         {
             label: 'Customers',
-            shortLabel: 'CU',
+            shortLabel: 'C',
             path: '/admin/customers',
+        },
+        {
+            label: 'Due Management',
+            shortLabel: 'D',
+            path: '/admin/dues',
         },
         {
             label: 'Sales',
@@ -114,6 +119,11 @@ const cashierNavigation:
             label: 'Customers',
             shortLabel: 'C',
             path: '/cashier/customers',
+        },
+        {
+            label: 'Due Management',
+            shortLabel: 'D',
+            path: '/cashier/dues',
         },
         {
             label: 'Sales History',

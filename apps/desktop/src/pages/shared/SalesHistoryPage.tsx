@@ -53,6 +53,7 @@ const emptySummary:
     SaleHistorySummary = {
     total_sales: 0,
     total_revenue: 0,
+    outstanding_due: 0,
     total_discount: 0,
     total_items: 0,
     gross_profit: null,
@@ -78,7 +79,15 @@ function formatDateTime(
 
 function paymentName(
     method: string | null,
+    paymentStatus: string,
 ): string {
+    if (
+        paymentStatus === 'due'
+        && method === null
+    ) {
+        return 'On Due';
+    }
+
     switch (method) {
         case 'bank_transfer':
             return 'Bank Transfer';
@@ -90,7 +99,25 @@ function paymentName(
             return 'Cash';
 
         default:
-            return 'Unknown';
+            return 'Not Recorded';
+    }
+}
+
+function paymentStatusName(
+    status: string,
+): string {
+    switch (status) {
+        case 'partial':
+            return 'Partial';
+
+        case 'due':
+            return 'Due';
+
+        case 'paid':
+            return 'Paid';
+
+        default:
+            return status;
     }
 }
 
@@ -212,12 +239,6 @@ export default function SalesHistoryPage() {
         setSaleDetailsError,
     ] = useState('');
 
-    /*
-     * Sales return states.
-     *
-     * These hooks must remain inside
-     * SalesHistoryPage().
-     */
     const [
         returnSaleId,
         setReturnSaleId,
@@ -567,7 +588,7 @@ export default function SalesHistoryPage() {
 
                     <p>
                         {isAdmin
-                            ? 'Review completed sales, payments, stock batches and profit information.'
+                            ? 'Review completed sales, customer payments, stock batches, dues and profit information.'
                             : 'Review sales completed using your cashier account.'}
                     </p>
                 </div>
@@ -602,7 +623,25 @@ export default function SalesHistoryPage() {
                     </strong>
 
                     <small>
-                        After discounts
+                        Total sale value
+                    </small>
+                </article>
+
+                <article>
+                    <span>
+                        Outstanding Due
+                    </span>
+
+                    <strong className="due-value">
+                        {currencyFormatter
+                            .format(
+                                summary
+                                    .outstanding_due,
+                            )}
+                    </strong>
+
+                    <small>
+                        Unsettled customer balances
                     </small>
                 </article>
 
@@ -735,7 +774,7 @@ export default function SalesHistoryPage() {
                         <input
                             type="search"
                             value={searchInput}
-                            placeholder="Search sale, cashier, product, SKU or barcode..."
+                            placeholder="Search sale, customer, cashier, product, SKU or barcode..."
                             aria-label="Search sales"
                             onChange={(event) => {
                                 setSearchInput(
@@ -974,7 +1013,11 @@ export default function SalesHistoryPage() {
                                                     </strong>
 
                                                     <span>
-                                                        Walk-in Customer
+                                                        {sale.customer
+                                                            ? `${sale.customer.name}${sale.customer.mobile
+                                                                ? ` · ${sale.customer.mobile}`
+                                                                : ''}`
+                                                            : 'Walk-in Customer'}
                                                     </span>
                                                 </div>
                                             </td>
@@ -1033,12 +1076,29 @@ export default function SalesHistoryPage() {
                                             </td>
 
                                             <td>
-                                                <span className="sales-payment-badge">
-                                                    {paymentName(
-                                                        sale
-                                                            .payment_method,
-                                                    )}
-                                                </span>
+                                                <div className="sales-items-cell">
+                                                    <span className="sales-payment-badge">
+                                                        {paymentName(
+                                                            sale
+                                                                .payment_method,
+
+                                                            sale
+                                                                .payment_status,
+                                                        )}
+                                                    </span>
+
+                                                    <span>
+                                                        {paymentStatusName(
+                                                            sale
+                                                                .payment_status,
+                                                        )}
+
+                                                        {sale.due_amount
+                                                            > 0
+                                                            ? ` · Due ${currencyFormatter.format(sale.due_amount)}`
+                                                            : ''}
+                                                    </span>
+                                                </div>
                                             </td>
 
                                             <td>

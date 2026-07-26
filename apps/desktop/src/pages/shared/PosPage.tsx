@@ -79,11 +79,9 @@ function formatPriceRange(
 
     return `${currencyFormatter.format(
         product.minimum_price,
-    )
-        } – ${currencyFormatter.format(
-            product.maximum_price,
-        )
-        }`;
+    )} – ${currencyFormatter.format(
+        product.maximum_price,
+    )}`;
 }
 
 export default function PosPage() {
@@ -200,7 +198,8 @@ export default function PosPage() {
                     );
                 } catch (error) {
                     setPageError(
-                        error instanceof ApiError
+                        error
+                            instanceof ApiError
                             ? error.message
                             : 'Unable to load POS categories.',
                     );
@@ -235,14 +234,17 @@ export default function PosPage() {
                             },
                         );
 
-                    setProducts(response.data);
+                    setProducts(
+                        response.data,
+                    );
 
                     setPagination(
                         response.meta,
                     );
                 } catch (error) {
                     setPageError(
-                        error instanceof ApiError
+                        error
+                            instanceof ApiError
                             ? error.message
                             : 'Unable to load POS products.',
                     );
@@ -268,16 +270,21 @@ export default function PosPage() {
 
     useEffect(() => {
         const timeout =
-            window.setTimeout(() => {
-                setPage(1);
+            window.setTimeout(
+                () => {
+                    setPage(1);
 
-                setAppliedSearch(
-                    searchInput.trim(),
-                );
-            }, 250);
+                    setAppliedSearch(
+                        searchInput.trim(),
+                    );
+                },
+                250,
+            );
 
         return () => {
-            window.clearTimeout(timeout);
+            window.clearTimeout(
+                timeout,
+            );
         };
     }, [searchInput]);
 
@@ -318,23 +325,12 @@ export default function PosPage() {
     ): void => {
         setCartError('');
 
-        const existingItem =
-            cart.find(
-                (item) =>
-                    item.stock_batch_id
-                    === batch.id,
-            );
-
-        const newQuantity =
-            (existingItem?.quantity ?? 0)
-            + quantity;
-
         if (
-            newQuantity
-            > batch.available_quantity
+            !Number.isFinite(quantity)
+            || quantity <= 0
         ) {
             setCartError(
-                `Only ${batch.available_quantity} ${product.unit} are available at ${currencyFormatter.format(batch.selling_price)}.`,
+                'Quantity must be greater than zero.',
             );
 
             return;
@@ -342,23 +338,50 @@ export default function PosPage() {
 
         setCart(
             (current) => {
-                const existing =
+                const existingItem =
                     current.find(
                         (item) =>
                             item.stock_batch_id
                             === batch.id,
                     );
 
-                if (existing) {
+                const newQuantity =
+                    (
+                        existingItem
+                            ?.quantity
+                        ?? 0
+                    )
+                    + quantity;
+
+                if (
+                    newQuantity
+                    > batch.available_quantity
+                ) {
+                    setCartError(
+                        `Only ${batch.available_quantity} ${product.unit} are available at ${currencyFormatter.format(batch.selling_price)}.`,
+                    );
+
+                    return current;
+                }
+
+                if (existingItem) {
                     return current.map(
                         (item) =>
                             item.stock_batch_id
                                 === batch.id
                                 ? {
                                     ...item,
+
                                     quantity:
-                                        item.quantity
-                                        + quantity,
+                                        Number(
+                                            (
+                                                item.quantity
+                                                + quantity
+                                            )
+                                                .toFixed(
+                                                    3,
+                                                ),
+                                        ),
                                 }
                                 : item,
                     );
@@ -366,6 +389,7 @@ export default function PosPage() {
 
                 return [
                     ...current,
+
                     {
                         stock_batch_id:
                             batch.id,
@@ -453,7 +477,81 @@ export default function PosPage() {
                             === batchId
                             ? {
                                 ...cartItem,
-                                quantity,
+
+                                quantity:
+                                    Number(
+                                        quantity
+                                            .toFixed(
+                                                3,
+                                            ),
+                                    ),
+                            }
+                            : cartItem,
+                ),
+        );
+    };
+
+    const updateItemDiscount = (
+        batchId: number,
+        itemDiscount: number,
+    ): void => {
+        const item =
+            cart.find(
+                (cartItem) =>
+                    cartItem.stock_batch_id
+                    === batchId,
+            );
+
+        if (!item) {
+            return;
+        }
+
+        const maximumDiscount =
+            item.quantity
+            * item.selling_price;
+
+        if (
+            !Number.isFinite(
+                itemDiscount,
+            )
+            || itemDiscount < 0
+        ) {
+            setCartError(
+                'Item discount cannot be negative.',
+            );
+
+            return;
+        }
+
+        if (
+            itemDiscount
+            > maximumDiscount
+        ) {
+            setCartError(
+                `The maximum discount for ${item.product_name} is ${currencyFormatter.format(maximumDiscount)}.`,
+            );
+
+            return;
+        }
+
+        setCartError('');
+
+        setCart(
+            (current) =>
+                current.map(
+                    (cartItem) =>
+                        cartItem.stock_batch_id
+                            === batchId
+                            ? {
+                                ...cartItem,
+
+                                discount:
+                                    Number(
+                                        itemDiscount
+                                            .toFixed(
+                                                2,
+                                            ),
+                                    ),
                             }
                             : cartItem,
                 ),
@@ -473,6 +571,13 @@ export default function PosPage() {
         );
 
         setCartError('');
+    };
+
+    const clearCart = (): void => {
+        setCart([]);
+        setSaleDiscount('0');
+        setCartError('');
+        setPaymentError('');
     };
 
     const openPayment = (): void => {
@@ -503,6 +608,29 @@ export default function PosPage() {
             return;
         }
 
+        const invalidItem =
+            cart.find(
+                (item) =>
+                    item.quantity <= 0
+                    || item.quantity
+                    > item
+                        .available_quantity
+                    || item.discount < 0
+                    || item.discount
+                    > (
+                        item.quantity
+                        * item.selling_price
+                    ),
+            );
+
+        if (invalidItem) {
+            setCartError(
+                `Check the quantity and discount for ${invalidItem.product_name}.`,
+            );
+
+            return;
+        }
+
         setCartError('');
         setPaymentError('');
         setIsPaymentOpen(true);
@@ -510,10 +638,12 @@ export default function PosPage() {
 
     const submitSale =
         async (
-            values: CompleteSaleValues,
+            values:
+                CompleteSaleValues,
         ): Promise<void> => {
             if (
                 !token
+                || cart.length === 0
                 || isSubmitting
             ) {
                 return;
@@ -529,6 +659,12 @@ export default function PosPage() {
                         cart,
                         {
                             ...values,
+
+                            /*
+                             * Use the current POS
+                             * discount value as the
+                             * source of truth.
+                             */
                             discount,
                         },
                     );
@@ -537,8 +673,7 @@ export default function PosPage() {
                     response.data,
                 );
 
-                setCart([]);
-                setSaleDiscount('0');
+                clearCart();
 
                 setIsPaymentOpen(false);
 
@@ -547,7 +682,10 @@ export default function PosPage() {
                     loadCategories(),
                 ]);
             } catch (error) {
-                if (error instanceof ApiError) {
+                if (
+                    error
+                    instanceof ApiError
+                ) {
                     setPaymentError(
                         error.message,
                     );
@@ -579,11 +717,18 @@ export default function PosPage() {
                     </div>
 
                     <div className="pos-walk-in-customer">
-                        <span>Customer</span>
+                        <span>
+                            Customer
+                        </span>
 
                         <strong>
-                            Walk-in Customer
+                            Select During Checkout
                         </strong>
+
+                        <small>
+                            Walk-in or registered
+                            customer
+                        </small>
                     </div>
                 </header>
 
@@ -609,7 +754,8 @@ export default function PosPage() {
                             placeholder="Search name, SKU or scan barcode..."
                             onChange={(event) => {
                                 setSearchInput(
-                                    event.target.value,
+                                    event.target
+                                        .value,
                                 );
                             }}
                         />
@@ -617,6 +763,7 @@ export default function PosPage() {
                         {searchInput && (
                             <button
                                 type="button"
+                                aria-label="Clear product search"
                                 onClick={() => {
                                     setSearchInput('');
                                     setAppliedSearch('');
@@ -761,7 +908,10 @@ export default function PosPage() {
                                 onClick={() => {
                                     setPage(
                                         (current) =>
-                                            current - 1,
+                                            Math.max(
+                                                1,
+                                                current - 1,
+                                            ),
                                     );
                                 }}
                             >
@@ -772,12 +922,18 @@ export default function PosPage() {
                                 type="button"
                                 disabled={
                                     page
-                                    >= pagination.last_page
+                                    >= pagination
+                                        .last_page
                                 }
                                 onClick={() => {
                                     setPage(
                                         (current) =>
-                                            current + 1,
+                                            Math.min(
+                                                pagination
+                                                    .last_page,
+
+                                                current + 1,
+                                            ),
                                     );
                                 }}
                             >
@@ -835,25 +991,31 @@ export default function PosPage() {
                                 <article
                                     className="pos-cart-item"
                                     key={
-                                        item.stock_batch_id
+                                        item
+                                            .stock_batch_id
                                     }
                                 >
                                     <header>
                                         <div>
                                             <strong>
-                                                {item.product_name}
+                                                {
+                                                    item
+                                                        .product_name
+                                                }
                                             </strong>
 
                                             <span>
                                                 Batch:{' '}
-                                                {item.batch_number
-                                                    || item.batch_code}
+                                                {item
+                                                    .batch_number
+                                                    || item
+                                                        .batch_code}
                                             </span>
                                         </div>
 
                                         <button
                                             type="button"
-                                            aria-label="Remove cart item"
+                                            aria-label={`Remove ${item.product_name}`}
                                             onClick={() => {
                                                 removeCartItem(
                                                     item
@@ -881,7 +1043,9 @@ export default function PosPage() {
                                         </div>
 
                                         <div>
-                                            <span>Available</span>
+                                            <span>
+                                                Available
+                                            </span>
 
                                             <strong>
                                                 {
@@ -898,13 +1062,26 @@ export default function PosPage() {
                                             type="button"
                                             disabled={
                                                 item.quantity
-                                                <= 1
+                                                <= 0.001
                                             }
                                             onClick={() => {
                                                 updateCartQuantity(
                                                     item
                                                         .stock_batch_id,
-                                                    item.quantity - 1,
+
+                                                    Math.max(
+                                                        0.001,
+
+                                                        Number(
+                                                            (
+                                                                item.quantity
+                                                                - 1
+                                                            )
+                                                                .toFixed(
+                                                                    3,
+                                                                ),
+                                                        ),
+                                                    ),
                                                 );
                                             }}
                                         >
@@ -914,14 +1091,22 @@ export default function PosPage() {
                                         <input
                                             type="number"
                                             min="0.001"
+                                            max={
+                                                item
+                                                    .available_quantity
+                                            }
                                             step="0.001"
-                                            value={item.quantity}
+                                            value={
+                                                item.quantity
+                                            }
                                             onChange={(event) => {
                                                 updateCartQuantity(
                                                     item
                                                         .stock_batch_id,
+
                                                     Number(
-                                                        event.target
+                                                        event
+                                                            .target
                                                             .value,
                                                     ),
                                                 );
@@ -939,7 +1124,21 @@ export default function PosPage() {
                                                 updateCartQuantity(
                                                     item
                                                         .stock_batch_id,
-                                                    item.quantity + 1,
+
+                                                    Math.min(
+                                                        item
+                                                            .available_quantity,
+
+                                                        Number(
+                                                            (
+                                                                item.quantity
+                                                                + 1
+                                                            )
+                                                                .toFixed(
+                                                                    3,
+                                                                ),
+                                                        ),
+                                                    ),
                                                 );
                                             }}
                                         >
@@ -956,6 +1155,38 @@ export default function PosPage() {
                                                 )}
                                         </strong>
                                     </div>
+
+                                    <label className="pos-item-discount-field">
+                                        <span>
+                                            Item Discount
+                                        </span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max={
+                                                item.quantity
+                                                * item
+                                                    .selling_price
+                                            }
+                                            step="0.01"
+                                            value={
+                                                item.discount
+                                            }
+                                            onChange={(event) => {
+                                                updateItemDiscount(
+                                                    item
+                                                        .stock_batch_id,
+
+                                                    Number(
+                                                        event
+                                                            .target
+                                                            .value,
+                                                    ),
+                                                );
+                                            }}
+                                        />
+                                    </label>
                                 </article>
                             ),
                         )
@@ -971,6 +1202,7 @@ export default function PosPage() {
                         <input
                             type="number"
                             min="0"
+                            max={subtotal}
                             step="0.01"
                             value={saleDiscount}
                             onChange={(event) => {
@@ -984,16 +1216,22 @@ export default function PosPage() {
                     </label>
 
                     <div>
-                        <span>Subtotal</span>
+                        <span>
+                            Subtotal
+                        </span>
 
                         <strong>
                             {currencyFormatter
-                                .format(subtotal)}
+                                .format(
+                                    subtotal,
+                                )}
                         </strong>
                     </div>
 
                     <div>
-                        <span>Discount</span>
+                        <span>
+                            Sale Discount
+                        </span>
 
                         <strong>
                             -
@@ -1008,7 +1246,9 @@ export default function PosPage() {
                     </div>
 
                     <div className="pos-grand-total">
-                        <span>Grand Total</span>
+                        <span>
+                            Grand Total
+                        </span>
 
                         <strong>
                             {currencyFormatter
@@ -1023,6 +1263,7 @@ export default function PosPage() {
                         className="pos-complete-sale-button"
                         disabled={
                             cart.length === 0
+                            || isSubmitting
                         }
                         onClick={openPayment}
                     >
@@ -1033,11 +1274,8 @@ export default function PosPage() {
                         <button
                             type="button"
                             className="pos-clear-cart-button"
-                            onClick={() => {
-                                setCart([]);
-                                setSaleDiscount('0');
-                                setCartError('');
-                            }}
+                            disabled={isSubmitting}
+                            onClick={clearCart}
                         >
                             Clear Cart
                         </button>
@@ -1056,17 +1294,34 @@ export default function PosPage() {
             />
 
             <PaymentModal
-                isOpen={isPaymentOpen}
-                grandTotal={grandTotal}
-                isSubmitting={isSubmitting}
-                errorMessage={paymentError}
+                isOpen={
+                    isPaymentOpen
+                }
+                grandTotal={
+                    grandTotal
+                }
+                discount={
+                    discount
+                }
+                isSubmitting={
+                    isSubmitting
+                }
+                errorMessage={
+                    paymentError
+                }
                 onClose={() => {
                     if (!isSubmitting) {
-                        setIsPaymentOpen(false);
+                        setIsPaymentOpen(
+                            false,
+                        );
+
+                        setPaymentError('');
                     }
                 }}
                 onSubmit={(values) => {
-                    void submitSale(values);
+                    void submitSale(
+                        values,
+                    );
                 }}
             />
 

@@ -19,12 +19,19 @@ class SalePayment extends Model
     public const METHOD_BANK_TRANSFER =
     'bank_transfer';
 
+    public const TYPE_INITIAL =
+    'initial_payment';
+
+    public const TYPE_DUE_COLLECTION =
+    'due_collection';
+
     /**
      * @var array<int, string>
      */
     protected $fillable = [
         'sale_id',
         'payment_method',
+        'payment_type',
         'amount',
         'reference_number',
         'notes',
