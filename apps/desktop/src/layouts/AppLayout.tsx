@@ -59,6 +59,13 @@ const adminNavigation:
             shortLabel: 'I',
             path: '/admin/inventory',
         },
+
+        {
+            label: 'Sales Returns',
+            shortLabel: 'R',
+            path: '/admin/returns',
+        },
+
         {
             label: 'Customers',
             shortLabel: 'CU',
@@ -114,7 +121,7 @@ const cashierNavigation:
             path: '/cashier/sales',
         },
         {
-            label: 'Returns',
+            label: 'Sales Returns',
             shortLabel: 'R',
             path: '/cashier/returns',
         },

@@ -52,9 +52,13 @@ import PosPage
 import SalesHistoryPage
     from './pages/shared/SalesHistoryPage';
 
+import SalesReturnsPage
+    from './pages/shared/SalesReturnsPage';
+
 export default function App() {
     return (
         <Routes>
+            {/* Public routes */}
             <Route
                 element={<PublicOnlyRoute />}
             >
@@ -64,10 +68,13 @@ export default function App() {
                 />
             </Route>
 
+            {/* Admin routes */}
             <Route
                 element={
                     <ProtectedRoute
-                        allowedRoles={['admin']}
+                        allowedRoles={[
+                            'admin',
+                        ]}
                     />
                 }
             >
@@ -98,28 +105,52 @@ export default function App() {
                     />
 
                     <Route
+                        path="sales"
+                        element={
+                            <SalesHistoryPage />
+                        }
+                    />
+
+                    <Route
+                        path="returns"
+                        element={
+                            <SalesReturnsPage />
+                        }
+                    />
+
+                    <Route
                         path="categories"
-                        element={<CategoriesPage />}
+                        element={
+                            <CategoriesPage />
+                        }
                     />
 
                     <Route
                         path="products"
-                        element={<ProductsPage />}
+                        element={
+                            <ProductsPage />
+                        }
                     />
 
                     <Route
                         path="suppliers"
-                        element={<SuppliersPage />}
+                        element={
+                            <SuppliersPage />
+                        }
                     />
 
                     <Route
                         path="purchases"
-                        element={<PurchasesPage />}
+                        element={
+                            <PurchasesPage />
+                        }
                     />
 
                     <Route
                         path="inventory"
-                        element={<InventoryPage />}
+                        element={
+                            <InventoryPage />
+                        }
                     />
 
                     <Route
@@ -130,11 +161,6 @@ export default function App() {
                                 description="Manage customer details and customer purchase history."
                             />
                         }
-                    />
-
-                    <Route
-                        path="sales"
-                        element={<SalesHistoryPage />}
                     />
 
                     <Route
@@ -179,10 +205,13 @@ export default function App() {
                 </Route>
             </Route>
 
+            {/* Cashier routes */}
             <Route
                 element={
                     <ProtectedRoute
-                        allowedRoles={['cashier']}
+                        allowedRoles={[
+                            'cashier',
+                        ]}
                     />
                 }
             >
@@ -213,6 +242,20 @@ export default function App() {
                     />
 
                     <Route
+                        path="sales"
+                        element={
+                            <SalesHistoryPage />
+                        }
+                    />
+
+                    <Route
+                        path="returns"
+                        element={
+                            <SalesReturnsPage />
+                        }
+                    />
+
+                    <Route
                         path="customers"
                         element={
                             <ModulePlaceholderPage
@@ -221,29 +264,16 @@ export default function App() {
                             />
                         }
                     />
-
-                    <Route
-                        path="sales"
-                        element={<SalesHistoryPage />}
-                    />
-
-                    <Route
-                        path="returns"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Returns"
-                                description="Process authorised sales returns."
-                            />
-                        }
-                    />
                 </Route>
             </Route>
 
+            {/* Role-based home redirect */}
             <Route
                 path="/"
                 element={<RoleHomeRedirect />}
             />
 
+            {/* Unknown routes */}
             <Route
                 path="*"
                 element={<NotFoundPage />}

@@ -8,12 +8,20 @@ import {
     useAuth,
 } from '../../auth/AuthContext';
 
+import CreateSalesReturnModal
+    from '../../components/returns/CreateSalesReturnModal';
+
 import SaleDetailsModal
     from '../../components/sales/SaleDetailsModal';
 
 import {
     ApiError,
 } from '../../lib/api';
+
+import {
+    createSalesReturn,
+    getSalesReturnOptions,
+} from '../../services/salesReturnService';
 
 import {
     getSaleDetails,
@@ -25,6 +33,11 @@ import type {
     SaleHistorySummary,
     SaleReceipt,
 } from '../../types/sale';
+
+import type {
+    CreateSalesReturnValues,
+    SalesReturnOptions,
+} from '../../types/salesReturn';
 
 const currencyFormatter =
     new Intl.NumberFormat(
@@ -58,7 +71,9 @@ function formatDateTime(
             hour: '2-digit',
             minute: '2-digit',
         },
-    ).format(new Date(value));
+    ).format(
+        new Date(value),
+    );
 }
 
 function paymentName(
@@ -197,85 +212,134 @@ export default function SalesHistoryPage() {
         setSaleDetailsError,
     ] = useState('');
 
+    /*
+     * Sales return states.
+     *
+     * These hooks must remain inside
+     * SalesHistoryPage().
+     */
+    const [
+        returnSaleId,
+        setReturnSaleId,
+    ] = useState<number | null>(
+        null,
+    );
+
+    const [
+        returnOptions,
+        setReturnOptions,
+    ] = useState<SalesReturnOptions | null>(
+        null,
+    );
+
+    const [
+        isLoadingReturn,
+        setIsLoadingReturn,
+    ] = useState(false);
+
+    const [
+        isSubmittingReturn,
+        setIsSubmittingReturn,
+    ] = useState(false);
+
+    const [
+        returnError,
+        setReturnError,
+    ] = useState('');
+
+    const [
+        returnSuccess,
+        setReturnSuccess,
+    ] = useState('');
+
     const isAdmin =
         user?.role === 'admin';
 
     const loadSales =
-        useCallback(async (): Promise<void> => {
-            if (!token) {
-                return;
-            }
-
-            setIsLoading(true);
-            setPageError('');
-
-            try {
-                const response =
-                    await getSalesHistory(
-                        token,
-                        {
-                            page,
-                            perPage,
-
-                            search:
-                                appliedSearch,
-
-                            paymentMethod,
-
-                            dateFrom,
-
-                            dateTo,
-                        },
-                    );
-
-                setSales(response.data);
-                setSummary(response.summary);
-
-                setCurrentPage(
-                    response
-                        .meta
-                        .current_page,
-                );
-
-                setLastPage(
-                    response
-                        .meta
-                        .last_page,
-                );
-
-                setTotalResults(
-                    response.meta.total,
-                );
-
-                setResultFrom(
-                    response.meta.from,
-                );
-
-                setResultTo(
-                    response.meta.to,
-                );
-            } catch (error) {
-                if (error instanceof ApiError) {
-                    setPageError(
-                        error.message,
-                    );
-                } else {
-                    setPageError(
-                        'Unable to load sales history.',
-                    );
+        useCallback(
+            async (): Promise<void> => {
+                if (!token) {
+                    return;
                 }
-            } finally {
-                setIsLoading(false);
-            }
-        }, [
-            token,
-            page,
-            perPage,
-            appliedSearch,
-            paymentMethod,
-            dateFrom,
-            dateTo,
-        ]);
+
+                setIsLoading(true);
+                setPageError('');
+
+                try {
+                    const response =
+                        await getSalesHistory(
+                            token,
+                            {
+                                page,
+                                perPage,
+
+                                search:
+                                    appliedSearch,
+
+                                paymentMethod,
+                                dateFrom,
+                                dateTo,
+                            },
+                        );
+
+                    setSales(
+                        response.data,
+                    );
+
+                    setSummary(
+                        response.summary,
+                    );
+
+                    setCurrentPage(
+                        response
+                            .meta
+                            .current_page,
+                    );
+
+                    setLastPage(
+                        response
+                            .meta
+                            .last_page,
+                    );
+
+                    setTotalResults(
+                        response.meta.total,
+                    );
+
+                    setResultFrom(
+                        response.meta.from,
+                    );
+
+                    setResultTo(
+                        response.meta.to,
+                    );
+                } catch (error) {
+                    if (
+                        error
+                        instanceof ApiError
+                    ) {
+                        setPageError(
+                            error.message,
+                        );
+                    } else {
+                        setPageError(
+                            'Unable to load sales history.',
+                        );
+                    }
+                } finally {
+                    setIsLoading(false);
+                }
+            },
+            [
+                token,
+                page,
+                perPage,
+                appliedSearch,
+                paymentMethod,
+                dateFrom,
+                dateTo,
+            ],
+        );
 
     useEffect(() => {
         void loadSales();
@@ -283,16 +347,21 @@ export default function SalesHistoryPage() {
 
     useEffect(() => {
         const timeout =
-            window.setTimeout(() => {
-                setPage(1);
+            window.setTimeout(
+                () => {
+                    setPage(1);
 
-                setAppliedSearch(
-                    searchInput.trim(),
-                );
-            }, 350);
+                    setAppliedSearch(
+                        searchInput.trim(),
+                    );
+                },
+                350,
+            );
 
         return () => {
-            window.clearTimeout(timeout);
+            window.clearTimeout(
+                timeout,
+            );
         };
     }, [searchInput]);
 
@@ -320,7 +389,10 @@ export default function SalesHistoryPage() {
                         response.data,
                     );
                 } catch (error) {
-                    if (error instanceof ApiError) {
+                    if (
+                        error
+                        instanceof ApiError
+                    ) {
                         setSaleDetailsError(
                             error.message,
                         );
@@ -339,27 +411,139 @@ export default function SalesHistoryPage() {
     const openSaleDetails = (
         saleId: number,
     ): void => {
-        setSelectedSaleId(saleId);
+        setSelectedSaleId(
+            saleId,
+        );
 
         void loadSelectedSale(
             saleId,
         );
     };
 
-    const closeSaleDetails = (): void => {
-        setSelectedSaleId(null);
-        setSelectedSale(null);
-        setSaleDetailsError('');
-    };
+    const closeSaleDetails =
+        (): void => {
+            setSelectedSaleId(null);
+            setSelectedSale(null);
+            setSaleDetailsError('');
+        };
 
-    const clearFilters = (): void => {
-        setSearchInput('');
-        setAppliedSearch('');
-        setPaymentMethod('');
-        setDateFrom('');
-        setDateTo('');
-        setPage(1);
-    };
+    const openReturnModal =
+        async (
+            saleId: number,
+        ): Promise<void> => {
+            if (!token) {
+                return;
+            }
+
+            setReturnSaleId(
+                saleId,
+            );
+
+            setReturnOptions(null);
+            setReturnError('');
+            setReturnSuccess('');
+            setIsLoadingReturn(true);
+
+            try {
+                const response =
+                    await getSalesReturnOptions(
+                        token,
+                        saleId,
+                    );
+
+                setReturnOptions(
+                    response.data,
+                );
+            } catch (error) {
+                if (
+                    error
+                    instanceof ApiError
+                ) {
+                    setReturnError(
+                        error.message,
+                    );
+                } else {
+                    setReturnError(
+                        'Unable to load returnable items.',
+                    );
+                }
+            } finally {
+                setIsLoadingReturn(false);
+            }
+        };
+
+    const closeReturnModal =
+        (): void => {
+            if (isSubmittingReturn) {
+                return;
+            }
+
+            setReturnSaleId(null);
+            setReturnOptions(null);
+            setReturnError('');
+            setIsLoadingReturn(false);
+        };
+
+    const submitReturn =
+        async (
+            values:
+                CreateSalesReturnValues,
+        ): Promise<void> => {
+            if (
+                !token
+                || returnSaleId === null
+                || isSubmittingReturn
+            ) {
+                return;
+            }
+
+            setIsSubmittingReturn(true);
+            setReturnError('');
+
+            try {
+                const response =
+                    await createSalesReturn(
+                        token,
+                        returnSaleId,
+                        values,
+                    );
+
+                setReturnSuccess(
+                    response.message,
+                );
+
+                setReturnSaleId(null);
+                setReturnOptions(null);
+                setReturnError('');
+
+                await loadSales();
+            } catch (error) {
+                if (
+                    error
+                    instanceof ApiError
+                ) {
+                    setReturnError(
+                        error.message,
+                    );
+                } else {
+                    setReturnError(
+                        'Unable to complete the sales return.',
+                    );
+                }
+            } finally {
+                setIsSubmittingReturn(false);
+            }
+        };
+
+    const clearFilters =
+        (): void => {
+            setSearchInput('');
+            setAppliedSearch('');
+            setPaymentMethod('');
+            setDateFrom('');
+            setDateTo('');
+            setPage(1);
+        };
 
     const hasFilters =
         appliedSearch !== ''
@@ -391,7 +575,9 @@ export default function SalesHistoryPage() {
 
             <section className="sales-summary-grid">
                 <article>
-                    <span>Total Sales</span>
+                    <span>
+                        Total Sales
+                    </span>
 
                     <strong>
                         {summary.total_sales}
@@ -403,7 +589,9 @@ export default function SalesHistoryPage() {
                 </article>
 
                 <article>
-                    <span>Total Revenue</span>
+                    <span>
+                        Total Revenue
+                    </span>
 
                     <strong>
                         {currencyFormatter
@@ -419,7 +607,9 @@ export default function SalesHistoryPage() {
                 </article>
 
                 <article>
-                    <span>Items Sold</span>
+                    <span>
+                        Items Sold
+                    </span>
 
                     <strong>
                         {summary.total_items}
@@ -431,7 +621,9 @@ export default function SalesHistoryPage() {
                 </article>
 
                 <article>
-                    <span>Total Discounts</span>
+                    <span>
+                        Total Discounts
+                    </span>
 
                     <strong>
                         {currencyFormatter
@@ -449,7 +641,9 @@ export default function SalesHistoryPage() {
                 {isAdmin && (
                     <>
                         <article>
-                            <span>Gross Profit</span>
+                            <span>
+                                Gross Profit
+                            </span>
 
                             <strong>
                                 {currencyFormatter
@@ -466,7 +660,9 @@ export default function SalesHistoryPage() {
                         </article>
 
                         <article>
-                            <span>Net Profit</span>
+                            <span>
+                                Net Profit
+                            </span>
 
                             <strong className="sales-summary-profit">
                                 {currencyFormatter
@@ -485,12 +681,37 @@ export default function SalesHistoryPage() {
                 )}
             </section>
 
+            {returnSuccess && (
+                <div
+                    className="success-alert"
+                    role="status"
+                >
+                    <span>✓</span>
+
+                    <p>
+                        {returnSuccess}
+                    </p>
+
+                    <button
+                        type="button"
+                        aria-label="Close success message"
+                        onClick={() => {
+                            setReturnSuccess('');
+                        }}
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
+
             {pageError && (
                 <div
                     className="form-alert sales-history-error"
                     role="alert"
                 >
-                    <span>{pageError}</span>
+                    <span>
+                        {pageError}
+                    </span>
 
                     <button
                         type="button"
@@ -518,7 +739,8 @@ export default function SalesHistoryPage() {
                             aria-label="Search sales"
                             onChange={(event) => {
                                 setSearchInput(
-                                    event.target.value,
+                                    event.target
+                                        .value,
                                 );
                             }}
                         />
@@ -545,10 +767,14 @@ export default function SalesHistoryPage() {
                             <input
                                 type="date"
                                 value={dateFrom}
-                                max={dateTo || undefined}
+                                max={
+                                    dateTo
+                                    || undefined
+                                }
                                 onChange={(event) => {
                                     setDateFrom(
-                                        event.target.value,
+                                        event.target
+                                            .value,
                                     );
 
                                     setPage(1);
@@ -562,10 +788,14 @@ export default function SalesHistoryPage() {
                             <input
                                 type="date"
                                 value={dateTo}
-                                min={dateFrom || undefined}
+                                min={
+                                    dateFrom
+                                    || undefined
+                                }
                                 onChange={(event) => {
                                     setDateTo(
-                                        event.target.value,
+                                        event.target
+                                            .value,
                                     );
 
                                     setPage(1);
@@ -574,13 +804,16 @@ export default function SalesHistoryPage() {
                         </label>
 
                         <label>
-                            <span>Payment</span>
+                            <span>
+                                Payment
+                            </span>
 
                             <select
                                 value={paymentMethod}
                                 onChange={(event) => {
                                     setPaymentMethod(
-                                        event.target.value,
+                                        event.target
+                                            .value,
                                     );
 
                                     setPage(1);
@@ -612,7 +845,8 @@ export default function SalesHistoryPage() {
                                 onChange={(event) => {
                                     setPerPage(
                                         Number(
-                                            event.target.value,
+                                            event.target
+                                                .value,
                                         ),
                                     );
 
@@ -641,7 +875,9 @@ export default function SalesHistoryPage() {
                             <button
                                 type="button"
                                 className="clear-filter-button"
-                                onClick={clearFilters}
+                                onClick={
+                                    clearFilters
+                                }
                             >
                                 Clear Filters
                             </button>
@@ -653,8 +889,14 @@ export default function SalesHistoryPage() {
                     <table className="sales-history-table">
                         <thead>
                             <tr>
-                                <th>Sale Number</th>
-                                <th>Date and Time</th>
+                                <th>
+                                    Sale Number
+                                </th>
+
+                                <th>
+                                    Date and Time
+                                </th>
+
                                 <th>Cashier</th>
                                 <th>Items</th>
                                 <th>Payment</th>
@@ -662,7 +904,9 @@ export default function SalesHistoryPage() {
                                 <th>Total</th>
 
                                 {isAdmin && (
-                                    <th>Net Profit</th>
+                                    <th>
+                                        Net Profit
+                                    </th>
                                 )}
 
                                 <th className="sales-actions-column">
@@ -676,7 +920,9 @@ export default function SalesHistoryPage() {
                                 <tr>
                                     <td
                                         colSpan={
-                                            isAdmin ? 9 : 8
+                                            isAdmin
+                                                ? 9
+                                                : 8
                                         }
                                         className="table-state"
                                     >
@@ -691,7 +937,9 @@ export default function SalesHistoryPage() {
                                 <tr>
                                     <td
                                         colSpan={
-                                            isAdmin ? 9 : 8
+                                            isAdmin
+                                                ? 9
+                                                : 8
                                         }
                                         className="table-state"
                                     >
@@ -734,7 +982,8 @@ export default function SalesHistoryPage() {
                                             <td>
                                                 <span className="sales-date-value">
                                                     {formatDateTime(
-                                                        sale.sale_date,
+                                                        sale
+                                                            .sale_date,
                                                     )}
                                                 </span>
                                             </td>
@@ -766,7 +1015,8 @@ export default function SalesHistoryPage() {
                                                             sale
                                                                 .items_count
                                                         }{' '}
-                                                        {sale.items_count
+                                                        {sale
+                                                            .items_count
                                                             === 1
                                                             ? 'item'
                                                             : 'items'}
@@ -837,17 +1087,31 @@ export default function SalesHistoryPage() {
                                             )}
 
                                             <td>
-                                                <button
-                                                    type="button"
-                                                    className="view-sale-button"
-                                                    onClick={() => {
-                                                        openSaleDetails(
-                                                            sale.id,
-                                                        );
-                                                    }}
-                                                >
-                                                    View Details
-                                                </button>
+                                                <div className="table-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="view-sale-button"
+                                                        onClick={() => {
+                                                            openSaleDetails(
+                                                                sale.id,
+                                                            );
+                                                        }}
+                                                    >
+                                                        View Details
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        className="sales-return-button"
+                                                        onClick={() => {
+                                                            void openReturnModal(
+                                                                sale.id,
+                                                            );
+                                                        }}
+                                                    >
+                                                        Return
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ),
@@ -881,14 +1145,16 @@ export default function SalesHistoryPage() {
                                     type="button"
                                     className="pagination-button"
                                     disabled={
-                                        currentPage <= 1
+                                        currentPage
+                                        <= 1
                                     }
                                     onClick={() => {
                                         setPage(
                                             (current) =>
                                                 Math.max(
                                                     1,
-                                                    current - 1,
+                                                    current
+                                                    - 1,
                                                 ),
                                         );
                                     }}
@@ -919,7 +1185,8 @@ export default function SalesHistoryPage() {
                                             (current) =>
                                                 Math.min(
                                                     lastPage,
-                                                    current + 1,
+                                                    current
+                                                    + 1,
                                                 ),
                                         );
                                     }}
@@ -950,6 +1217,28 @@ export default function SalesHistoryPage() {
                             selectedSaleId,
                         );
                     }
+                }}
+            />
+
+            <CreateSalesReturnModal
+                saleId={returnSaleId}
+                options={returnOptions}
+                isLoading={
+                    isLoadingReturn
+                }
+                isSubmitting={
+                    isSubmittingReturn
+                }
+                errorMessage={
+                    returnError
+                }
+                onClose={
+                    closeReturnModal
+                }
+                onSubmit={(values) => {
+                    void submitReturn(
+                        values,
+                    );
                 }}
             />
         </div>

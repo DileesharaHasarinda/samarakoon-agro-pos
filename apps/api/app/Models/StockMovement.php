@@ -16,6 +16,9 @@ class StockMovement extends Model
     public const TYPE_SALE =
     'sale';
 
+    public const TYPE_SALE_RETURN =
+    'sale_return';
+
     /**
      * @var array<int, string>
      */

@@ -73,6 +73,16 @@ class Sale extends Model
     }
 
     /**
+     * @return HasMany<SaleReturn>
+     */
+    public function returns(): HasMany
+    {
+        return $this->hasMany(
+            SaleReturn::class,
+        );
+    }
+
+    /**
      * @return BelongsTo<User, Sale>
      */
     public function createdBy(): BelongsTo
