@@ -1,12 +1,15 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BarcodeController;
+use App\Http\Controllers\Api\BusinessSettingController;
 use App\Http\Controllers\Api\CashierAccountController;
 use App\Http\Controllers\Api\CashierShiftController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerDueController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DatabaseBackupController;
 use App\Http\Controllers\Api\ExpenseCategoryController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\InventoryAlertController;
@@ -19,7 +22,6 @@ use App\Http\Controllers\Api\SalesReturnController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\SupplierPayableController;
-use App\Http\Controllers\Api\BusinessSettingController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -32,8 +34,7 @@ Route::prefix('v1')
             '/health',
             function (): JsonResponse {
                 return response()->json([
-                    'status' =>
-                    'ok',
+                    'status' => 'ok',
 
                     'application' =>
                     'Samarakoon Agro POS API',
@@ -85,9 +86,6 @@ Route::prefix('v1')
             )->group(function (): void {
                 /*
                  * Cashier dashboard.
-                 *
-                 * Admin users can also access this
-                 * endpoint when necessary.
                  */
                 Route::get(
                     '/dashboard/cashier',
@@ -97,6 +95,10 @@ Route::prefix('v1')
                     ],
                 );
 
+                /*
+                 * Business settings used by
+                 * receipts and invoices.
+                 */
                 Route::get(
                     '/business-settings',
                     [
@@ -193,10 +195,10 @@ Route::prefix('v1')
 
                 /*
                  * Cashiers must have an open shift
-                 * before collecting a due payment.
+                 * before collecting due payments.
                  *
-                 * Admin users are allowed through
-                 * by EnsureOpenCashierShift.
+                 * Admin accounts are allowed by the
+                 * EnsureOpenCashierShift middleware.
                  */
                 Route::post(
                     '/sales/{sale}/due-payments',
@@ -210,6 +212,9 @@ Route::prefix('v1')
 
                 /*
                  * Sales return routes.
+                 *
+                 * These routes must remain before
+                 * the dynamic /sales/{sale} route.
                  */
                 Route::get(
                     '/sales/{sale}/return-options',
@@ -219,10 +224,6 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * Cashiers must have an open shift
-                 * before processing a return.
-                 */
                 Route::post(
                     '/sales/{sale}/returns',
                     [
@@ -250,9 +251,10 @@ Route::prefix('v1')
                 );
 
                 /*
-                 * Sales routes are declared
-                 * separately because only sale
-                 * creation requires an open shift.
+                 * Sales routes.
+                 *
+                 * Only sale creation requires
+                 * an open cashier shift.
                  */
                 Route::get(
                     '/sales',
@@ -282,7 +284,7 @@ Route::prefix('v1')
 
                 /*
                  * Cashier shift and cash-register
-                 * routes.
+                 * management.
                  *
                  * Static routes are placed before
                  * the dynamic {cashierShift} route.
@@ -343,7 +345,7 @@ Route::prefix('v1')
                 'role:admin',
             )->group(function (): void {
                 /*
-                 * Admin dashboard and reports.
+                 * Admin dashboard.
                  */
                 Route::get(
                     '/dashboard/admin',
@@ -353,6 +355,9 @@ Route::prefix('v1')
                     ],
                 );
 
+                /*
+                 * Business settings update.
+                 */
                 Route::put(
                     '/business-settings',
                     [
@@ -361,11 +366,98 @@ Route::prefix('v1')
                     ],
                 );
 
+                /*
+                 * Reports.
+                 */
                 Route::get(
                     '/reports/overview',
                     [
                         ReportController::class,
                         'overview',
+                    ],
+                );
+
+                /*
+                 * Backup and Restore.
+                 *
+                 * These endpoints are restricted
+                 * to administrator accounts.
+                 */
+                Route::get(
+                    '/database-backups',
+                    [
+                        DatabaseBackupController::class,
+                        'index',
+                    ],
+                );
+
+                Route::post(
+                    '/database-backups',
+                    [
+                        DatabaseBackupController::class,
+                        'store',
+                    ],
+                );
+
+                Route::get(
+                    '/database-backups/{databaseBackup}/download',
+                    [
+                        DatabaseBackupController::class,
+                        'download',
+                    ],
+                );
+
+                Route::post(
+                    '/database-backups/{databaseBackup}/restore',
+                    [
+                        DatabaseBackupController::class,
+                        'restore',
+                    ],
+                );
+
+                Route::delete(
+                    '/database-backups/{databaseBackup}',
+                    [
+                        DatabaseBackupController::class,
+                        'destroy',
+                    ],
+                );
+
+                /*
+                 * Barcode Management.
+                 *
+                 * These routes are declared before
+                 * the product apiResource routes.
+                 */
+                Route::get(
+                    '/barcodes/products',
+                    [
+                        BarcodeController::class,
+                        'index',
+                    ],
+                );
+
+                Route::post(
+                    '/barcodes/generate-missing',
+                    [
+                        BarcodeController::class,
+                        'generateMissing',
+                    ],
+                );
+
+                Route::post(
+                    '/products/{product}/barcode/generate',
+                    [
+                        BarcodeController::class,
+                        'generate',
+                    ],
+                );
+
+                Route::put(
+                    '/products/{product}/barcode',
+                    [
+                        BarcodeController::class,
+                        'update',
                     ],
                 );
 
@@ -435,6 +527,9 @@ Route::prefix('v1')
                     ],
                 );
 
+                /*
+                 * Admin access test.
+                 */
                 Route::get(
                     '/admin/access-check',
                     function (): JsonResponse {
@@ -448,9 +543,8 @@ Route::prefix('v1')
                 /*
                  * Dropdown option endpoints.
                  *
-                 * Keep these before apiResource
-                 * dynamic routes such as
-                 * /categories/{category}.
+                 * These routes must be placed
+                 * before dynamic resource routes.
                  */
                 Route::get(
                     '/categories/options',

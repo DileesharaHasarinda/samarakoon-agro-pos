@@ -25,6 +25,15 @@ import NotFoundPage
 import AdminDashboardPage
     from './pages/admin/AdminDashboardPage';
 
+import BackupRestorePage
+    from './pages/admin/BackupRestorePage';
+
+import BarcodeManagementPage
+    from './pages/admin/BarcodeManagementPage';
+
+import CashierAccountsPage
+    from './pages/admin/CashierAccountsPage';
+
 import CategoriesPage
     from './pages/admin/CategoriesPage';
 
@@ -42,6 +51,9 @@ import PurchasesPage
 
 import ReportsPage
     from './pages/admin/ReportsPage';
+
+import SettingsPage
+    from './pages/admin/SettingsPage';
 
 import StockAlertsPage
     from './pages/admin/StockAlertsPage';
@@ -61,9 +73,6 @@ import CustomersPage
 import DueManagementPage
     from './pages/shared/DueManagementPage';
 
-import ModulePlaceholderPage
-    from './pages/shared/ModulePlaceholderPage';
-
 import PosPage
     from './pages/shared/PosPage';
 
@@ -73,20 +82,16 @@ import SalesHistoryPage
 import SalesReturnsPage
     from './pages/shared/SalesReturnsPage';
 
-import CashierAccountsPage
-    from './pages/admin/CashierAccountsPage';
-
 import ShiftRegisterPage
     from './pages/shared/ShiftRegisterPage';
-
-import SettingsPage
-    from './pages/admin/SettingsPage';
 
 export default function App() {
     return (
         <Routes>
             <Route
-                element={<PublicOnlyRoute />}
+                element={
+                    <PublicOnlyRoute />
+                }
             >
                 <Route
                     path="/login"
@@ -172,6 +177,13 @@ export default function App() {
                     />
 
                     <Route
+                        path="barcodes"
+                        element={
+                            <BarcodeManagementPage />
+                        }
+                    />
+
+                    <Route
                         path="suppliers"
                         element={
                             <SuppliersPage />
@@ -235,8 +247,17 @@ export default function App() {
                     />
 
                     <Route
+                        path="backups"
+                        element={
+                            <BackupRestorePage />
+                        }
+                    />
+
+                    <Route
                         path="settings"
-                        element={<SettingsPage />}
+                        element={
+                            <SettingsPage />
+                        }
                     />
                 </Route>
             </Route>
@@ -272,8 +293,17 @@ export default function App() {
                     />
 
                     <Route
+                        path="shift"
+                        element={
+                            <ShiftRegisterPage />
+                        }
+                    />
+
+                    <Route
                         path="pos"
-                        element={<PosPage />}
+                        element={
+                            <PosPage />
+                        }
                     />
 
                     <Route
@@ -303,24 +333,21 @@ export default function App() {
                             <DueManagementPage />
                         }
                     />
-
-                    <Route
-                        path="shift"
-                        element={
-                            <ShiftRegisterPage />
-                        }
-                    />
                 </Route>
             </Route>
 
             <Route
                 path="/"
-                element={<RoleHomeRedirect />}
+                element={
+                    <RoleHomeRedirect />
+                }
             />
 
             <Route
                 path="*"
-                element={<NotFoundPage />}
+                element={
+                    <NotFoundPage />
+                }
             />
         </Routes>
     );

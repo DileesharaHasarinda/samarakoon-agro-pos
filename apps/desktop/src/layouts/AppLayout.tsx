@@ -61,6 +61,17 @@ const adminNavigation:
         },
 
         {
+            label: 'Barcode Management',
+            shortLabel: 'BC',
+            path: '/admin/barcodes',
+        },
+        {
+            label: 'Backup & Restore',
+            shortLabel: 'BR',
+            path: '/admin/backups',
+        },
+
+        {
             label: 'Sales Returns',
             shortLabel: 'R',
             path: '/admin/returns',
