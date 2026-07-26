@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\CustomerDueController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseCategoryController;
 use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\InventoryAlertController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\PurchaseController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\SalesReturnController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\SupplierController;
+use App\Http\Controllers\Api\SupplierPayableController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -218,6 +220,60 @@ Route::prefix('v1')
                         ],
                     );
 
+                    /*
+                     * Low-stock and expiry.
+                     */
+                    Route::get(
+                        '/inventory-alerts',
+                        [
+                            InventoryAlertController::class,
+                            'index',
+                        ],
+                    );
+
+                    Route::put(
+                        '/products/{product}/stock-settings',
+                        [
+                            InventoryAlertController::class,
+                            'updateSettings',
+                        ],
+                    );
+
+                    /*
+                     * Supplier payments and dues.
+                     */
+                    Route::get(
+                        '/supplier-payables',
+                        [
+                            SupplierPayableController::class,
+                            'index',
+                        ],
+                    );
+
+                    Route::get(
+                        '/supplier-payables/{purchase}',
+                        [
+                            SupplierPayableController::class,
+                            'show',
+                        ],
+                    );
+
+                    Route::put(
+                        '/purchases/{purchase}/settlement',
+                        [
+                            SupplierPayableController::class,
+                            'configure',
+                        ],
+                    );
+
+                    Route::post(
+                        '/purchases/{purchase}/supplier-payments',
+                        [
+                            SupplierPayableController::class,
+                            'storePayment',
+                        ],
+                    );
+
                     Route::delete(
                         '/customers/{customer}',
                         [
@@ -306,21 +362,5 @@ Route::prefix('v1')
                         ExpenseController::class,
                     );
                 });
-
-                Route::middleware(
-                    'role:admin,cashier',
-                )
-                    ->prefix('cashier')
-                    ->group(function (): void {
-                        Route::get(
-                            '/access-check',
-                            function (): JsonResponse {
-                                return response()->json([
-                                    'message' =>
-                                    'Cashier access confirmed.',
-                                ]);
-                            },
-                        );
-                    });
             });
     });

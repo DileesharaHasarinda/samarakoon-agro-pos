@@ -92,6 +92,16 @@ const adminNavigation:
             path: '/admin/reports',
         },
         {
+            label: 'Stock Alerts',
+            shortLabel: 'A',
+            path: '/admin/stock-alerts',
+        },
+        {
+            label: 'Supplier Dues',
+            shortLabel: 'SD',
+            path: '/admin/supplier-dues',
+        },
+        {
             label: 'Cashier Accounts',
             shortLabel: 'CA',
             path: '/admin/users',

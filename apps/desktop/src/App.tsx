@@ -43,6 +43,12 @@ import PurchasesPage
 import ReportsPage
     from './pages/admin/ReportsPage';
 
+import StockAlertsPage
+    from './pages/admin/StockAlertsPage';
+
+import SupplierDuesPage
+    from './pages/admin/SupplierDuesPage';
+
 import SuppliersPage
     from './pages/admin/SuppliersPage';
 
@@ -164,6 +170,13 @@ export default function App() {
                     />
 
                     <Route
+                        path="supplier-dues"
+                        element={
+                            <SupplierDuesPage />
+                        }
+                    />
+
+                    <Route
                         path="purchases"
                         element={
                             <PurchasesPage />
@@ -174,6 +187,13 @@ export default function App() {
                         path="inventory"
                         element={
                             <InventoryPage />
+                        }
+                    />
+
+                    <Route
+                        path="stock-alerts"
+                        element={
+                            <StockAlertsPage />
                         }
                     />
 
