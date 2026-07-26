@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\SalesReturnController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\SupplierController;
+use App\Http\Controllers\Api\ExpenseCategoryController;
+use App\Http\Controllers\Api\ExpenseController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -199,6 +201,24 @@ Route::prefix('v1')
                                 CustomerController::class,
                                 'destroy',
                             ],
+                        );
+
+                        Route::get(
+                            '/expense-categories/options',
+                            [
+                                ExpenseCategoryController::class,
+                                'options',
+                            ],
+                        );
+
+                        Route::apiResource(
+                            'expense-categories',
+                            ExpenseCategoryController::class,
+                        );
+
+                        Route::apiResource(
+                            'expenses',
+                            ExpenseController::class,
                         );
 
                         Route::get(

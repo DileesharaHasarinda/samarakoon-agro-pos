@@ -61,6 +61,9 @@ import SalesHistoryPage
 import SalesReturnsPage
     from './pages/shared/SalesReturnsPage';
 
+import ExpensesPage
+    from './pages/admin/ExpensesPage';
+
 export default function App() {
     return (
         <Routes>
@@ -174,10 +177,7 @@ export default function App() {
                     <Route
                         path="expenses"
                         element={
-                            <ModulePlaceholderPage
-                                title="Expenses"
-                                description="Record and review business expenses."
-                            />
+                            <ExpensesPage />
                         }
                     />
 
