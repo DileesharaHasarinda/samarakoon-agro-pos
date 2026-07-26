@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\SalesReturnController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\SupplierPayableController;
+use App\Http\Controllers\Api\BusinessSettingController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -93,6 +94,14 @@ Route::prefix('v1')
                     [
                         DashboardController::class,
                         'cashier',
+                    ],
+                );
+
+                Route::get(
+                    '/business-settings',
+                    [
+                        BusinessSettingController::class,
+                        'show',
                     ],
                 );
 
@@ -341,6 +350,14 @@ Route::prefix('v1')
                     [
                         DashboardController::class,
                         'admin',
+                    ],
+                );
+
+                Route::put(
+                    '/business-settings',
+                    [
+                        BusinessSettingController::class,
+                        'update',
                     ],
                 );
 

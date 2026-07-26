@@ -79,6 +79,9 @@ import CashierAccountsPage
 import ShiftRegisterPage
     from './pages/shared/ShiftRegisterPage';
 
+import SettingsPage
+    from './pages/admin/SettingsPage';
+
 export default function App() {
     return (
         <Routes>
@@ -233,12 +236,7 @@ export default function App() {
 
                     <Route
                         path="settings"
-                        element={
-                            <ModulePlaceholderPage
-                                title="Settings"
-                                description="Configure business and application settings."
-                            />
-                        }
+                        element={<SettingsPage />}
                     />
                 </Route>
             </Route>
