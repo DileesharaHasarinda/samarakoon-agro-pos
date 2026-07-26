@@ -28,6 +28,9 @@ import AdminDashboardPage
 import CategoriesPage
     from './pages/admin/CategoriesPage';
 
+import ExpensesPage
+    from './pages/admin/ExpensesPage';
+
 import InventoryPage
     from './pages/admin/InventoryPage';
 
@@ -36,6 +39,9 @@ import ProductsPage
 
 import PurchasesPage
     from './pages/admin/PurchasesPage';
+
+import ReportsPage
+    from './pages/admin/ReportsPage';
 
 import SuppliersPage
     from './pages/admin/SuppliersPage';
@@ -60,9 +66,6 @@ import SalesHistoryPage
 
 import SalesReturnsPage
     from './pages/shared/SalesReturnsPage';
-
-import ExpensesPage
-    from './pages/admin/ExpensesPage';
 
 export default function App() {
     return (
@@ -184,10 +187,7 @@ export default function App() {
                     <Route
                         path="reports"
                         element={
-                            <ModulePlaceholderPage
-                                title="Reports"
-                                description="Review sales, stock, purchase and profit reports."
-                            />
+                            <ReportsPage />
                         }
                     />
 

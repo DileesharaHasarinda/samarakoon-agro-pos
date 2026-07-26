@@ -4,15 +4,17 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerDueController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\ExpenseCategoryController;
+use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\PurchaseController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\SalesReturnController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\SupplierController;
-use App\Http\Controllers\Api\ExpenseCategoryController;
-use App\Http\Controllers\Api\ExpenseController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -22,9 +24,12 @@ Route::prefix('v1')
             '/health',
             function (): JsonResponse {
                 return response()->json([
-                    'status' => 'ok',
+                    'status' =>
+                    'ok',
+
                     'application' =>
                     'Samarakoon Agro POS API',
+
                     'timestamp' =>
                     now()->toISOString(),
                 ]);
@@ -37,7 +42,9 @@ Route::prefix('v1')
                 AuthController::class,
                 'login',
             ],
-        )->middleware('throttle:10,1');
+        )->middleware(
+            'throttle:10,1',
+        );
 
         Route::middleware('auth:sanctum')
             ->group(function (): void {
@@ -60,6 +67,14 @@ Route::prefix('v1')
                 Route::middleware(
                     'role:admin,cashier',
                 )->group(function (): void {
+                    Route::get(
+                        '/dashboard/cashier',
+                        [
+                            DashboardController::class,
+                            'cashier',
+                        ],
+                    );
+
                     Route::get(
                         '/pos/categories',
                         [
@@ -100,9 +115,6 @@ Route::prefix('v1')
                         ],
                     );
 
-                    /*
-                     * Customer routes.
-                     */
                     Route::get(
                         '/customers/options',
                         [
@@ -121,9 +133,6 @@ Route::prefix('v1')
                         'update',
                     ]);
 
-                    /*
-                     * Due-management routes.
-                     */
                     Route::get(
                         '/customer-dues',
                         [
@@ -148,9 +157,6 @@ Route::prefix('v1')
                         ],
                     );
 
-                    /*
-                     * Sales return routes.
-                     */
                     Route::get(
                         '/sales/{sale}/return-options',
                         [
@@ -193,96 +199,113 @@ Route::prefix('v1')
                     ]);
                 });
 
-                Route::middleware('role:admin')
-                    ->group(function (): void {
-                        Route::delete(
-                            '/customers/{customer}',
-                            [
-                                CustomerController::class,
-                                'destroy',
-                            ],
-                        );
+                Route::middleware(
+                    'role:admin',
+                )->group(function (): void {
+                    Route::get(
+                        '/dashboard/admin',
+                        [
+                            DashboardController::class,
+                            'admin',
+                        ],
+                    );
 
-                        Route::get(
-                            '/expense-categories/options',
-                            [
-                                ExpenseCategoryController::class,
-                                'options',
-                            ],
-                        );
+                    Route::get(
+                        '/reports/overview',
+                        [
+                            ReportController::class,
+                            'overview',
+                        ],
+                    );
 
-                        Route::apiResource(
-                            'expense-categories',
-                            ExpenseCategoryController::class,
-                        );
+                    Route::delete(
+                        '/customers/{customer}',
+                        [
+                            CustomerController::class,
+                            'destroy',
+                        ],
+                    );
 
-                        Route::apiResource(
-                            'expenses',
-                            ExpenseController::class,
-                        );
+                    Route::get(
+                        '/admin/access-check',
+                        function (): JsonResponse {
+                            return response()->json([
+                                'message' =>
+                                'Admin access confirmed.',
+                            ]);
+                        },
+                    );
 
-                        Route::get(
-                            '/admin/access-check',
-                            function (): JsonResponse {
-                                return response()->json([
-                                    'message' =>
-                                    'Admin access confirmed.',
-                                ]);
-                            },
-                        );
-
-                        Route::get(
-                            '/categories/options',
-                            [
-                                CategoryController::class,
-                                'options',
-                            ],
-                        );
-
-                        Route::get(
-                            '/products/options',
-                            [
-                                ProductController::class,
-                                'options',
-                            ],
-                        );
-
-                        Route::get(
-                            '/suppliers/options',
-                            [
-                                SupplierController::class,
-                                'options',
-                            ],
-                        );
-
-                        Route::post(
-                            '/purchases/{purchase}/receive',
-                            [
-                                PurchaseController::class,
-                                'receive',
-                            ],
-                        );
-
-                        Route::apiResource(
-                            'categories',
+                    Route::get(
+                        '/categories/options',
+                        [
                             CategoryController::class,
-                        );
+                            'options',
+                        ],
+                    );
 
-                        Route::apiResource(
-                            'products',
+                    Route::get(
+                        '/products/options',
+                        [
                             ProductController::class,
-                        );
+                            'options',
+                        ],
+                    );
 
-                        Route::apiResource(
-                            'suppliers',
+                    Route::get(
+                        '/suppliers/options',
+                        [
                             SupplierController::class,
-                        );
+                            'options',
+                        ],
+                    );
 
-                        Route::apiResource(
-                            'purchases',
+                    Route::get(
+                        '/expense-categories/options',
+                        [
+                            ExpenseCategoryController::class,
+                            'options',
+                        ],
+                    );
+
+                    Route::post(
+                        '/purchases/{purchase}/receive',
+                        [
                             PurchaseController::class,
-                        );
-                    });
+                            'receive',
+                        ],
+                    );
+
+                    Route::apiResource(
+                        'categories',
+                        CategoryController::class,
+                    );
+
+                    Route::apiResource(
+                        'products',
+                        ProductController::class,
+                    );
+
+                    Route::apiResource(
+                        'suppliers',
+                        SupplierController::class,
+                    );
+
+                    Route::apiResource(
+                        'purchases',
+                        PurchaseController::class,
+                    );
+
+                    Route::apiResource(
+                        'expense-categories',
+                        ExpenseCategoryController::class,
+                    );
+
+                    Route::apiResource(
+                        'expenses',
+                        ExpenseController::class,
+                    );
+                });
 
                 Route::middleware(
                     'role:admin,cashier',
