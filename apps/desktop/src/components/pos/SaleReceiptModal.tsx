@@ -1,21 +1,9 @@
-import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
-import {
-    useAuth,
-} from '../../auth/AuthContext';
-
-import {
-    getBusinessSettings,
-} from '../../services/businessSettingService';
-
-import {
-    defaultBusinessSetting,
-} from '../../types/businessSetting';
+import { useAuth } from '../../auth/AuthContext';
+import { getBusinessSettings } from '../../services/businessSettingService';
+import { defaultBusinessSetting } from '../../types/businessSetting';
 
 import type {
     BusinessSetting,
@@ -25,6 +13,71 @@ import type {
 import type {
     SaleReceipt,
 } from '../../types/sale';
+
+interface EscPosReceiptLine {
+    left: string;
+    right?: string;
+}
+
+interface EscPosReceiptItem {
+    name: string;
+    meta?: string[];
+    quantityLine: string;
+    lineTotal: string;
+    discountLine?: string;
+}
+
+interface EscPosReceiptPayload {
+    printerName: string;
+    paperWidthMm: 58 | 80;
+
+    businessName: string;
+    addressLines: string[];
+    receiptTitle: string;
+
+    metaLines: EscPosReceiptLine[];
+    items: EscPosReceiptItem[];
+    totalsLines: EscPosReceiptLine[];
+    statusLines: EscPosReceiptLine[];
+
+    notes?: string | null;
+    footerText?: string | null;
+
+    copies: number;
+    duplicateLabel: boolean;
+}
+
+interface PosPrintApi {
+    printSilently: (
+        html: string,
+        options: {
+            printerName?: string | null;
+            paperWidthMicrons?: number;
+            paperHeightMicrons?: number;
+        },
+    ) => Promise<{ success: boolean; error?: string }>;
+
+    printReceiptEscPos: (
+        payload: EscPosReceiptPayload,
+    ) => Promise<{ success: boolean; error?: string }>;
+
+    getPrinters: () => Promise<Array<{
+        name: string;
+        displayName: string;
+        isDefault: boolean;
+        status: number;
+    }>>;
+}
+
+declare global {
+    interface Window {
+        posPrint?: PosPrintApi;
+    }
+}
+
+function mmToMicrons(mm: number): number {
+    return Math.round(mm * 1000);
+}
 
 interface SaleReceiptModalProps {
     receipt: SaleReceipt | null;
@@ -157,15 +210,14 @@ function numberValue(
 function formatQuantity(
     value: NumericValue,
 ): string {
-    const quantity =
-        numberValue(value);
-
     return new Intl.NumberFormat(
         'en-GB',
         {
             maximumFractionDigits: 3,
         },
-    ).format(quantity);
+    ).format(
+        numberValue(value),
+    );
 }
 
 function formatDateTime(
@@ -177,11 +229,7 @@ function formatDateTime(
 
     const date = new Date(value);
 
-    if (
-        Number.isNaN(
-            date.getTime(),
-        )
-    ) {
+    if (Number.isNaN(date.getTime())) {
         return value;
     }
 
@@ -206,11 +254,7 @@ function formatDate(
 
     const date = new Date(value);
 
-    if (
-        Number.isNaN(
-            date.getTime(),
-        )
-    ) {
+    if (Number.isNaN(date.getTime())) {
         return value;
     }
 
@@ -227,43 +271,48 @@ function formatDate(
 function paymentMethodName(
     method: string | null | undefined,
 ): string {
-    switch (method) {
-        case 'cash':
-            return 'Cash';
-
-        case 'card':
-            return 'Card';
-
-        case 'bank_transfer':
-            return 'Bank Transfer';
-
-        case 'cheque':
-            return 'Cheque';
-
-        case 'credit':
-            return 'Credit';
-
-        default:
-            return 'Not Specified';
+    if (method === 'cash') {
+        return 'Cash';
     }
+
+    if (method === 'card') {
+        return 'Card';
+    }
+
+    if (method === 'bank_transfer') {
+        return 'Bank Transfer';
+    }
+
+    if (method === 'cheque') {
+        return 'Cheque';
+    }
+
+    if (method === 'credit') {
+        return 'Credit';
+    }
+
+    return 'Not Specified';
 }
 
 function paymentStatusName(
     status: string | null | undefined,
 ): string {
-    switch (status) {
-        case 'paid':
-            return 'Paid';
-
-        case 'partial':
-            return 'Partially Paid';
-
-        case 'due':
-            return 'Due';
-
-        default:
-            return 'Completed';
+    if (
+        status === 'paid'
+        || status === 'full'
+    ) {
+        return 'Paid';
     }
+
+    if (status === 'partial') {
+        return 'Partially Paid';
+    }
+
+    if (status === 'due') {
+        return 'Due';
+    }
+
+    return 'Completed';
 }
 
 function itemUnitPrice(
@@ -280,12 +329,8 @@ function itemLineTotal(
 ): number {
     const calculated =
         itemUnitPrice(item)
-        * numberValue(
-            item.quantity,
-        )
-        - numberValue(
-            item.discount,
-        );
+        * numberValue(item.quantity)
+        - numberValue(item.discount);
 
     return numberValue(
         item.line_total,
@@ -321,9 +366,9 @@ function createCurrencyFormatter(
             'en-GB',
             {
                 style: 'currency',
-                currency:
-                    currencyCode,
+                currency: currencyCode,
                 minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
             },
         );
     } catch {
@@ -333,6 +378,7 @@ function createCurrencyFormatter(
                 style: 'currency',
                 currency: 'LKR',
                 minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
             },
         );
     }
@@ -341,23 +387,21 @@ function createCurrencyFormatter(
 function createDocumentView(
     sale: PrintableSale,
 ): DocumentView {
-    const items =
-        sale.items ?? [];
-
-    const payments =
-        sale.payments ?? [];
+    const items = sale.items ?? [];
+    const payments = sale.payments ?? [];
 
     const calculatedSubtotal =
         items.reduce(
             (
                 total,
                 item,
-            ) =>
+            ) => (
                 total
                 + itemUnitPrice(item)
                 * numberValue(
                     item.quantity,
-                ),
+                )
+            ),
             0,
         );
 
@@ -366,11 +410,12 @@ function createDocumentView(
             (
                 total,
                 item,
-            ) =>
+            ) => (
                 total
                 + numberValue(
                     item.discount,
-                ),
+                )
+            ),
             0,
         );
 
@@ -407,11 +452,12 @@ function createDocumentView(
             (
                 total,
                 payment,
-            ) =>
+            ) => (
                 total
                 + numberValue(
                     payment.amount,
-                ),
+                )
+            ),
             0,
         );
 
@@ -426,8 +472,7 @@ function createDocumentView(
             sale.due_amount,
             Math.max(
                 0,
-                grandTotal
-                - paidAmount,
+                grandTotal - paidAmount,
             ),
         );
 
@@ -441,6 +486,7 @@ function createDocumentView(
         numberValue(
             sale.change_amount
             ?? sale.balance,
+
             Math.max(
                 0,
                 amountReceived
@@ -524,11 +570,92 @@ function createDocumentView(
     };
 }
 
+function Icon({
+    name,
+}: {
+    name:
+    | 'alert'
+    | 'check'
+    | 'close'
+    | 'invoice'
+    | 'print'
+    | 'receipt';
+}) {
+    const props = {
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 2,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+        'aria-hidden': true,
+    };
+
+    if (name === 'alert') {
+        return (
+            <svg {...props}>
+                <path d="M10.3 3.4 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.4a2 2 0 0 0-3.4 0Z" />
+                <path d="M12 9v4M12 17h.01" />
+            </svg>
+        );
+    }
+
+    if (name === 'check') {
+        return (
+            <svg {...props}>
+                <path d="m5 12 4 4L19 6" />
+            </svg>
+        );
+    }
+
+    if (name === 'close') {
+        return (
+            <svg {...props}>
+                <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+        );
+    }
+
+    if (name === 'invoice') {
+        return (
+            <svg {...props}>
+                <path d="M6 3h9l3 3v15H6Z" />
+                <path d="M15 3v4h4M9 11h6M9 15h6" />
+            </svg>
+        );
+    }
+
+    if (name === 'print') {
+        return (
+            <svg {...props}>
+                <path d="M6 9V3h12v6" />
+
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+
+                <rect
+                    x="6"
+                    y="14"
+                    width="12"
+                    height="7"
+                />
+
+                <path d="M18 12h.01" />
+            </svg>
+        );
+    }
+
+    return (
+        <svg {...props}>
+            <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
+            <path d="M9 8h6M9 12h6M9 16h3" />
+        </svg>
+    );
+}
+
 interface ThermalReceiptProps {
     settings: BusinessSetting;
     document: DocumentView;
-    currencyFormatter:
-    Intl.NumberFormat;
+    currencyFormatter: Intl.NumberFormat;
     copyIndex: number;
 }
 
@@ -539,23 +666,20 @@ function ThermalReceipt({
     copyIndex,
 }: ThermalReceiptProps) {
     const paperClass =
-        settings
-            .receipt_paper_size
+        settings.receipt_paper_size
             === '58mm'
             ? 'print-paper-58mm'
             : 'print-paper-80mm';
 
-    const currency = (
+    const money = (
         value: number,
-    ): string =>
-        currencyFormatter.format(
-            value,
-        );
+    ): string => (
+        currencyFormatter.format(value)
+    );
 
     return (
         <article
             className={`
-                document-copy
                 print-document-receipt
                 ${paperClass}
             `}
@@ -568,13 +692,12 @@ function ThermalReceipt({
                     </div>
                 )}
 
-            <header className="thermal-document-header">
+            <header className="thermal-header">
                 {settings
                     .show_logo_on_receipt
-                    && settings
-                        .logo_data_url && (
+                    && settings.logo_data_url && (
                         <img
-                            className="thermal-business-logo"
+                            className="thermal-logo"
                             src={
                                 settings
                                     .logo_data_url
@@ -601,15 +724,11 @@ function ThermalReceipt({
                     </p>
                 )}
 
-                {settings
-                    .secondary_phone && (
-                        <p>
-                            {
-                                settings
-                                    .secondary_phone
-                            }
-                        </p>
-                    )}
+                {settings.secondary_phone && (
+                    <p>
+                        {settings.secondary_phone}
+                    </p>
+                )}
 
                 {settings.email && (
                     <p>
@@ -617,20 +736,18 @@ function ThermalReceipt({
                     </p>
                 )}
 
-                {settings
-                    .registration_number && (
-                        <p>
-                            Reg No:{' '}
-                            {
-                                settings
-                                    .registration_number
-                            }
-                        </p>
-                    )}
+                {settings.registration_number && (
+                    <p>
+                        Reg No:
+                        {' '}
+                        {settings.registration_number}
+                    </p>
+                )}
 
                 {settings.tax_number && (
                     <p>
-                        Tax No:{' '}
+                        Tax No:
+                        {' '}
                         {settings.tax_number}
                     </p>
                 )}
@@ -642,83 +759,71 @@ function ThermalReceipt({
 
             <div className="thermal-divider" />
 
-            <section className="thermal-meta-list">
+            <section className="thermal-list">
                 <div>
-                    <span>Sale:</span>
+                    <span>
+                        Sale:
+                    </span>
 
                     <strong>
-                        {
-                            document
-                                .saleNumber
-                        }
+                        {document.saleNumber}
                     </strong>
                 </div>
 
                 <div>
-                    <span>Date:</span>
+                    <span>
+                        Date:
+                    </span>
 
                     <strong>
                         {formatDateTime(
-                            document
-                                .saleDate,
+                            document.saleDate,
                         )}
                     </strong>
                 </div>
 
-                {settings
-                    .show_cashier_name && (
+                {settings.show_cashier_name && (
+                    <div>
+                        <span>
+                            Cashier:
+                        </span>
+
+                        <strong>
+                            {document.cashierName}
+                        </strong>
+                    </div>
+                )}
+
+                {settings.show_customer_details && (
+                    <>
                         <div>
                             <span>
-                                Cashier:
+                                Customer:
                             </span>
 
                             <strong>
-                                {
-                                    document
-                                        .cashierName
-                                }
+                                {document.customerName}
                             </strong>
                         </div>
-                    )}
 
-                {settings
-                    .show_customer_details && (
-                        <>
+                        {document.customerPhone && (
                             <div>
                                 <span>
-                                    Customer:
+                                    Mobile:
                                 </span>
 
                                 <strong>
-                                    {
-                                        document
-                                            .customerName
-                                    }
+                                    {document.customerPhone}
                                 </strong>
                             </div>
-
-                            {document
-                                .customerPhone && (
-                                    <div>
-                                        <span>
-                                            Mobile:
-                                        </span>
-
-                                        <strong>
-                                            {
-                                                document
-                                                    .customerPhone
-                                            }
-                                        </strong>
-                                    </div>
-                                )}
-                        </>
-                    )}
+                        )}
+                    </>
+                )}
             </section>
 
             <div className="thermal-divider" />
 
-            <section className="thermal-item-list">
+            <section className="thermal-items">
                 {document.items.map(
                     (
                         item,
@@ -733,37 +838,24 @@ function ThermalReceipt({
                             }
                         >
                             <strong>
-                                {itemName(
-                                    item,
-                                )}
+                                {itemName(item)}
                             </strong>
 
                             {settings.show_sku
-                                && item
-                                    .product
-                                    ?.sku && (
+                                && item.product?.sku && (
                                     <small>
-                                        SKU:{' '}
-                                        {
-                                            item
-                                                .product
-                                                .sku
-                                        }
+                                        SKU:
+                                        {' '}
+                                        {item.product.sku}
                                     </small>
                                 )}
 
-                            {settings
-                                .show_batch_number
-                                && itemBatchNumber(
-                                    item,
-                                ) && (
+                            {settings.show_batch_number
+                                && itemBatchNumber(item) && (
                                     <small>
-                                        Batch:{' '}
-                                        {
-                                            itemBatchNumber(
-                                                item,
-                                            )
-                                        }
+                                        Batch:
+                                        {' '}
+                                        {itemBatchNumber(item)}
                                     </small>
                                 )}
 
@@ -772,8 +864,8 @@ function ThermalReceipt({
                                     {formatQuantity(
                                         item.quantity,
                                     )}
-                                    {' '}×{' '}
-                                    {currency(
+                                    {' × '}
+                                    {money(
                                         itemUnitPrice(
                                             item,
                                         ),
@@ -781,7 +873,7 @@ function ThermalReceipt({
                                 </span>
 
                                 <strong>
-                                    {currency(
+                                    {money(
                                         itemLineTotal(
                                             item,
                                         ),
@@ -793,8 +885,9 @@ function ThermalReceipt({
                                 item.discount,
                             ) > 0 && (
                                     <small>
-                                        Discount:{' '}
-                                        -{currency(
+                                        Discount:
+                                        {' -'}
+                                        {money(
                                             numberValue(
                                                 item.discount,
                                             ),
@@ -808,124 +901,120 @@ function ThermalReceipt({
 
             <div className="thermal-divider" />
 
-            <section className="thermal-total-list">
+            <section className="thermal-totals">
                 <div>
-                    <span>Subtotal</span>
+                    <span>
+                        Subtotal
+                    </span>
 
                     <strong>
-                        {currency(
+                        {money(
                             document.subtotal,
                         )}
                     </strong>
                 </div>
 
-                {document
-                    .totalDiscount > 0 && (
-                        <div>
-                            <span>
-                                Discount
-                            </span>
-
-                            <strong>
-                                -{currency(
-                                    document
-                                        .totalDiscount,
-                                )}
-                            </strong>
-                        </div>
-                    )}
-
-                <div className="thermal-grand-total">
-                    <span>
-                        Grand Total
-                    </span>
-
-                    <strong>
-                        {currency(
-                            document
-                                .grandTotal,
-                        )}
-                    </strong>
-                </div>
-
-                <div>
-                    <span>Paid</span>
-
-                    <strong>
-                        {currency(
-                            document
-                                .paidAmount,
-                        )}
-                    </strong>
-                </div>
-
-                {document.dueAmount > 0 && (
-                    <div className="thermal-due-total">
-                        <span>Due</span>
+                {document.totalDiscount > 0 && (
+                    <div>
+                        <span>
+                            Discount
+                        </span>
 
                         <strong>
-                            {currency(
-                                document
-                                    .dueAmount,
+                            -
+                            {money(
+                                document.totalDiscount,
                             )}
                         </strong>
                     </div>
                 )}
 
-                {document
-                    .changeAmount > 0 && (
-                        <div>
-                            <span>Change</span>
-
-                            <strong>
-                                {currency(
-                                    document
-                                        .changeAmount,
-                                )}
-                            </strong>
-                        </div>
-                    )}
-            </section>
-
-            <div className="thermal-divider" />
-
-            <section className="thermal-payment-list">
-                <div>
-                    <span>Status:</span>
+                <div className="thermal-grand">
+                    <span>
+                        Grand Total
+                    </span>
 
                     <strong>
-                        {
-                            document
-                                .paymentStatus
-                        }
+                        {money(
+                            document.grandTotal,
+                        )}
                     </strong>
                 </div>
 
                 <div>
-                    <span>Payment:</span>
+                    <span>
+                        Paid
+                    </span>
 
                     <strong>
-                        {
-                            document
-                                .paymentMethod
-                        }
+                        {money(
+                            document.paidAmount,
+                        )}
+                    </strong>
+                </div>
+
+                {document.dueAmount > 0 && (
+                    <div className="thermal-due">
+                        <span>
+                            Due
+                        </span>
+
+                        <strong>
+                            {money(
+                                document.dueAmount,
+                            )}
+                        </strong>
+                    </div>
+                )}
+
+                {document.changeAmount > 0 && (
+                    <div>
+                        <span>
+                            Change
+                        </span>
+
+                        <strong>
+                            {money(
+                                document.changeAmount,
+                            )}
+                        </strong>
+                    </div>
+                )}
+            </section>
+
+            <div className="thermal-divider" />
+
+            <section className="thermal-list">
+                <div>
+                    <span>
+                        Status:
+                    </span>
+
+                    <strong>
+                        {document.paymentStatus}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>
+                        Payment:
+                    </span>
+
+                    <strong>
+                        {document.paymentMethod}
                     </strong>
                 </div>
 
                 {settings
                     .show_payment_reference
-                    && document
-                        .paymentReference && (
+                    && document.paymentReference && (
                         <div>
                             <span>
                                 Reference:
                             </span>
 
                             <strong>
-                                {
-                                    document
-                                        .paymentReference
-                                }
+                                {document.paymentReference}
                             </strong>
                         </div>
                     )}
@@ -940,8 +1029,7 @@ function ThermalReceipt({
 
                             <strong>
                                 {formatDate(
-                                    document
-                                        .dueDate,
+                                    document.dueDate,
                                 )}
                             </strong>
                         </div>
@@ -950,7 +1038,9 @@ function ThermalReceipt({
 
             {document.notes && (
                 <section className="thermal-notes">
-                    <strong>Notes</strong>
+                    <strong>
+                        Notes
+                    </strong>
 
                     <p>
                         {document.notes}
@@ -959,7 +1049,7 @@ function ThermalReceipt({
             )}
 
             {settings.receipt_footer && (
-                <footer className="thermal-document-footer">
+                <footer className="thermal-footer">
                     {settings.receipt_footer}
                 </footer>
             )}
@@ -970,8 +1060,7 @@ function ThermalReceipt({
 interface A4InvoiceProps {
     settings: BusinessSetting;
     document: DocumentView;
-    currencyFormatter:
-    Intl.NumberFormat;
+    currencyFormatter: Intl.NumberFormat;
 }
 
 function A4Invoice({
@@ -979,28 +1068,26 @@ function A4Invoice({
     document,
     currencyFormatter,
 }: A4InvoiceProps) {
-    const currency = (
+    const money = (
         value: number,
-    ): string =>
-        currencyFormatter.format(
-            value,
-        );
+    ): string => (
+        currencyFormatter.format(value)
+    );
 
     return (
         <article className="print-document-invoice">
-            <header className="invoice-document-header">
-                <div className="invoice-business-information">
-                    {settings
-                        .logo_data_url && (
-                            <img
-                                className="invoice-business-logo"
-                                src={
-                                    settings
-                                        .logo_data_url
-                                }
-                                alt=""
-                            />
-                        )}
+            <header className="invoice-header">
+                <div className="invoice-business">
+                    {settings.logo_data_url && (
+                        <img
+                            className="invoice-logo"
+                            src={
+                                settings
+                                    .logo_data_url
+                            }
+                            alt=""
+                        />
+                    )}
 
                     <h2>
                         {settings.business_name}
@@ -1020,15 +1107,11 @@ function A4Invoice({
                         </p>
                     )}
 
-                    {settings
-                        .secondary_phone && (
-                            <p>
-                                {
-                                    settings
-                                        .secondary_phone
-                                }
-                            </p>
-                        )}
+                    {settings.secondary_phone && (
+                        <p>
+                            {settings.secondary_phone}
+                        </p>
+                    )}
 
                     {settings.email && (
                         <p>
@@ -1042,79 +1125,61 @@ function A4Invoice({
                         </p>
                     )}
 
-                    {settings
-                        .registration_number && (
-                            <p>
-                                Registration:{' '}
-                                {
-                                    settings
-                                        .registration_number
-                                }
-                            </p>
-                        )}
+                    {settings.registration_number && (
+                        <p>
+                            Registration:
+                            {' '}
+                            {settings.registration_number}
+                        </p>
+                    )}
 
                     {settings.tax_number && (
                         <p>
-                            Tax Number:{' '}
-                            {
-                                settings
-                                    .tax_number
-                            }
+                            Tax Number:
+                            {' '}
+                            {settings.tax_number}
                         </p>
                     )}
                 </div>
 
-                <div className="invoice-document-title">
+                <div className="invoice-title">
                     <h1>
                         {settings.invoice_title}
                     </h1>
 
                     <strong>
-                        {
-                            document
-                                .saleNumber
-                        }
+                        {document.saleNumber}
                     </strong>
 
                     <span>
                         {formatDateTime(
-                            document
-                                .saleDate,
+                            document.saleDate,
                         )}
                     </span>
                 </div>
             </header>
 
-            <section className="invoice-information-grid">
+            <section className="invoice-info">
                 <div>
-                    <span>Bill To</span>
+                    <span>
+                        Bill To
+                    </span>
 
                     <strong>
-                        {
-                            document
-                                .customerName
-                        }
+                        {document.customerName}
                     </strong>
 
-                    {document
-                        .customerPhone && (
-                            <p>
-                                {
-                                    document
-                                        .customerPhone
-                                }
-                            </p>
-                        )}
+                    {document.customerPhone && (
+                        <p>
+                            {document.customerPhone}
+                        </p>
+                    )}
 
-                    {document
-                        .customerAddress && (
-                            <p>
-                                {
-                                    document
-                                        .customerAddress
-                                }
-                            </p>
-                        )}
+                    {document.customerAddress && (
+                        <p>
+                            {document.customerAddress}
+                        </p>
+                    )}
                 </div>
 
                 <div>
@@ -1123,46 +1188,53 @@ function A4Invoice({
                     </span>
 
                     <strong>
-                        {
-                            document
-                                .paymentStatus
-                        }
+                        {document.paymentStatus}
                     </strong>
 
                     <p>
-                        {
-                            document
-                                .paymentMethod
-                        }
+                        {document.paymentMethod}
                     </p>
                 </div>
 
-                {settings
-                    .show_cashier_name && (
-                        <div>
-                            <span>
-                                Prepared By
-                            </span>
+                {settings.show_cashier_name && (
+                    <div>
+                        <span>
+                            Prepared By
+                        </span>
 
-                            <strong>
-                                {
-                                    document
-                                        .cashierName
-                                }
-                            </strong>
-                        </div>
-                    )}
+                        <strong>
+                            {document.cashierName}
+                        </strong>
+                    </div>
+                )}
             </section>
 
-            <table className="invoice-document-table">
+            <table className="invoice-table">
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Description</th>
-                        <th>Quantity</th>
-                        <th>Unit Price</th>
-                        <th>Discount</th>
-                        <th>Amount</th>
+                        <th>
+                            #
+                        </th>
+
+                        <th>
+                            Description
+                        </th>
+
+                        <th>
+                            Quantity
+                        </th>
+
+                        <th>
+                            Unit Price
+                        </th>
+
+                        <th>
+                            Discount
+                        </th>
+
+                        <th>
+                            Amount
+                        </th>
                     </tr>
                 </thead>
 
@@ -1186,38 +1258,25 @@ function A4Invoice({
 
                                 <td>
                                     <strong>
-                                        {itemName(
-                                            item,
-                                        )}
+                                        {itemName(item)}
                                     </strong>
 
                                     <div className="invoice-item-meta">
                                         {settings.show_sku
-                                            && item
-                                                .product
-                                                ?.sku && (
+                                            && item.product?.sku && (
                                                 <small>
-                                                    SKU:{' '}
-                                                    {
-                                                        item
-                                                            .product
-                                                            .sku
-                                                    }
+                                                    SKU:
+                                                    {' '}
+                                                    {item.product.sku}
                                                 </small>
                                             )}
 
-                                        {settings
-                                            .show_batch_number
-                                            && itemBatchNumber(
-                                                item,
-                                            ) && (
+                                        {settings.show_batch_number
+                                            && itemBatchNumber(item) && (
                                                 <small>
-                                                    Batch:{' '}
-                                                    {
-                                                        itemBatchNumber(
-                                                            item,
-                                                        )
-                                                    }
+                                                    Batch:
+                                                    {' '}
+                                                    {itemBatchNumber(item)}
                                                 </small>
                                             )}
                                     </div>
@@ -1228,15 +1287,13 @@ function A4Invoice({
                                         item.quantity,
                                     )}
 
-                                    {item
-                                        .product
-                                        ?.unit
+                                    {item.product?.unit
                                         ? ` ${item.product.unit}`
                                         : ''}
                                 </td>
 
                                 <td>
-                                    {currency(
+                                    {money(
                                         itemUnitPrice(
                                             item,
                                         ),
@@ -1244,7 +1301,7 @@ function A4Invoice({
                                 </td>
 
                                 <td>
-                                    {currency(
+                                    {money(
                                         numberValue(
                                             item.discount,
                                         ),
@@ -1252,7 +1309,7 @@ function A4Invoice({
                                 </td>
 
                                 <td>
-                                    {currency(
+                                    {money(
                                         itemLineTotal(
                                             item,
                                         ),
@@ -1264,68 +1321,66 @@ function A4Invoice({
                 </tbody>
             </table>
 
-            <section className="invoice-bottom-grid">
-                <div className="invoice-payment-information">
+            <section className="invoice-bottom">
+                <div className="invoice-payment">
                     <h3>
                         Payment Information
                     </h3>
 
                     <p>
-                        Method:{' '}
+                        Method:
+                        {' '}
+
                         <strong>
-                            {
-                                document
-                                    .paymentMethod
-                            }
+                            {document.paymentMethod}
                         </strong>
                     </p>
 
                     <p>
-                        Paid:{' '}
+                        Paid:
+                        {' '}
+
                         <strong>
-                            {currency(
-                                document
-                                    .paidAmount,
+                            {money(
+                                document.paidAmount,
                             )}
                         </strong>
                     </p>
 
                     <p>
-                        Outstanding:{' '}
+                        Outstanding:
+                        {' '}
+
                         <strong>
-                            {currency(
-                                document
-                                    .dueAmount,
+                            {money(
+                                document.dueAmount,
                             )}
                         </strong>
                     </p>
 
                     {settings
                         .show_payment_reference
-                        && document
-                            .paymentReference && (
+                        && document.paymentReference && (
                             <p>
-                                Reference:{' '}
+                                Reference:
+                                {' '}
+
                                 <strong>
-                                    {
-                                        document
-                                            .paymentReference
-                                    }
+                                    {document.paymentReference}
                                 </strong>
                             </p>
                         )}
 
                     {settings.show_due_date
-                        && document
-                            .dueAmount > 0
-                        && document
-                            .dueDate && (
+                        && document.dueAmount > 0
+                        && document.dueDate && (
                             <p>
-                                Due Date:{' '}
+                                Due Date:
+                                {' '}
+
                                 <strong>
                                     {formatDate(
-                                        document
-                                            .dueDate,
+                                        document.dueDate,
                                     )}
                                 </strong>
                             </p>
@@ -1333,7 +1388,9 @@ function A4Invoice({
 
                     {document.notes && (
                         <div className="invoice-notes">
-                            <span>Notes</span>
+                            <span>
+                                Notes
+                            </span>
 
                             <p>
                                 {document.notes}
@@ -1342,14 +1399,15 @@ function A4Invoice({
                     )}
                 </div>
 
-                <div className="invoice-total-panel">
+                <div className="invoice-totals">
                     <div>
-                        <span>Subtotal</span>
+                        <span>
+                            Subtotal
+                        </span>
 
                         <strong>
-                            {currency(
-                                document
-                                    .subtotal,
+                            {money(
+                                document.subtotal,
                             )}
                         </strong>
                     </div>
@@ -1360,9 +1418,9 @@ function A4Invoice({
                         </span>
 
                         <strong>
-                            -{currency(
-                                document
-                                    .itemDiscount,
+                            -
+                            {money(
+                                document.itemDiscount,
                             )}
                         </strong>
                     </div>
@@ -1373,22 +1431,21 @@ function A4Invoice({
                         </span>
 
                         <strong>
-                            -{currency(
-                                document
-                                    .saleDiscount,
+                            -
+                            {money(
+                                document.saleDiscount,
                             )}
                         </strong>
                     </div>
 
-                    <div className="invoice-grand-total">
+                    <div className="invoice-grand">
                         <span>
                             Grand Total
                         </span>
 
                         <strong>
-                            {currency(
-                                document
-                                    .grandTotal,
+                            {money(
+                                document.grandTotal,
                             )}
                         </strong>
                     </div>
@@ -1399,9 +1456,8 @@ function A4Invoice({
                         </span>
 
                         <strong>
-                            {currency(
-                                document
-                                    .paidAmount,
+                            {money(
+                                document.paidAmount,
                             )}
                         </strong>
                     </div>
@@ -1412,9 +1468,8 @@ function A4Invoice({
                         </span>
 
                         <strong>
-                            {currency(
-                                document
-                                    .dueAmount,
+                            {money(
+                                document.dueAmount,
                             )}
                         </strong>
                     </div>
@@ -1422,7 +1477,7 @@ function A4Invoice({
             </section>
 
             {settings.invoice_footer && (
-                <footer className="invoice-document-footer">
+                <footer className="invoice-footer">
                     {settings.invoice_footer}
                 </footer>
             )}
@@ -1430,28 +1485,1407 @@ function A4Invoice({
     );
 }
 
+const styles = `
+#sale-document-modal,
+#sale-document-modal *,
+#sale-document-modal *::before,
+#sale-document-modal *::after {
+    box-sizing: border-box !important;
+}
+
+#sale-document-modal {
+    --green-900: #14532d;
+    --green-800: #166534;
+    --green-700: #15803d;
+    --green-100: #dcfce7;
+    --green-50: #f0fdf4;
+
+    --red: #b42318;
+    --red-bg: #fef3f2;
+
+    --text: #101828;
+    --text-2: #344054;
+    --muted: #667085;
+    --border: #d0d9d2;
+    --border-2: #aebdb2;
+
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483647 !important;
+
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    overflow: hidden !important;
+
+    color: var(--text) !important;
+
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif !important;
+
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+
+    isolation: isolate !important;
+    -webkit-font-smoothing: antialiased !important;
+}
+
+#sale-document-modal button {
+    font: inherit !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+}
+
+#sale-document-modal h1,
+#sale-document-modal h2,
+#sale-document-modal h3,
+#sale-document-modal p {
+    margin: 0 !important;
+}
+
+#sale-document-modal .sd-backdrop {
+    position: absolute !important;
+    inset: 0 !important;
+
+    display: flex !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    padding: 18px !important;
+
+    overflow: auto !important;
+
+    background:
+        rgba(3, 18, 10, 0.74) !important;
+
+    backdrop-filter: blur(4px) !important;
+}
+
+#sale-document-modal .sd-dialog {
+    display: flex !important;
+
+    width: min(1180px, 100%) !important;
+    max-height:
+        calc(100dvh - 36px) !important;
+
+    min-height: 0 !important;
+
+    flex-direction: column !important;
+
+    overflow: hidden !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        var(--border) !important;
+
+    border-radius: 16px !important;
+
+    box-shadow:
+        0 28px 72px
+        rgba(0, 0, 0, 0.36) !important;
+}
+
+#sale-document-modal .sd-header {
+    display: grid !important;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        auto
+        40px !important;
+
+    min-height: 88px !important;
+    flex: 0 0 auto !important;
+
+    align-items: center !important;
+    gap: 16px !important;
+
+    padding: 14px 18px !important;
+
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--green-900),
+            var(--green-700)
+        ) !important;
+}
+
+#sale-document-modal .sd-header-copy {
+    min-width: 0 !important;
+}
+
+#sale-document-modal .sd-kicker {
+    display: flex !important;
+
+    align-items: center !important;
+    gap: 6px !important;
+
+    margin-bottom: 2px !important;
+
+    color: #bbf7d0 !important;
+
+    font-size: 11px !important;
+    font-weight: 750 !important;
+    letter-spacing: 0.055em !important;
+
+    text-transform: uppercase !important;
+}
+
+#sale-document-modal .sd-kicker svg {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+#sale-document-modal .sd-title {
+    overflow: hidden !important;
+
+    color: #ffffff !important;
+
+    font-size: 22px !important;
+    font-weight: 740 !important;
+    line-height: 1.25 !important;
+    letter-spacing: -0.02em !important;
+
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#sale-document-modal .sd-subtitle {
+    margin-top: 3px !important;
+
+    color: #d8f7e1 !important;
+
+    font-size: 12px !important;
+}
+
+#sale-document-modal .sd-total {
+    display: flex !important;
+
+    min-width: 190px !important;
+
+    flex-direction: column !important;
+    align-items: flex-end !important;
+
+    padding: 8px 11px !important;
+
+    background:
+        rgba(255, 255, 255, 0.12) !important;
+
+    border:
+        1px solid
+        rgba(255, 255, 255, 0.21) !important;
+
+    border-radius: 10px !important;
+}
+
+#sale-document-modal .sd-total span {
+    color: #d8f7e1 !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+
+    text-transform: uppercase !important;
+}
+
+#sale-document-modal .sd-total strong {
+    margin-top: 1px !important;
+
+    color: #ffffff !important;
+
+    font-size: 19px !important;
+    font-weight: 780 !important;
+
+    white-space: nowrap !important;
+}
+
+#sale-document-modal .sd-close {
+    display: grid !important;
+
+    width: 40px !important;
+    height: 40px !important;
+
+    place-items: center !important;
+
+    padding: 0 !important;
+
+    color: #ffffff !important;
+
+    background:
+        rgba(255, 255, 255, 0.12) !important;
+
+    border:
+        1px solid
+        rgba(255, 255, 255, 0.34) !important;
+
+    border-radius: 9px !important;
+
+    cursor: pointer !important;
+}
+
+#sale-document-modal .sd-close:hover {
+    background:
+        rgba(255, 255, 255, 0.22) !important;
+}
+
+#sale-document-modal .sd-close svg {
+    width: 19px !important;
+    height: 19px !important;
+}
+
+#sale-document-modal .sd-toolbar {
+    display: flex !important;
+
+    min-height: 60px !important;
+    flex: 0 0 auto !important;
+
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 14px !important;
+
+    padding: 10px 16px !important;
+
+    background: #ffffff !important;
+
+    border-bottom:
+        1px solid
+        var(--border) !important;
+}
+
+#sale-document-modal .sd-types {
+    display: flex !important;
+
+    align-items: center !important;
+    gap: 7px !important;
+}
+
+#sale-document-modal .sd-type {
+    display: inline-flex !important;
+
+    min-height: 40px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+
+    padding: 7px 11px !important;
+
+    color: var(--text-2) !important;
+
+    font-size: 12px !important;
+    font-weight: 650 !important;
+
+    background: #f8faf9 !important;
+
+    border:
+        1px solid
+        var(--border-2) !important;
+
+    border-radius: 8px !important;
+
+    cursor: pointer !important;
+}
+
+#sale-document-modal .sd-type:hover {
+    border-color:
+        var(--green-700) !important;
+}
+
+#sale-document-modal .sd-type.active {
+    color: #ffffff !important;
+
+    background: var(--green-700) !important;
+
+    border-color:
+        var(--green-700) !important;
+
+    box-shadow:
+        0 4px 10px
+        rgba(21, 128, 61, 0.15) !important;
+}
+
+#sale-document-modal .sd-type svg {
+    width: 16px !important;
+    height: 16px !important;
+}
+
+#sale-document-modal .sd-format {
+    display: inline-flex !important;
+
+    min-height: 34px !important;
+
+    align-items: center !important;
+
+    padding: 6px 9px !important;
+
+    color: var(--green-900) !important;
+
+    font-size: 11px !important;
+    font-weight: 650 !important;
+
+    white-space: nowrap !important;
+
+    background: var(--green-50) !important;
+
+    border:
+        1px solid
+        #b8dfc3 !important;
+
+    border-radius: 999px !important;
+}
+
+#sale-document-modal .sd-summary {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            3,
+            minmax(0, 1fr)
+        ) !important;
+
+    gap: 8px !important;
+
+    padding: 10px 16px !important;
+
+    background: #f8faf9 !important;
+
+    border-bottom:
+        1px solid
+        var(--border) !important;
+}
+
+#sale-document-modal .sd-summary > div {
+    display: flex !important;
+
+    min-width: 0 !important;
+
+    flex-direction: column !important;
+    gap: 2px !important;
+
+    padding: 8px 10px !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        #e3e9e4 !important;
+
+    border-radius: 8px !important;
+}
+
+#sale-document-modal .sd-summary span {
+    color: var(--muted) !important;
+
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+
+    text-transform: uppercase !important;
+}
+
+#sale-document-modal .sd-summary strong {
+    overflow: hidden !important;
+
+    color: var(--text-2) !important;
+
+    font-size: 12px !important;
+    font-weight: 700 !important;
+
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#sale-document-modal .sd-warning {
+    display: flex !important;
+
+    align-items: flex-start !important;
+    gap: 8px !important;
+
+    margin: 10px 16px 0 !important;
+    padding: 9px 11px !important;
+
+    color: var(--red) !important;
+
+    font-size: 12px !important;
+    font-weight: 600 !important;
+
+    background: var(--red-bg) !important;
+
+    border:
+        1px solid
+        #f3b5af !important;
+
+    border-radius: 8px !important;
+}
+
+#sale-document-modal .sd-warning svg {
+    width: 17px !important;
+    height: 17px !important;
+    min-width: 17px !important;
+
+    margin-top: 1px !important;
+}
+
+#sale-document-modal .sd-preview {
+    display: block !important;
+
+    min-height: 0 !important;
+    flex: 1 !important;
+
+    padding: 18px !important;
+
+    overflow: auto !important;
+
+    background:
+        linear-gradient(
+            135deg,
+            #e8ede9,
+            #f4f6f4
+        ) !important;
+
+    scrollbar-width: thin !important;
+
+    scrollbar-color:
+        #9cad9f
+        #dfe6e0 !important;
+}
+
+#sale-document-modal .print-area {
+    display: flex !important;
+
+    width: max-content !important;
+    min-width: 100% !important;
+
+    align-items: flex-start !important;
+    justify-content: center !important;
+    gap: 18px !important;
+
+    margin: 0 auto !important;
+}
+
+#sale-document-modal .print-area.receipts {
+    flex-wrap: wrap !important;
+}
+
+#sale-document-modal .print-area.invoice {
+    display: block !important;
+    width: 100% !important;
+}
+
+#sale-document-modal .print-document-receipt,
+#sale-document-modal .print-document-invoice {
+    color: #111111 !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    background: #ffffff !important;
+
+    box-shadow:
+        0 8px 24px
+        rgba(16, 24, 40, 0.16) !important;
+}
+
+#sale-document-modal .print-document-receipt {
+    flex: 0 0 auto !important;
+
+    min-height: 300px !important;
+
+    padding: 14px 12px !important;
+
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+}
+
+#sale-document-modal .print-paper-58mm {
+    width: 58mm !important;
+}
+
+#sale-document-modal .print-paper-80mm {
+    width: 80mm !important;
+}
+
+#sale-document-modal .thermal-copy-label {
+    margin-bottom: 7px !important;
+    padding: 4px 6px !important;
+
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.08em !important;
+
+    text-align: center !important;
+
+    border:
+        1px dashed
+        #555555 !important;
+}
+
+#sale-document-modal .thermal-header {
+    text-align: center !important;
+}
+
+#sale-document-modal .thermal-logo {
+    display: block !important;
+
+    width: auto !important;
+    max-width: 52mm !important;
+    max-height: 20mm !important;
+
+    margin: 0 auto 7px !important;
+
+    object-fit: contain !important;
+}
+
+#sale-document-modal .thermal-header h2 {
+    color: #111111 !important;
+
+    font-size: 15px !important;
+    font-weight: 750 !important;
+    line-height: 1.2 !important;
+}
+
+#sale-document-modal .thermal-header p {
+    margin-top: 2px !important;
+
+    color: #222222 !important;
+
+    font-size: 9px !important;
+    line-height: 1.35 !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .thermal-header > strong {
+    display: block !important;
+
+    margin-top: 7px !important;
+
+    font-size: 11px !important;
+    font-weight: 750 !important;
+    letter-spacing: 0.03em !important;
+
+    text-transform: uppercase !important;
+}
+
+#sale-document-modal .thermal-divider {
+    height: 0 !important;
+
+    margin: 7px 0 !important;
+
+    border-top:
+        1px dashed
+        #333333 !important;
+}
+
+#sale-document-modal .thermal-list,
+#sale-document-modal .thermal-totals {
+    display: flex !important;
+
+    flex-direction: column !important;
+    gap: 3px !important;
+}
+
+#sale-document-modal .thermal-list > div,
+#sale-document-modal .thermal-totals > div {
+    display: flex !important;
+
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+}
+
+#sale-document-modal .thermal-list span,
+#sale-document-modal .thermal-totals span {
+    color: #333333 !important;
+    font-size: 9px !important;
+}
+
+#sale-document-modal .thermal-list strong,
+#sale-document-modal .thermal-totals strong {
+    max-width: 64% !important;
+
+    color: #111111 !important;
+
+    font-size: 9px !important;
+    font-weight: 700 !important;
+
+    text-align: right !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .thermal-items {
+    display: flex !important;
+
+    flex-direction: column !important;
+    gap: 6px !important;
+}
+
+#sale-document-modal .thermal-items article {
+    padding-bottom: 5px !important;
+
+    border-bottom:
+        1px dotted
+        #b0b0b0 !important;
+}
+
+#sale-document-modal .thermal-items article:last-child {
+    padding-bottom: 0 !important;
+    border-bottom: 0 !important;
+}
+
+#sale-document-modal .thermal-items article > strong {
+    display: block !important;
+
+    color: #111111 !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .thermal-items small {
+    display: block !important;
+
+    margin-top: 1px !important;
+
+    color: #444444 !important;
+
+    font-size: 8px !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .thermal-items article > div {
+    display: flex !important;
+
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+
+    margin-top: 3px !important;
+}
+
+#sale-document-modal
+.thermal-items article > div span,
+#sale-document-modal
+.thermal-items article > div strong {
+    font-size: 9px !important;
+}
+
+#sale-document-modal .thermal-grand {
+    margin: 3px 0 !important;
+    padding: 5px 0 !important;
+
+    border-top:
+        1px solid
+        #111111 !important;
+
+    border-bottom:
+        1px solid
+        #111111 !important;
+}
+
+#sale-document-modal .thermal-grand span,
+#sale-document-modal .thermal-grand strong {
+    color: #000000 !important;
+
+    font-size: 12px !important;
+    font-weight: 800 !important;
+}
+
+#sale-document-modal .thermal-due span,
+#sale-document-modal .thermal-due strong {
+    font-weight: 750 !important;
+}
+
+#sale-document-modal .thermal-notes {
+    margin-top: 7px !important;
+    padding: 6px !important;
+
+    border:
+        1px solid
+        #cccccc !important;
+}
+
+#sale-document-modal .thermal-notes strong {
+    display: block !important;
+    font-size: 9px !important;
+}
+
+#sale-document-modal .thermal-notes p {
+    margin-top: 2px !important;
+
+    font-size: 8px !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .thermal-footer {
+    margin-top: 10px !important;
+
+    font-size: 9px !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+
+    text-align: center !important;
+
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .print-document-invoice {
+    width: 210mm !important;
+    min-height: 297mm !important;
+
+    margin: 0 auto !important;
+    padding: 18mm !important;
+
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+}
+
+#sale-document-modal .invoice-header {
+    display: grid !important;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        auto !important;
+
+    align-items: start !important;
+    gap: 24px !important;
+
+    padding-bottom: 18px !important;
+
+    border-bottom:
+        2px solid
+        var(--green-800) !important;
+}
+
+#sale-document-modal .invoice-logo {
+    display: block !important;
+
+    width: auto !important;
+    max-width: 180px !important;
+    max-height: 70px !important;
+
+    margin-bottom: 10px !important;
+
+    object-fit: contain !important;
+}
+
+#sale-document-modal .invoice-business h2 {
+    color: var(--green-900) !important;
+
+    font-size: 22px !important;
+    font-weight: 760 !important;
+    line-height: 1.2 !important;
+}
+
+#sale-document-modal .invoice-business p {
+    margin-top: 2px !important;
+
+    color: #475467 !important;
+
+    font-size: 10px !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .invoice-title {
+    min-width: 185px !important;
+
+    text-align: right !important;
+}
+
+#sale-document-modal .invoice-title h1 {
+    color: var(--green-900) !important;
+
+    font-size: 25px !important;
+    font-weight: 780 !important;
+    line-height: 1.2 !important;
+    letter-spacing: -0.02em !important;
+
+    text-transform: uppercase !important;
+}
+
+#sale-document-modal .invoice-title strong {
+    display: block !important;
+
+    margin-top: 7px !important;
+
+    color: #101828 !important;
+
+    font-size: 13px !important;
+}
+
+#sale-document-modal .invoice-title span {
+    display: block !important;
+
+    margin-top: 3px !important;
+
+    color: #667085 !important;
+
+    font-size: 10px !important;
+}
+
+#sale-document-modal .invoice-info {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            3,
+            minmax(0, 1fr)
+        ) !important;
+
+    gap: 12px !important;
+
+    margin: 18px 0 !important;
+}
+
+#sale-document-modal .invoice-info > div {
+    min-width: 0 !important;
+
+    padding: 11px !important;
+
+    background: #f8faf9 !important;
+
+    border:
+        1px solid
+        #dce4de !important;
+
+    border-radius: 7px !important;
+}
+
+#sale-document-modal .invoice-info span {
+    display: block !important;
+
+    color: #667085 !important;
+
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+
+    text-transform: uppercase !important;
+}
+
+#sale-document-modal .invoice-info strong {
+    display: block !important;
+
+    margin-top: 3px !important;
+
+    color: #101828 !important;
+
+    font-size: 12px !important;
+    font-weight: 700 !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .invoice-info p {
+    margin-top: 2px !important;
+
+    color: #475467 !important;
+
+    font-size: 10px !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .invoice-table {
+    width: 100% !important;
+
+    border-collapse: collapse !important;
+
+    color: #101828 !important;
+
+    table-layout: fixed !important;
+}
+
+#sale-document-modal .invoice-table th {
+    padding: 8px 7px !important;
+
+    color: #ffffff !important;
+
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.025em !important;
+
+    text-align: left !important;
+    text-transform: uppercase !important;
+
+    background: var(--green-800) !important;
+
+    border:
+        1px solid
+        var(--green-800) !important;
+}
+
+#sale-document-modal .invoice-table td {
+    padding: 8px 7px !important;
+
+    color: #344054 !important;
+
+    font-size: 10px !important;
+    vertical-align: top !important;
+
+    border:
+        1px solid
+        #d8e0da !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal
+.invoice-table tbody tr:nth-child(even) {
+    background: #f8faf9 !important;
+}
+
+#sale-document-modal .invoice-table th:first-child,
+#sale-document-modal .invoice-table td:first-child {
+    width: 42px !important;
+    text-align: center !important;
+}
+
+#sale-document-modal
+.invoice-table th:nth-child(n + 3),
+#sale-document-modal
+.invoice-table td:nth-child(n + 3) {
+    width: 15% !important;
+    text-align: right !important;
+}
+
+#sale-document-modal .invoice-table td strong {
+    color: #101828 !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+}
+
+#sale-document-modal .invoice-item-meta {
+    display: flex !important;
+
+    flex-wrap: wrap !important;
+    gap: 4px 8px !important;
+
+    margin-top: 3px !important;
+}
+
+#sale-document-modal .invoice-item-meta small {
+    color: #667085 !important;
+    font-size: 8px !important;
+}
+
+#sale-document-modal .invoice-bottom {
+    display: grid !important;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        minmax(230px, 290px) !important;
+
+    align-items: start !important;
+    gap: 24px !important;
+
+    margin-top: 20px !important;
+}
+
+#sale-document-modal .invoice-payment {
+    padding: 13px !important;
+
+    background: #f8faf9 !important;
+
+    border:
+        1px solid
+        #dce4de !important;
+
+    border-radius: 7px !important;
+}
+
+#sale-document-modal .invoice-payment h3 {
+    margin-bottom: 7px !important;
+
+    color: var(--green-900) !important;
+
+    font-size: 13px !important;
+    font-weight: 730 !important;
+}
+
+#sale-document-modal .invoice-payment > p {
+    margin-top: 3px !important;
+
+    color: #475467 !important;
+
+    font-size: 10px !important;
+}
+
+#sale-document-modal
+.invoice-payment > p strong {
+    color: #101828 !important;
+}
+
+#sale-document-modal .invoice-notes {
+    margin-top: 10px !important;
+    padding-top: 8px !important;
+
+    border-top:
+        1px solid
+        #d8e0da !important;
+}
+
+#sale-document-modal .invoice-notes span {
+    color: #344054 !important;
+
+    font-size: 9px !important;
+    font-weight: 700 !important;
+
+    text-transform: uppercase !important;
+}
+
+#sale-document-modal .invoice-notes p {
+    margin-top: 3px !important;
+
+    color: #475467 !important;
+
+    font-size: 10px !important;
+
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal .invoice-totals {
+    display: flex !important;
+
+    flex-direction: column !important;
+
+    border:
+        1px solid
+        #cbd6cd !important;
+
+    border-radius: 7px !important;
+
+    overflow: hidden !important;
+}
+
+#sale-document-modal .invoice-totals > div {
+    display: flex !important;
+
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+
+    min-height: 35px !important;
+
+    padding: 7px 10px !important;
+
+    border-bottom:
+        1px solid
+        #e0e6e1 !important;
+}
+
+#sale-document-modal
+.invoice-totals > div:last-child {
+    border-bottom: 0 !important;
+}
+
+#sale-document-modal .invoice-totals span {
+    color: #475467 !important;
+    font-size: 10px !important;
+}
+
+#sale-document-modal .invoice-totals strong {
+    color: #101828 !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+
+    text-align: right !important;
+}
+
+#sale-document-modal .invoice-grand {
+    color: #ffffff !important;
+
+    background: var(--green-800) !important;
+
+    border-bottom-color:
+        var(--green-800) !important;
+}
+
+#sale-document-modal .invoice-grand span,
+#sale-document-modal .invoice-grand strong {
+    color: #ffffff !important;
+
+    font-size: 13px !important;
+    font-weight: 750 !important;
+}
+
+#sale-document-modal .invoice-footer {
+    margin-top: 25px !important;
+    padding-top: 12px !important;
+
+    color: #475467 !important;
+
+    font-size: 10px !important;
+    line-height: 1.45 !important;
+
+    text-align: center !important;
+
+    white-space: pre-wrap !important;
+
+    border-top:
+        1px solid
+        #d8e0da !important;
+}
+
+#sale-document-modal .sd-actions {
+    display: flex !important;
+
+    min-height: 68px !important;
+    flex: 0 0 auto !important;
+
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 9px !important;
+
+    padding: 12px 18px !important;
+
+    background: #ffffff !important;
+
+    border-top:
+        1px solid
+        var(--border) !important;
+}
+
+#sale-document-modal .sd-action {
+    display: inline-flex !important;
+
+    min-height: 42px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+
+    padding: 8px 13px !important;
+
+    font-size: 13px !important;
+    font-weight: 700 !important;
+
+    border-radius: 9px !important;
+
+    cursor: pointer !important;
+}
+
+#sale-document-modal .sd-cancel {
+    color: var(--text-2) !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        var(--border-2) !important;
+}
+
+#sale-document-modal .sd-print {
+    color: #ffffff !important;
+
+    background: var(--green-700) !important;
+
+    border:
+        1px solid
+        var(--green-700) !important;
+
+    box-shadow:
+        0 4px 12px
+        rgba(21, 128, 61, 0.18) !important;
+}
+
+#sale-document-modal
+.sd-print:hover:not(:disabled) {
+    background: var(--green-800) !important;
+
+    border-color:
+        var(--green-800) !important;
+}
+
+#sale-document-modal .sd-action:disabled {
+    opacity: 0.55 !important;
+    cursor: not-allowed !important;
+}
+
+#sale-document-modal .sd-action svg {
+    width: 17px !important;
+    height: 17px !important;
+}
+
+#sale-document-modal button:focus-visible {
+    outline: none !important;
+
+    border-color:
+        var(--green-700) !important;
+
+    box-shadow:
+        0 0 0 4px
+        rgba(21, 128, 61, 0.14) !important;
+}
+
+@media (max-width: 760px) {
+    #sale-document-modal .sd-backdrop {
+        align-items: flex-end !important;
+        padding: 0 !important;
+    }
+
+    #sale-document-modal .sd-dialog {
+        width: 100% !important;
+        max-height: 97dvh !important;
+
+        border-right: 0 !important;
+        border-bottom: 0 !important;
+        border-left: 0 !important;
+
+        border-radius:
+            16px
+            16px
+            0
+            0 !important;
+    }
+
+    #sale-document-modal .sd-header {
+        grid-template-columns:
+            minmax(0, 1fr)
+            40px !important;
+
+        min-height: 78px !important;
+
+        padding: 12px 14px !important;
+    }
+
+    #sale-document-modal .sd-title {
+        font-size: 19px !important;
+    }
+
+    #sale-document-modal .sd-total {
+        grid-column: 1 / -1 !important;
+        grid-row: 2 !important;
+
+        width: 100% !important;
+        min-width: 0 !important;
+
+        align-items: flex-start !important;
+    }
+
+    #sale-document-modal .sd-close {
+        grid-column: 2 !important;
+        grid-row: 1 !important;
+    }
+
+    #sale-document-modal .sd-toolbar {
+        align-items: stretch !important;
+        flex-direction: column !important;
+    }
+
+    #sale-document-modal .sd-types {
+        display: grid !important;
+
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(0, 1fr)
+            ) !important;
+    }
+
+    #sale-document-modal .sd-type {
+        width: 100% !important;
+    }
+
+    #sale-document-modal .sd-format {
+        justify-content: center !important;
+    }
+
+    #sale-document-modal .sd-summary {
+        grid-template-columns: 1fr !important;
+
+        padding-right: 12px !important;
+        padding-left: 12px !important;
+    }
+
+    #sale-document-modal .sd-preview {
+        padding: 12px !important;
+    }
+
+    #sale-document-modal .sd-actions {
+        display: grid !important;
+
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(0, 1fr)
+            ) !important;
+
+        padding: 11px 13px !important;
+    }
+
+    #sale-document-modal .sd-action {
+        width: 100% !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #sale-document-modal *,
+    #sale-document-modal *::before,
+    #sale-document-modal *::after {
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+}
+`;
+
 export default function SaleReceiptModal({
     receipt,
     onClose,
 }: SaleReceiptModalProps) {
-    const {
-        token,
-    } = useAuth();
+    const { token } = useAuth();
 
-    const [
-        settings,
-        setSettings,
-    ] = useState<BusinessSetting>(
-        defaultBusinessSetting,
-    );
+    const printButtonRef =
+        useRef<HTMLButtonElement | null>(
+            null,
+        );
 
-    const [
-        documentType,
-        setDocumentType,
-    ] = useState<PrintDocumentType>(
-        defaultBusinessSetting
-            .default_print_document,
-    );
+    const autoPrintedReceipt =
+        useRef<SaleReceipt | null>(
+            null,
+        );
+
+    const previewRef =
+        useRef<HTMLDivElement | null>(
+            null,
+        );
+
+    const [settings, setSettings] =
+        useState<BusinessSetting>(
+            defaultBusinessSetting,
+        );
+
+    const [documentType, setDocumentType] =
+        useState<PrintDocumentType>(
+            defaultBusinessSetting
+                .default_print_document,
+        );
 
     const [
         isLoadingSettings,
@@ -1463,36 +2897,40 @@ export default function SaleReceiptModal({
         setSettingsWarning,
     ] = useState('');
 
-    const autoPrintedReceipt =
-        useRef<SaleReceipt | null>(
-            null,
-        );
+    const [
+        isPrinting,
+        setIsPrinting,
+    ] = useState(false);
+
+    const [
+        printError,
+        setPrintError,
+    ] = useState('');
 
     const printableSale =
         receipt as unknown as
         PrintableSale | null;
 
-    const document =
+    const saleDocument =
         useMemo(
-            () =>
+            () => (
                 printableSale
                     ? createDocumentView(
                         printableSale,
                     )
-                    : null,
+                    : null
+            ),
             [printableSale],
         );
 
     const currencyFormatter =
         useMemo(
-            () =>
+            () => (
                 createCurrencyFormatter(
                     settings.currency_code,
-                ),
-            [
-                settings
-                    .currency_code,
-            ],
+                )
+            ),
+            [settings.currency_code],
         );
 
     useEffect(() => {
@@ -1538,6 +2976,11 @@ export default function SaleReceiptModal({
                         defaultBusinessSetting,
                     );
 
+                    setDocumentType(
+                        defaultBusinessSetting
+                            .default_print_document,
+                    );
+
                     setSettingsWarning(
                         'Business settings could not be loaded. Default printing settings are being used.',
                     );
@@ -1560,46 +3003,456 @@ export default function SaleReceiptModal({
         token,
     ]);
 
+    const buildEscPosPayload =
+        useCallback(
+            (): EscPosReceiptPayload | null => {
+                if (!saleDocument) {
+                    return null;
+                }
+
+                const money = (
+                    value: number,
+                ): string => (
+                    currencyFormatter.format(value)
+                );
+
+                const addressLines: string[] = [];
+
+                if (
+                    settings.show_business_address
+                    && settings.address
+                ) {
+                    addressLines.push(settings.address);
+                }
+
+                if (settings.phone) {
+                    addressLines.push(
+                        `Tel: ${settings.phone}`,
+                    );
+                }
+
+                if (settings.secondary_phone) {
+                    addressLines.push(
+                        settings.secondary_phone,
+                    );
+                }
+
+                const metaLines: EscPosReceiptLine[] = [
+                    { left: `Sale: ${saleDocument.saleNumber}` },
+                    {
+                        left: `Date: ${formatDateTime(
+                            saleDocument.saleDate,
+                        )}`,
+                    },
+                ];
+
+                if (settings.show_cashier_name) {
+                    metaLines.push({
+                        left: `Cashier: ${saleDocument.cashierName}`,
+                    });
+                }
+
+                if (settings.show_customer_details) {
+                    metaLines.push({
+                        left: `Customer: ${saleDocument.customerName}`,
+                    });
+
+                    if (saleDocument.customerPhone) {
+                        metaLines.push({
+                            left: `Mobile: ${saleDocument.customerPhone}`,
+                        });
+                    }
+                }
+
+                const items: EscPosReceiptItem[] =
+                    saleDocument.items.map((item) => {
+                        const meta: string[] = [];
+
+                        if (
+                            settings.show_sku
+                            && item.product?.sku
+                        ) {
+                            meta.push(
+                                `SKU: ${item.product.sku}`,
+                            );
+                        }
+
+                        if (settings.show_batch_number) {
+                            const batchNumber =
+                                itemBatchNumber(item);
+
+                            if (batchNumber) {
+                                meta.push(
+                                    `Batch: ${batchNumber}`,
+                                );
+                            }
+                        }
+
+                        const quantityLine =
+                            `${formatQuantity(
+                                item.quantity,
+                            )} x ${money(
+                                itemUnitPrice(item),
+                            )}`;
+
+                        const lineTotal =
+                            money(itemLineTotal(item));
+
+                        const discountValue =
+                            numberValue(item.discount);
+
+                        return {
+                            name: itemName(item),
+                            meta,
+                            quantityLine,
+                            lineTotal,
+                            discountLine:
+                                discountValue > 0
+                                    ? `Discount: -${money(
+                                        discountValue,
+                                    )}`
+                                    : undefined,
+                        };
+                    });
+
+                const totalsLines: EscPosReceiptLine[] = [
+                    {
+                        left: 'Subtotal',
+                        right: money(saleDocument.subtotal),
+                    },
+                ];
+
+                if (saleDocument.totalDiscount > 0) {
+                    totalsLines.push({
+                        left: 'Discount',
+                        right: `-${money(
+                            saleDocument.totalDiscount,
+                        )}`,
+                    });
+                }
+
+                totalsLines.push({
+                    left: 'GRAND TOTAL',
+                    right: money(saleDocument.grandTotal),
+                });
+
+                totalsLines.push({
+                    left: 'Paid',
+                    right: money(saleDocument.paidAmount),
+                });
+
+                if (saleDocument.dueAmount > 0) {
+                    totalsLines.push({
+                        left: 'Due',
+                        right: money(saleDocument.dueAmount),
+                    });
+                }
+
+                if (saleDocument.changeAmount > 0) {
+                    totalsLines.push({
+                        left: 'Change',
+                        right: money(
+                            saleDocument.changeAmount,
+                        ),
+                    });
+                }
+
+                const statusLines: EscPosReceiptLine[] = [
+                    {
+                        left: 'Status',
+                        right: saleDocument.paymentStatus,
+                    },
+                    {
+                        left: 'Payment',
+                        right: saleDocument.paymentMethod,
+                    },
+                ];
+
+                if (
+                    settings.show_payment_reference
+                    && saleDocument.paymentReference
+                ) {
+                    statusLines.push({
+                        left: 'Reference',
+                        right: saleDocument.paymentReference,
+                    });
+                }
+
+                if (
+                    settings.show_due_date
+                    && saleDocument.dueAmount > 0
+                    && saleDocument.dueDate
+                ) {
+                    statusLines.push({
+                        left: 'Due Date',
+                        right: formatDate(
+                            saleDocument.dueDate,
+                        ),
+                    });
+                }
+
+                return {
+                    printerName:
+                        settings.printer_name ?? '',
+                    paperWidthMm:
+                        settings.receipt_paper_size
+                            === '58mm'
+                            ? 58
+                            : 80,
+
+                    businessName: settings.business_name,
+                    addressLines,
+                    receiptTitle: settings.receipt_title,
+
+                    metaLines,
+                    items,
+                    totalsLines,
+                    statusLines,
+                    notes: saleDocument.notes,
+                    footerText:
+                        settings.receipt_footer
+                            && settings.receipt_footer.trim().length > 0
+                            ? settings.receipt_footer
+                            : 'Thank you for your business.',
+
+                    copies: Math.max(
+                        1,
+                        Math.min(3, settings.receipt_copies),
+                    ),
+
+                    duplicateLabel:
+                        settings.print_duplicate_label,
+                };
+            },
+            [
+                saleDocument,
+                settings,
+                currencyFormatter,
+            ],
+        );
+
+    const runSilentPrint =
+        useCallback(
+            async (): Promise<void> => {
+                if (isPrinting) {
+                    return;
+                }
+
+                if (!window.posPrint) {
+                    setPrintError(
+                        'Silent printing is not available in this build. Please update the desktop app.',
+                    );
+
+                    return;
+                }
+
+                setIsPrinting(true);
+                setPrintError('');
+
+                try {
+                    if (documentType === 'receipt') {
+                        // Receipts print via raw ESC/POS commands sent
+                        // directly to the OS's raw printing channel,
+                        // bypassing HTML rendering entirely. This avoids
+                        // the bitmap rasterization step that previously
+                        // caused blocky, clipped text.
+                        const payload = buildEscPosPayload();
+
+                        if (!payload) {
+                            setPrintError(
+                                'Receipt data is not ready yet. Please try again.',
+                            );
+
+                            return;
+                        }
+
+                        if (!payload.printerName) {
+                            setPrintError(
+                                'No printer is configured. Enter the exact printer name in Business Settings.',
+                            );
+
+                            return;
+                        }
+
+                        const result =
+                            await window.posPrint.printReceiptEscPos(
+                                payload,
+                            );
+
+                        if (!result.success) {
+                            setPrintError(
+                                result.error
+                                ?? 'Printing failed. Check that the printer is online and try again.',
+                            );
+                        }
+
+                        return;
+                    }
+
+                    // A4 invoices still print via the HTML/browser
+                    // pipeline — normal office printers do not have the
+                    // DPI/rasterization problems thermal printers do.
+                    if (!previewRef.current) {
+                        return;
+                    }
+
+                    const contentHtml =
+                        previewRef.current.innerHTML;
+
+                    const fullHtml = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8" />
+                            <style>
+                                @page {
+                                    size: 210mm 297mm;
+                                    margin: 0;
+                                }
+                            </style>
+                            <style>${styles}</style>
+                            <style>
+                                html, body {
+                                    margin: 0;
+                                    padding: 0;
+                                    background: #ffffff;
+                                    -webkit-font-smoothing: antialiased;
+                                }
+
+                                #sale-document-modal {
+                                    position: static !important;
+                                    display: block !important;
+                                    width: auto !important;
+                                    height: auto !important;
+                                    overflow: visible !important;
+                                }
+
+                                #sale-document-modal .print-area {
+                                    display: block !important;
+                                    width: 100% !important;
+                                    margin: 0 !important;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div id="sale-document-modal">
+                                ${contentHtml}
+                            </div>
+                        </body>
+                        </html>
+                    `;
+
+                    const result =
+                        await window.posPrint.printSilently(
+                            fullHtml,
+                            {
+                                printerName:
+                                    settings.printer_name
+                                    || null,
+                            },
+                        );
+
+                    if (!result.success) {
+                        setPrintError(
+                            result.error
+                            ?? 'Printing failed. Check that the printer is online and try again.',
+                        );
+                    }
+                } catch (error) {
+                    setPrintError(
+                        error instanceof Error
+                            ? `Unexpected error: ${error.message}`
+                            : 'An unexpected error occurred while printing.',
+                    );
+                } finally {
+                    setIsPrinting(false);
+                }
+            },
+            [
+                documentType,
+                settings.printer_name,
+                buildEscPosPayload,
+                isPrinting,
+            ],
+        );
+
     useEffect(() => {
         if (!receipt) {
-            autoPrintedReceipt
-                .current = null;
-
+            autoPrintedReceipt.current = null;
             return;
         }
 
-        const handleKeyDown = (
+        const oldOverflow =
+            window.document
+                .body
+                .style
+                .overflow;
+
+        window.document.body.style.overflow =
+            'hidden';
+
+        const focusTimer =
+            window.setTimeout(
+                () => {
+                    printButtonRef
+                        .current
+                        ?.focus();
+                },
+                90,
+            );
+
+        const onKeyDown = (
             event: KeyboardEvent,
         ): void => {
             if (event.key === 'Escape') {
                 onClose();
             }
+
+            if (
+                (
+                    event.ctrlKey
+                    || event.metaKey
+                )
+                && event.key.toLowerCase()
+                === 'p'
+            ) {
+                event.preventDefault();
+                void runSilentPrint();
+            }
         };
 
         window.addEventListener(
             'keydown',
-            handleKeyDown,
+            onKeyDown,
         );
 
         return () => {
+            window.clearTimeout(focusTimer);
+
+            window.document
+                .body
+                .style
+                .overflow =
+                oldOverflow;
+
             window.removeEventListener(
                 'keydown',
-                handleKeyDown,
+                onKeyDown,
             );
         };
     }, [
         receipt,
         onClose,
+        runSilentPrint,
     ]);
 
     useEffect(() => {
         if (
             !receipt
             || isLoadingSettings
-            || !settings
-                .auto_print_after_sale
-            || autoPrintedReceipt
-                .current === receipt
+            || !settings.auto_print_after_sale
+            || autoPrintedReceipt.current
+            === receipt
         ) {
             return;
         }
@@ -1607,28 +3460,28 @@ export default function SaleReceiptModal({
         autoPrintedReceipt.current =
             receipt;
 
-        const timeout =
+        const timer =
             window.setTimeout(
                 () => {
-                    window.print();
+                    void runSilentPrint();
                 },
                 350,
             );
 
         return () => {
-            window.clearTimeout(
-                timeout,
-            );
+            window.clearTimeout(timer);
         };
     }, [
         receipt,
         isLoadingSettings,
         settings.auto_print_after_sale,
+        runSilentPrint,
     ]);
 
     if (
         !receipt
-        || !document
+        || !saleDocument
+        || typeof window === 'undefined'
     ) {
         return null;
     }
@@ -1644,177 +3497,287 @@ export default function SaleReceiptModal({
             )
             : 1;
 
-    return (
-        <div className="modal-backdrop receipt-document-backdrop">
-            <section
-                className="receipt-document-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Sale receipt and invoice"
+    return createPortal(
+        <div id="sale-document-modal">
+            <style>
+                {styles}
+            </style>
+
+            <div
+                className="sd-backdrop"
+                role="presentation"
+                onMouseDown={(event) => {
+                    if (
+                        event.target
+                        === event.currentTarget
+                    ) {
+                        onClose();
+                    }
+                }}
             >
-                <header className="receipt-document-modal-header">
-                    <div>
-                        <span className="page-kicker">
-                            Completed sale
+                <section
+                    className="sd-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="sale-document-title"
+                >
+                    <header className="sd-header">
+                        <div className="sd-header-copy">
+                            <span className="sd-kicker">
+                                <Icon name="check" />
+
+                                Sale completed
+                            </span>
+
+                            <h2
+                                id="sale-document-title"
+                                className="sd-title"
+                            >
+                                {saleDocument.saleNumber}
+                            </h2>
+
+                            <p className="sd-subtitle">
+                                Review and print the
+                                required sales document.
+                            </p>
+                        </div>
+
+                        <div className="sd-total">
+                            <span>
+                                Grand Total
+                            </span>
+
+                            <strong>
+                                {currencyFormatter.format(
+                                    saleDocument.grandTotal,
+                                )}
+                            </strong>
+                        </div>
+
+                        <button
+                            type="button"
+                            className="sd-close"
+                            aria-label="Close sale document"
+                            onClick={onClose}
+                        >
+                            <Icon name="close" />
+                        </button>
+                    </header>
+
+                    <div className="sd-toolbar">
+                        <div className="sd-types">
+                            <button
+                                type="button"
+                                className={
+                                    documentType
+                                        === 'receipt'
+                                        ? 'sd-type active'
+                                        : 'sd-type'
+                                }
+                                aria-pressed={
+                                    documentType
+                                    === 'receipt'
+                                }
+                                onClick={() => {
+                                    setDocumentType(
+                                        'receipt',
+                                    );
+                                }}
+                            >
+                                <Icon name="receipt" />
+
+                                Thermal Receipt
+                            </button>
+
+                            <button
+                                type="button"
+                                className={
+                                    documentType
+                                        === 'invoice'
+                                        ? 'sd-type active'
+                                        : 'sd-type'
+                                }
+                                aria-pressed={
+                                    documentType
+                                    === 'invoice'
+                                }
+                                onClick={() => {
+                                    setDocumentType(
+                                        'invoice',
+                                    );
+                                }}
+                            >
+                                <Icon name="invoice" />
+
+                                A4 Invoice
+                            </button>
+                        </div>
+
+                        <span className="sd-format">
+                            {documentType === 'receipt'
+                                ? `${settings.receipt_paper_size} · ${receiptCopies} ${receiptCopies === 1
+                                    ? 'copy'
+                                    : 'copies'
+                                }`
+                                : 'A4 document'}
                         </span>
-
-                        <h2>
-                            {document.saleNumber}
-                        </h2>
-
-                        <p>
-                            Print a thermal receipt
-                            or an A4 invoice.
-                        </p>
                     </div>
 
-                    <button
-                        type="button"
-                        className="modal-close-button"
-                        aria-label="Close receipt"
-                        onClick={onClose}
-                    >
-                        ×
-                    </button>
-                </header>
+                    <div className="sd-summary">
+                        <div>
+                            <span>
+                                Customer
+                            </span>
 
-                <div className="receipt-document-toolbar">
-                    <div className="receipt-document-type-buttons">
-                        <button
-                            type="button"
-                            className={
-                                documentType
-                                    === 'receipt'
-                                    ? 'settings-preview-button active'
-                                    : 'settings-preview-button'
-                            }
-                            onClick={() => {
-                                setDocumentType(
-                                    'receipt',
-                                );
-                            }}
+                            <strong
+                                title={
+                                    saleDocument.customerName
+                                }
+                            >
+                                {saleDocument.customerName}
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                Payment Status
+                            </span>
+
+                            <strong>
+                                {saleDocument.paymentStatus}
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                Payment Method
+                            </span>
+
+                            <strong>
+                                {saleDocument.paymentMethod}
+                            </strong>
+                        </div>
+                    </div>
+
+                    {settingsWarning && (
+                        <div
+                            className="sd-warning"
+                            role="alert"
                         >
-                            Thermal Receipt
-                        </button>
+                            <Icon name="alert" />
 
-                        <button
-                            type="button"
+                            <span>
+                                {settingsWarning}
+                            </span>
+                        </div>
+                    )}
+
+                    {printError && (
+                        <div
+                            className="sd-warning"
+                            role="alert"
+                        >
+                            <Icon name="alert" />
+
+                            <span>
+                                {printError}
+                            </span>
+                        </div>
+                    )}
+
+                    <div
+                        className="sd-preview"
+                        ref={previewRef}
+                    >
+                        <div
                             className={
                                 documentType
                                     === 'invoice'
-                                    ? 'settings-preview-button active'
-                                    : 'settings-preview-button'
+                                    ? 'print-area invoice'
+                                    : 'print-area receipts'
                             }
-                            onClick={() => {
-                                setDocumentType(
-                                    'invoice',
-                                );
-                            }}
                         >
-                            A4 Invoice
-                        </button>
-                    </div>
-
-                    <div className="receipt-document-format">
-                        {documentType === 'receipt'
-                            ? `${settings.receipt_paper_size} · ${receiptCopies} ${receiptCopies === 1
-                                ? 'copy'
-                                : 'copies'}`
-                            : 'A4 document'}
-                    </div>
-                </div>
-
-                {settingsWarning && (
-                    <div className="printer-information-banner receipt-settings-warning">
-                        {settingsWarning}
-                    </div>
-                )}
-
-                <div className="receipt-document-preview">
-                    <div
-                        className={`
-                            document-print-area
-                            ${documentType
-                                === 'invoice'
-                                ? 'document-print-area-invoice'
-                                : 'document-print-area-receipt'
-                            }
-                        `}
-                    >
-                        {documentType
-                            === 'receipt' ? (
-                            Array.from(
-                                {
-                                    length:
-                                        receiptCopies,
-                                },
-                                (
-                                    _,
-                                    copyIndex,
-                                ) => (
-                                    <ThermalReceipt
-                                        key={
-                                            copyIndex
-                                        }
+                            {documentType === 'receipt'
+                                ? Array.from(
+                                    {
+                                        length:
+                                            receiptCopies,
+                                    },
+                                    (
+                                        _,
+                                        copyIndex,
+                                    ) => (
+                                        <ThermalReceipt
+                                            key={
+                                                copyIndex
+                                            }
+                                            settings={
+                                                settings
+                                            }
+                                            document={
+                                                saleDocument
+                                            }
+                                            currencyFormatter={
+                                                currencyFormatter
+                                            }
+                                            copyIndex={
+                                                copyIndex
+                                            }
+                                        />
+                                    ),
+                                )
+                                : (
+                                    <A4Invoice
                                         settings={
                                             settings
                                         }
                                         document={
-                                            document
+                                            saleDocument
                                         }
                                         currencyFormatter={
                                             currencyFormatter
                                         }
-                                        copyIndex={
-                                            copyIndex
-                                        }
                                     />
-                                ),
-                            )
-                        ) : (
-                            <A4Invoice
-                                settings={
-                                    settings
-                                }
-                                document={
-                                    document
-                                }
-                                currencyFormatter={
-                                    currencyFormatter
-                                }
-                            />
-                        )}
+                                )}
+                        </div>
                     </div>
-                </div>
 
-                <footer className="receipt-document-actions">
-                    <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={onClose}
-                    >
-                        Close
-                    </button>
+                    <footer className="sd-actions">
+                        <button
+                            type="button"
+                            className="sd-action sd-cancel"
+                            onClick={onClose}
+                        >
+                            Close
+                        </button>
 
-                    <button
-                        type="button"
-                        className="primary-button"
-                        disabled={
-                            isLoadingSettings
-                        }
-                        onClick={() => {
-                            window.print();
-                        }}
-                    >
-                        {isLoadingSettings
-                            ? 'Loading Settings...'
-                            : documentType
-                                === 'receipt'
-                                ? 'Print Receipt'
-                                : 'Print Invoice'}
-                    </button>
-                </footer>
-            </section>
-        </div>
+                        <button
+                            ref={printButtonRef}
+                            type="button"
+                            className="sd-action sd-print"
+                            disabled={
+                                isLoadingSettings
+                                || isPrinting
+                            }
+                            onClick={() => {
+                                void runSilentPrint();
+                            }}
+                        >
+                            <Icon name="print" />
+
+                            {isPrinting
+                                ? 'Printing...'
+                                : isLoadingSettings
+                                    ? 'Loading Settings...'
+                                    : documentType
+                                        === 'receipt'
+                                        ? 'Print Receipt'
+                                        : 'Print Invoice'}
+                        </button>
+                    </footer>
+                </section>
+            </div>
+        </div>,
+        window.document.body,
     );
 }

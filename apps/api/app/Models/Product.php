@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +13,12 @@ class Product extends Model
     use HasFactory;
 
     /**
+     * These values may be set internally by
+     * ProductController.
+     *
+     * The frontend product form still sends
+     * only name, unit and optional barcode.
+     *
      * @var array<int, string>
      */
     protected $fillable = [
@@ -19,31 +26,17 @@ class Product extends Model
         'name',
         'sku',
         'barcode',
-        'description',
-        'cost_price',
-        'selling_price',
-        'reorder_level',
         'unit',
-        'expiry_date',
+        'is_active',
     ];
 
     /**
-     * @return array<string, string>
+     * @var array<string, string>
      */
-    protected function casts(): array
-    {
-        return [
-            'category_id' => 'integer',
-            'cost_price' => 'decimal:2',
-            'selling_price' => 'decimal:2',
-            'reorder_level' => 'integer',
-            'expiry_date' => 'date',
-        ];
-    }
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
 
-    /**
-     * @return BelongsTo<Category, Product>
-     */
     public function category(): BelongsTo
     {
         return $this->belongsTo(
@@ -51,9 +44,6 @@ class Product extends Model
         );
     }
 
-    /**
-     * @return HasMany<PurchaseItem>
-     */
     public function purchaseItems(): HasMany
     {
         return $this->hasMany(
@@ -61,9 +51,6 @@ class Product extends Model
         );
     }
 
-    /**
-     * @return HasMany<StockBatch>
-     */
     public function stockBatches(): HasMany
     {
         return $this->hasMany(
@@ -71,23 +58,19 @@ class Product extends Model
         );
     }
 
-    /**
-     * @return HasMany<StockMovement>
-     */
-    public function stockMovements(): HasMany
-    {
-        return $this->hasMany(
-            StockMovement::class,
-        );
-    }
-
-    /**
-     * @return HasMany<SaleItem>
-     */
     public function saleItems(): HasMany
     {
         return $this->hasMany(
             SaleItem::class,
+        );
+    }
+
+    public function scopeActive(
+        Builder $query,
+    ): Builder {
+        return $query->where(
+            'is_active',
+            true,
         );
     }
 }

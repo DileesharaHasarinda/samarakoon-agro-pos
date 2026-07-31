@@ -3,27 +3,11 @@
 namespace App\Http\Requests\Product;
 
 use App\Models\Product;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateProductRequest extends FormRequest
 {
-    private const ALLOWED_UNITS = [
-        'Piece',
-        'Packet',
-        'Bottle',
-        'Bag',
-        'Kilogram',
-        'Gram',
-        'Litre',
-        'Millilitre',
-        'Box',
-        'Metre',
-        'Roll',
-        'Set',
-    ];
-
     public function authorize(): bool
     {
         return true;
@@ -31,140 +15,93 @@ class UpdateProductRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $barcode = trim(
+            (string) $this->input(
+                'barcode',
+                '',
+            ),
+        );
+
         $this->merge([
-            'name' => trim(
-                (string) $this->input('name'),
+            'category_id' =>
+            $this->input(
+                'category_id',
             ),
 
-            'sku' => $this->nullableString(
-                'sku',
+            'name' =>
+            trim(
+                (string) $this->input(
+                    'name',
+                    '',
+                ),
+            ),
+
+            'unit' =>
+            trim(
+                (string) $this->input(
+                    'unit',
+                    '',
+                ),
             ),
 
             'barcode' =>
-            $this->nullableString(
-                'barcode',
-            ),
-
-            'description' =>
-            $this->nullableString(
-                'description',
-            ),
-
-            'unit' => trim(
-                (string) $this->input('unit'),
-            ),
-
-            'expiry_date' =>
-            $this->nullableString(
-                'expiry_date',
-            ),
+            $barcode === ''
+                ? null
+                : $barcode,
         ]);
     }
 
     /**
-     * @return array<string, array<int, mixed>>
+     * @return array<string, mixed>
      */
     public function rules(): array
     {
         $routeProduct =
-            $this->route('product');
+            $this->route(
+                'product',
+            );
 
         $productId =
-            $routeProduct instanceof Product
-            ? $routeProduct->getKey()
+            $routeProduct
+            instanceof Product
+            ? $routeProduct->id
             : $routeProduct;
-
-        $categoryId = (int) $this->input(
-            'category_id',
-        );
 
         return [
             'category_id' => [
                 'required',
                 'integer',
-                'exists:categories,id',
+                Rule::exists(
+                    'categories',
+                    'id',
+                ),
             ],
 
             'name' => [
                 'required',
                 'string',
+                'min:2',
                 'max:160',
-
-                Rule::unique(
-                    'products',
-                    'name',
-                )
-                    ->where(
-                        fn(
-                            Builder $query,
-                        ) => $query->where(
-                            'category_id',
-                            $categoryId,
-                        ),
-                    )
-                    ->ignore($productId),
-            ],
-
-            'sku' => [
-                'nullable',
-                'string',
-                'max:100',
-
-                Rule::unique(
-                    'products',
-                    'sku',
-                )->ignore($productId),
-            ],
-
-            'barcode' => [
-                'nullable',
-                'string',
-                'max:120',
-
-                Rule::unique(
-                    'products',
-                    'barcode',
-                )->ignore($productId),
-            ],
-
-            'description' => [
-                'nullable',
-                'string',
-                'max:1500',
-            ],
-
-            'cost_price' => [
-                'required',
-                'numeric',
-                'min:0',
-                'max:999999999999.99',
-            ],
-
-            'selling_price' => [
-                'required',
-                'numeric',
-                'min:0',
-                'max:999999999999.99',
-            ],
-
-            'reorder_level' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:4294967295',
             ],
 
             'unit' => [
                 'required',
                 'string',
-                Rule::in(
-                    self::ALLOWED_UNITS,
-                ),
+                'max:40',
             ],
 
-            'expiry_date' => [
+            'barcode' => [
                 'nullable',
-                'date_format:Y-m-d',
+                'string',
+                'max:64',
+                'regex:/^[\x20-\x7E]+$/',
+
+                Rule::unique(
+                    'products',
+                    'barcode',
+                )->ignore(
+                    $productId,
+                ),
             ],
         ];
     }
@@ -176,86 +113,25 @@ class UpdateProductRequest extends FormRequest
     {
         return [
             'category_id.required' =>
-            'Please select a category first.',
+            'Please select a product category.',
 
             'category_id.exists' =>
             'The selected category does not exist.',
 
             'name.required' =>
-            'Please enter the product name.',
+            'Product name is required.',
 
-            'name.unique' =>
-            'A product with this name already exists in the selected category.',
-
-            'name.max' =>
-            'The product name cannot exceed 160 characters.',
-
-            'sku.unique' =>
-            'This SKU is already used by another product.',
-
-            'sku.max' =>
-            'The SKU cannot exceed 100 characters.',
-
-            'barcode.unique' =>
-            'This barcode is already used by another product.',
-
-            'barcode.max' =>
-            'The barcode cannot exceed 120 characters.',
-
-            'description.max' =>
-            'The description cannot exceed 1500 characters.',
-
-            'cost_price.required' =>
-            'Please enter the cost price.',
-
-            'cost_price.numeric' =>
-            'The cost price must be a valid number.',
-
-            'cost_price.min' =>
-            'The cost price cannot be negative.',
-
-            'selling_price.required' =>
-            'Please enter the selling price.',
-
-            'selling_price.numeric' =>
-            'The selling price must be a valid number.',
-
-            'selling_price.min' =>
-            'The selling price cannot be negative.',
-
-            'reorder_level.required' =>
-            'Please enter the reorder level.',
-
-            'reorder_level.integer' =>
-            'The reorder level must be a whole number.',
-
-            'reorder_level.min' =>
-            'The reorder level cannot be negative.',
+            'name.min' =>
+            'Product name must contain at least 2 characters.',
 
             'unit.required' =>
-            'Please select a product unit.',
+            'Product unit is required.',
 
-            'unit.in' =>
-            'Please select a valid product unit.',
+            'barcode.unique' =>
+            'This barcode is already assigned to another product.',
 
-            'expiry_date.date_format' =>
-            'The expiry date must be a valid date.',
+            'barcode.regex' =>
+            'The barcode contains unsupported characters.',
         ];
-    }
-
-    private function nullableString(
-        string $field,
-    ): ?string {
-        $value = $this->input($field);
-
-        if (! is_string($value)) {
-            return null;
-        }
-
-        $trimmedValue = trim($value);
-
-        return $trimmedValue === ''
-            ? null
-            : $trimmedValue;
     }
 }

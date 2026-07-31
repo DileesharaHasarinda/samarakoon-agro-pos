@@ -107,6 +107,1066 @@ function formatCurrency(
     }
 }
 
+const settingsPageStyles = `
+    #sapo-settings-page,
+    #sapo-settings-page *,
+    #sapo-settings-page *::before,
+    #sapo-settings-page *::after {
+        box-sizing: border-box !important;
+    }
+
+    #sapo-settings-page {
+        --stg-green-800: #166534;
+        --stg-green-700: #15803d;
+        --stg-green-100: #dcfce7;
+        --stg-green-50: #f0fdf4;
+        --stg-red: #dc2626;
+        --stg-red-light: #fef2f2;
+        --stg-blue: #2563eb;
+        --stg-blue-light: #eff6ff;
+        --stg-text: #111827;
+        --stg-text-secondary: #1f2937;
+        --stg-muted: #6b7280;
+        --stg-border: #e5e7eb;
+        --stg-border-strong: #d1d5db;
+        --stg-bg: #f9fafb;
+        --stg-white: #ffffff;
+        --stg-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 20px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: var(--stg-text-secondary) !important;
+        font-family: var(--stg-font) !important;
+        font-size: 14px !important;
+        line-height: 1.5 !important;
+        background: transparent !important;
+        isolation: isolate !important;
+    }
+
+    #sapo-settings-page h1,
+    #sapo-settings-page h2,
+    #sapo-settings-page h3,
+    #sapo-settings-page p,
+    #sapo-settings-page span,
+    #sapo-settings-page strong,
+    #sapo-settings-page small,
+    #sapo-settings-page label,
+    #sapo-settings-page button,
+    #sapo-settings-page input,
+    #sapo-settings-page select,
+    #sapo-settings-page textarea,
+    #sapo-settings-page table,
+    #sapo-settings-page th,
+    #sapo-settings-page td {
+        font-family: var(--stg-font) !important;
+        letter-spacing: normal !important;
+    }
+
+    #sapo-settings-page h1,
+    #sapo-settings-page h2,
+    #sapo-settings-page h3,
+    #sapo-settings-page p {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* ---------- Loading state ---------- */
+    #sapo-settings-page .stg-loading-panel {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 10px !important;
+        padding: 60px 24px !important;
+        background: var(--stg-white) !important;
+        border: 1px solid var(--stg-border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-settings-page .stg-loading-panel span {
+        font-size: 13.5px !important;
+        color: var(--stg-muted) !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .stg-spinner {
+        width: 18px !important;
+        height: 18px !important;
+        border: 2px solid var(--stg-border-strong) !important;
+        border-top-color: var(--stg-green-700) !important;
+        border-radius: 999px !important;
+        animation: stg-spin 0.7s linear infinite !important;
+    }
+
+    @keyframes stg-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* ---------- Header ---------- */
+    #sapo-settings-page .stg-header {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        gap: 16px !important;
+        padding: 20px 24px !important;
+        background: var(--stg-white) !important;
+        border: 1px solid var(--stg-border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-settings-page .stg-kicker {
+        display: inline-block !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.04em !important;
+        text-transform: uppercase !important;
+        color: var(--stg-green-700) !important;
+        margin-bottom: 6px !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .stg-header h2 {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: var(--stg-text) !important;
+        margin-bottom: 4px !important;
+    }
+
+    #sapo-settings-page .stg-header > div > p {
+        font-size: 13.5px !important;
+        color: var(--stg-muted) !important;
+    }
+
+    #sapo-settings-page .stg-update-info {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-end !important;
+        gap: 2px !important;
+        text-align: right !important;
+    }
+
+    #sapo-settings-page .stg-update-info span {
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        color: var(--stg-muted) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .stg-update-info strong {
+        font-size: 13.5px !important;
+        font-weight: 600 !important;
+        color: var(--stg-text) !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .stg-update-info small {
+        font-size: 12px !important;
+        color: var(--stg-muted) !important;
+        background: transparent !important;
+    }
+
+    /* ---------- Tabs ---------- */
+    #sapo-settings-page .stg-tabs {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 10px !important;
+    }
+
+    #sapo-settings-page .stg-tab {
+        display: flex !important;
+        align-items: center !important;
+        gap: 12px !important;
+        flex: 1 1 240px !important;
+        padding: 14px 16px !important;
+        background: var(--stg-white) !important;
+        border: 1px solid var(--stg-border) !important;
+        border-radius: 10px !important;
+        cursor: pointer !important;
+        text-align: left !important;
+        transition: border-color 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-settings-page .stg-tab:hover {
+        border-color: var(--stg-border-strong) !important;
+        background: var(--stg-bg) !important;
+    }
+
+    #sapo-settings-page .stg-tab-active {
+        border-color: var(--stg-green-700) !important;
+        background: var(--stg-green-50) !important;
+    }
+
+    #sapo-settings-page .stg-tab > span:first-child {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 34px !important;
+        height: 34px !important;
+        flex-shrink: 0 !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        color: var(--stg-muted) !important;
+        background: var(--stg-bg) !important;
+        border-radius: 8px !important;
+    }
+
+    #sapo-settings-page .stg-tab-active > span:first-child {
+        color: #ffffff !important;
+        background: var(--stg-green-700) !important;
+    }
+
+    #sapo-settings-page .stg-tab > div {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 2px !important;
+        min-width: 0 !important;
+    }
+
+    #sapo-settings-page .stg-tab strong {
+        font-size: 13.5px !important;
+        font-weight: 600 !important;
+        color: var(--stg-text) !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .stg-tab small {
+        font-size: 12px !important;
+        color: var(--stg-muted) !important;
+        background: transparent !important;
+    }
+
+    /* ---------- Alerts ---------- */
+    #sapo-settings-page .stg-success-alert {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        background: var(--stg-green-50) !important;
+        border: 1px solid var(--stg-green-100) !important;
+    }
+
+    #sapo-settings-page .stg-success-alert span:first-child {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 20px !important;
+        height: 20px !important;
+        flex-shrink: 0 !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        color: #ffffff !important;
+        background: var(--stg-green-700) !important;
+        border-radius: 999px !important;
+    }
+
+    #sapo-settings-page .stg-success-alert p {
+        flex: 1 !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        color: #15803d !important;
+    }
+
+    #sapo-settings-page .stg-success-alert button {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 24px !important;
+        height: 24px !important;
+        flex-shrink: 0 !important;
+        font-size: 16px !important;
+        line-height: 1 !important;
+        color: #15803d !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+    }
+
+    #sapo-settings-page .stg-success-alert button:hover {
+        background: rgba(21, 128, 61, 0.1) !important;
+    }
+
+    #sapo-settings-page .stg-form-alert {
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        background: var(--stg-red-light) !important;
+        border: 1px solid #fecaca !important;
+        color: #b91c1c !important;
+    }
+
+    /* ---------- Section cards ---------- */
+    #sapo-settings-page .stg-section {
+        background: var(--stg-white) !important;
+        border: 1px solid var(--stg-border) !important;
+        border-radius: 10px !important;
+        padding: 20px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 18px !important;
+    }
+
+    #sapo-settings-page .stg-panel-heading h2 {
+        font-size: 16px !important;
+        font-weight: 700 !important;
+        color: var(--stg-text) !important;
+        margin-bottom: 3px !important;
+    }
+
+    #sapo-settings-page .stg-panel-heading p {
+        font-size: 13px !important;
+        color: var(--stg-muted) !important;
+    }
+
+    /* ---------- Form grid ---------- */
+    #sapo-settings-page .stg-form-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 16px !important;
+    }
+
+    #sapo-settings-page .stg-full-field {
+        grid-column: 1 / -1 !important;
+    }
+
+    #sapo-settings-page .stg-field {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 6px !important;
+        min-width: 0 !important;
+    }
+
+    #sapo-settings-page .stg-field span {
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        color: var(--stg-text-secondary) !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page input,
+    #sapo-settings-page select,
+    #sapo-settings-page textarea {
+        width: 100% !important;
+        padding: 9px 12px !important;
+        font-size: 13.5px !important;
+        color: var(--stg-text-secondary) !important;
+        background: var(--stg-white) !important;
+        border: 1px solid var(--stg-border-strong) !important;
+        border-radius: 8px !important;
+        outline: none !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    }
+
+    #sapo-settings-page textarea {
+        resize: vertical !important;
+        min-height: 72px !important;
+        font-family: var(--stg-font) !important;
+    }
+
+    #sapo-settings-page select {
+        cursor: pointer !important;
+    }
+
+    #sapo-settings-page input:focus,
+    #sapo-settings-page select:focus,
+    #sapo-settings-page textarea:focus {
+        border-color: var(--stg-green-700) !important;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important;
+    }
+
+    /* ---------- Logo panel ---------- */
+    #sapo-settings-page .stg-logo-panel {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: flex-start !important;
+        gap: 20px !important;
+    }
+
+    #sapo-settings-page .stg-logo-preview {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 96px !important;
+        height: 96px !important;
+        flex-shrink: 0 !important;
+        background: var(--stg-bg) !important;
+        border: 1px dashed var(--stg-border-strong) !important;
+        border-radius: 10px !important;
+        overflow: hidden !important;
+    }
+
+    #sapo-settings-page .stg-logo-preview img {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+    }
+
+    #sapo-settings-page .stg-logo-preview span {
+        font-size: 28px !important;
+        font-weight: 700 !important;
+        color: var(--stg-border-strong) !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .stg-logo-actions {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+        flex: 1 1 220px !important;
+    }
+
+    #sapo-settings-page .stg-logo-actions p {
+        font-size: 12px !important;
+        color: var(--stg-muted) !important;
+        line-height: 1.5 !important;
+    }
+
+    /* ---------- Buttons ---------- */
+    #sapo-settings-page .stg-primary-button,
+    #sapo-settings-page .stg-secondary-button,
+    #sapo-settings-page .stg-file-button {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        height: 38px !important;
+        padding: 0 16px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+        width: fit-content !important;
+    }
+
+    #sapo-settings-page .stg-primary-button {
+        color: #ffffff !important;
+        background: var(--stg-green-700) !important;
+        border: 1px solid var(--stg-green-700) !important;
+    }
+
+    #sapo-settings-page .stg-primary-button:hover:not(:disabled) {
+        background: var(--stg-green-800) !important;
+    }
+
+    #sapo-settings-page .stg-secondary-button,
+    #sapo-settings-page .stg-file-button {
+        color: #374151 !important;
+        background: var(--stg-white) !important;
+        border: 1px solid var(--stg-border-strong) !important;
+    }
+
+    #sapo-settings-page .stg-secondary-button:hover:not(:disabled),
+    #sapo-settings-page .stg-file-button:hover {
+        background: var(--stg-bg) !important;
+        border-color: #9ca3af !important;
+    }
+
+    #sapo-settings-page .stg-file-button {
+        position: relative !important;
+        overflow: hidden !important;
+    }
+
+    #sapo-settings-page .stg-file-button input[type="file"] {
+        position: absolute !important;
+        inset: 0 !important;
+        opacity: 0 !important;
+        cursor: pointer !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+
+    #sapo-settings-page .stg-danger-button {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        height: 38px !important;
+        padding: 0 16px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: var(--stg-red) !important;
+        background: var(--stg-red-light) !important;
+        border: 1px solid #fecaca !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        width: fit-content !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+    }
+
+    #sapo-settings-page .stg-danger-button:hover:not(:disabled) {
+        background: var(--stg-red) !important;
+        color: #ffffff !important;
+        border-color: var(--stg-red) !important;
+    }
+
+    #sapo-settings-page button:disabled {
+        opacity: 0.55 !important;
+        cursor: not-allowed !important;
+    }
+
+    /* ---------- Printer info banner ---------- */
+    #sapo-settings-page .stg-printer-banner {
+        padding: 12px 14px !important;
+        font-size: 12.5px !important;
+        line-height: 1.5 !important;
+        color: var(--stg-blue) !important;
+        background: var(--stg-blue-light) !important;
+        border: 1px solid #bfdbfe !important;
+        border-radius: 8px !important;
+    }
+
+    /* ---------- Switch grid ---------- */
+    #sapo-settings-page .stg-switch-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+    }
+
+    #sapo-settings-page .stg-switch {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        padding: 11px 14px !important;
+        background: var(--stg-bg) !important;
+        border: 1px solid var(--stg-border) !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        transition: border-color 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-settings-page .stg-switch:hover {
+        border-color: var(--stg-border-strong) !important;
+    }
+
+    #sapo-settings-page .stg-switch input[type="checkbox"] {
+        width: 16px !important;
+        height: 16px !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
+        accent-color: var(--stg-green-700) !important;
+        cursor: pointer !important;
+    }
+
+    #sapo-settings-page .stg-switch span {
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        color: var(--stg-text-secondary) !important;
+        background: transparent !important;
+    }
+
+    /* ---------- Print layout (forms + preview) ---------- */
+    #sapo-settings-page .stg-print-layout {
+        display: grid !important;
+        grid-template-columns: 1.4fr 1fr !important;
+        gap: 20px !important;
+        align-items: start !important;
+    }
+
+    #sapo-settings-page .stg-print-forms {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 20px !important;
+        min-width: 0 !important;
+    }
+
+    /* ---------- Preview panel ---------- */
+    #sapo-settings-page .stg-preview-panel {
+        position: sticky !important;
+        top: 20px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 14px !important;
+        max-height: calc(100vh - 40px) !important;
+    }
+
+    #sapo-settings-page .stg-preview-toolbar {
+        display: flex !important;
+        gap: 8px !important;
+    }
+
+    #sapo-settings-page .stg-preview-button {
+        flex: 1 !important;
+        height: 36px !important;
+        padding: 0 14px !important;
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        color: #374151 !important;
+        background: var(--stg-bg) !important;
+        border: 1px solid var(--stg-border-strong) !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease !important;
+    }
+
+    #sapo-settings-page .stg-preview-button:hover {
+        background: #f1f5f9 !important;
+    }
+
+    #sapo-settings-page .stg-preview-button.stg-preview-active {
+        color: #ffffff !important;
+        background: var(--stg-green-700) !important;
+        border-color: var(--stg-green-700) !important;
+    }
+
+    /* ---------- Scrollable preview area ---------- */
+    #sapo-settings-page .stg-preview-scroll {
+        max-height: 560px !important;
+        overflow-y: auto !important;
+        padding: 16px !important;
+        background: #e5e7eb !important;
+        border: 1px solid var(--stg-border) !important;
+        border-radius: 10px !important;
+        display: flex !important;
+        justify-content: center !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: var(--stg-border-strong) transparent !important;
+    }
+
+    #sapo-settings-page .stg-preview-scroll::-webkit-scrollbar {
+        width: 8px !important;
+    }
+
+    #sapo-settings-page .stg-preview-scroll::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .stg-preview-scroll::-webkit-scrollbar-thumb {
+        background: var(--stg-border-strong) !important;
+        border-radius: 8px !important;
+    }
+
+    #sapo-settings-page .stg-preview-paper {
+        background: var(--stg-white) !important;
+        color: #111827 !important;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12) !important;
+        font-family: var(--stg-font) !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* Receipt (thermal) preview */
+    #sapo-settings-page .print-document-receipt {
+        width: 300px !important;
+        padding: 20px 16px !important;
+        font-size: 12px !important;
+        line-height: 1.5 !important;
+    }
+
+    #sapo-settings-page .thermal-document-header {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 3px !important;
+        text-align: center !important;
+    }
+
+    #sapo-settings-page .thermal-business-logo {
+        max-width: 60px !important;
+        max-height: 60px !important;
+        object-fit: contain !important;
+        margin-bottom: 4px !important;
+    }
+
+    #sapo-settings-page .thermal-document-header h2 {
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        color: #111827 !important;
+    }
+
+    #sapo-settings-page .thermal-document-header p {
+        font-size: 11px !important;
+        color: #4b5563 !important;
+    }
+
+    #sapo-settings-page .thermal-document-header strong {
+        margin-top: 6px !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        color: #111827 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .thermal-divider {
+        margin: 10px 0 !important;
+        border-top: 1px dashed #9ca3af !important;
+    }
+
+    #sapo-settings-page .thermal-meta-list,
+    #sapo-settings-page .thermal-payment-list {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 3px !important;
+    }
+
+    #sapo-settings-page .thermal-meta-list > div,
+    #sapo-settings-page .thermal-payment-list > div {
+        display: flex !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+        font-size: 11.5px !important;
+    }
+
+    #sapo-settings-page .thermal-meta-list span,
+    #sapo-settings-page .thermal-payment-list span {
+        color: #4b5563 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .thermal-meta-list strong,
+    #sapo-settings-page .thermal-payment-list strong {
+        color: #111827 !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+        text-align: right !important;
+    }
+
+    #sapo-settings-page .thermal-item-list {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+
+    #sapo-settings-page .thermal-item-list article strong {
+        display: block !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        color: #111827 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .thermal-item-list small {
+        display: block !important;
+        font-size: 10.5px !important;
+        color: #9ca3af !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .thermal-item-list article > div {
+        display: flex !important;
+        justify-content: space-between !important;
+        margin-top: 2px !important;
+        font-size: 11.5px !important;
+    }
+
+    #sapo-settings-page .thermal-item-list article > div span {
+        color: #4b5563 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .thermal-item-list article > div strong {
+        color: #111827 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .thermal-total-list {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 3px !important;
+    }
+
+    #sapo-settings-page .thermal-total-list > div {
+        display: flex !important;
+        justify-content: space-between !important;
+        font-size: 11.5px !important;
+    }
+
+    #sapo-settings-page .thermal-total-list span {
+        color: #4b5563 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .thermal-total-list strong {
+        color: #111827 !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .thermal-grand-total {
+        margin-top: 4px !important;
+        padding-top: 6px !important;
+        border-top: 1px solid #d1d5db !important;
+    }
+
+    #sapo-settings-page .thermal-grand-total span,
+    #sapo-settings-page .thermal-grand-total strong {
+        font-size: 13px !important;
+        font-weight: 700 !important;
+    }
+
+    #sapo-settings-page .thermal-document-footer {
+        margin-top: 12px !important;
+        padding-top: 10px !important;
+        border-top: 1px dashed #9ca3af !important;
+        font-size: 11px !important;
+        color: #4b5563 !important;
+        text-align: center !important;
+        white-space: pre-line !important;
+    }
+
+    /* Invoice (A4) preview */
+    #sapo-settings-page .print-document-invoice {
+        width: 560px !important;
+        padding: 32px !important;
+        font-size: 12.5px !important;
+    }
+
+    #sapo-settings-page .invoice-document-header {
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        gap: 16px !important;
+        padding-bottom: 16px !important;
+        border-bottom: 2px solid #111827 !important;
+    }
+
+    #sapo-settings-page .invoice-business-logo {
+        max-width: 90px !important;
+        max-height: 60px !important;
+        object-fit: contain !important;
+        margin-bottom: 8px !important;
+    }
+
+    #sapo-settings-page .invoice-document-header h2 {
+        font-size: 16px !important;
+        font-weight: 700 !important;
+        color: #111827 !important;
+    }
+
+    #sapo-settings-page .invoice-document-header p {
+        font-size: 11.5px !important;
+        color: #4b5563 !important;
+    }
+
+    #sapo-settings-page .invoice-document-title {
+        text-align: right !important;
+    }
+
+    #sapo-settings-page .invoice-document-title h1 {
+        font-size: 20px !important;
+        font-weight: 800 !important;
+        color: #111827 !important;
+        margin-bottom: 4px !important;
+    }
+
+    #sapo-settings-page .invoice-document-title strong {
+        display: block !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        color: #111827 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-document-title span {
+        display: block !important;
+        font-size: 11px !important;
+        color: #6b7280 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-information-grid {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 16px !important;
+        padding: 16px 0 !important;
+    }
+
+    #sapo-settings-page .invoice-information-grid span {
+        display: block !important;
+        font-size: 10.5px !important;
+        font-weight: 600 !important;
+        color: #9ca3af !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        margin-bottom: 3px !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-information-grid strong {
+        display: block !important;
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        color: #111827 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-information-grid p {
+        font-size: 11.5px !important;
+        color: #4b5563 !important;
+    }
+
+    #sapo-settings-page .invoice-document-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin-top: 6px !important;
+    }
+
+    #sapo-settings-page .invoice-document-table thead th {
+        padding: 8px 6px !important;
+        font-size: 10.5px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        color: #ffffff !important;
+        background: #166534 !important;
+        text-align: left !important;
+    }
+
+    #sapo-settings-page .invoice-document-table tbody td {
+        padding: 8px 6px !important;
+        font-size: 12px !important;
+        color: #1f2937 !important;
+        border-bottom: 1px solid #e5e7eb !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-document-table strong {
+        font-weight: 600 !important;
+        color: #111827 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-document-table small {
+        display: block !important;
+        font-size: 10px !important;
+        color: #9ca3af !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-bottom-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 20px !important;
+        margin-top: 18px !important;
+    }
+
+    #sapo-settings-page .invoice-payment-information h3 {
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        color: #111827 !important;
+        margin-bottom: 6px !important;
+    }
+
+    #sapo-settings-page .invoice-payment-information p {
+        font-size: 11.5px !important;
+        color: #4b5563 !important;
+        margin-bottom: 2px !important;
+    }
+
+    #sapo-settings-page .invoice-total-panel {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 5px !important;
+    }
+
+    #sapo-settings-page .invoice-total-panel > div {
+        display: flex !important;
+        justify-content: space-between !important;
+        font-size: 12px !important;
+    }
+
+    #sapo-settings-page .invoice-total-panel span {
+        color: #4b5563 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-total-panel strong {
+        color: #111827 !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+    }
+
+    #sapo-settings-page .invoice-grand-total {
+        margin-top: 4px !important;
+        padding-top: 8px !important;
+        border-top: 2px solid #111827 !important;
+    }
+
+    #sapo-settings-page .invoice-grand-total span,
+    #sapo-settings-page .invoice-grand-total strong {
+        font-size: 14px !important;
+        font-weight: 700 !important;
+    }
+
+    #sapo-settings-page .invoice-document-footer {
+        margin-top: 20px !important;
+        padding-top: 14px !important;
+        border-top: 1px solid #e5e7eb !important;
+        font-size: 11px !important;
+        color: #6b7280 !important;
+        white-space: pre-line !important;
+    }
+
+    /* ---------- Printer actions ---------- */
+    #sapo-settings-page .stg-printer-actions {
+        display: flex !important;
+        justify-content: flex-end !important;
+    }
+
+    /* ---------- Save bar ---------- */
+    #sapo-settings-page .stg-save-bar {
+        position: sticky !important;
+        bottom: 0 !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        gap: 10px !important;
+        padding: 16px 20px !important;
+        background: var(--stg-white) !important;
+        border: 1px solid var(--stg-border) !important;
+        border-radius: 10px !important;
+        box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.06) !important;
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 980px) {
+        #sapo-settings-page .stg-print-layout {
+            grid-template-columns: 1fr !important;
+        }
+
+        #sapo-settings-page .stg-preview-panel {
+            position: static !important;
+            max-height: none !important;
+        }
+    }
+
+    @media (max-width: 640px) {
+        #sapo-settings-page .stg-header {
+            flex-direction: column !important;
+        }
+
+        #sapo-settings-page .stg-update-info {
+            align-items: flex-start !important;
+            text-align: left !important;
+        }
+
+        #sapo-settings-page .stg-form-grid,
+        #sapo-settings-page .stg-switch-grid {
+            grid-template-columns: 1fr !important;
+        }
+
+        #sapo-settings-page .stg-full-field {
+            grid-column: 1 !important;
+        }
+
+        #sapo-settings-page .stg-save-bar {
+            flex-direction: column-reverse !important;
+        }
+
+        #sapo-settings-page .stg-save-bar button {
+            width: 100% !important;
+        }
+    }
+`;
+
 interface SettingsPreviewProps {
     values: BusinessSettingInput;
     documentType: PrintDocumentType;
@@ -136,8 +1196,7 @@ function SettingsPreview({
         return (
             <article
                 className="
-                    settings-preview-paper
-                    settings-invoice-preview
+                    stg-preview-paper
                     document-print-area
                     print-document-invoice
                 "
@@ -342,7 +1401,7 @@ function SettingsPreview({
     return (
         <article
             className={`
-                settings-preview-paper
+                stg-preview-paper
                 document-print-area
                 print-document-receipt
                 ${paperClass}
@@ -538,32 +1597,22 @@ export default function SettingsPage() {
     const [
         activeTab,
         setActiveTab,
-    ] = useState<SettingsTab>(
-        'business',
-    );
+    ] = useState<SettingsTab>('business');
 
     const [
         values,
         setValues,
-    ] = useState<BusinessSettingInput>(
-        toInput(
-            defaultBusinessSetting,
-        ),
-    );
+    ] = useState<BusinessSettingInput>(toInput(defaultBusinessSetting));
 
     const [
         savedSettings,
         setSavedSettings,
-    ] = useState<BusinessSetting>(
-        defaultBusinessSetting,
-    );
+    ] = useState<BusinessSetting>(defaultBusinessSetting);
 
     const [
         previewDocument,
         setPreviewDocument,
-    ] = useState<PrintDocumentType>(
-        'receipt',
-    );
+    ] = useState<PrintDocumentType>('receipt');
 
     const [
         isLoading,
@@ -638,9 +1687,7 @@ export default function SettingsPage() {
         void loadSettings();
     }, [loadSettings]);
 
-    function setField<
-        K extends keyof BusinessSettingInput,
-    >(
+    function setField<K extends keyof BusinessSettingInput>(
         key: K,
         value: BusinessSettingInput[K],
     ): void {
@@ -879,1055 +1926,1102 @@ export default function SettingsPage() {
 
     if (isLoading) {
         return (
-            <section className="content-card loading-panel">
-                <div className="small-spinner" />
+            <div id="sapo-settings-page">
+                <style>
+                    {settingsPageStyles}
+                </style>
 
-                <span>
-                    Loading business settings...
-                </span>
-            </section>
+                <section className="stg-loading-panel">
+                    <div className="stg-spinner" />
+
+                    <span>
+                        Loading business settings...
+                    </span>
+                </section>
+            </div>
         );
     }
 
     return (
-        <form
-            className="business-settings-layout"
-            onSubmit={handleSubmit}
-        >
-            <section className="sales-history-header settings-page-header">
-                <div>
-                    <span className="page-kicker">
-                        System configuration
-                    </span>
+        <div id="sapo-settings-page">
+            <style>
+                {settingsPageStyles}
+            </style>
 
-                    <h2>
-                        Business and Printing Settings
-                    </h2>
-
-                    <p>
-                        Manage business information,
-                        receipt layouts, invoices and
-                        printing preferences.
-                    </p>
-                </div>
-
-                {savedSettings
-                    .updated_at && (
-                        <div className="settings-update-information">
-                            <span>
-                                Last updated
+            <form
+                onSubmit={handleSubmit}
+            >
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '20px',
+                    }}
+                >
+                    <section className="stg-header">
+                        <div>
+                            <span className="stg-kicker">
+                                System configuration
                             </span>
 
-                            <strong>
-                                {new Intl.DateTimeFormat(
-                                    'en-GB',
-                                    {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                    },
-                                ).format(
-                                    new Date(
-                                        savedSettings
-                                            .updated_at,
-                                    ),
-                                )}
-                            </strong>
+                            <h2>
+                                Business and Printing Settings
+                            </h2>
 
-                            {savedSettings
-                                .updated_by && (
-                                    <small>
-                                        By{' '}
-                                        {
-                                            savedSettings
-                                                .updated_by
-                                                .name
-                                        }
-                                    </small>
-                                )}
+                            <p>
+                                Manage business information,
+                                receipt layouts, invoices and
+                                printing preferences.
+                            </p>
+                        </div>
+
+                        {savedSettings
+                            .updated_at && (
+                                <div className="stg-update-info">
+                                    <span>
+                                        Last updated
+                                    </span>
+
+                                    <strong>
+                                        {new Intl.DateTimeFormat(
+                                            'en-GB',
+                                            {
+                                                day: '2-digit',
+                                                month: 'short',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                            },
+                                        ).format(
+                                            new Date(
+                                                savedSettings
+                                                    .updated_at,
+                                            ),
+                                        )}
+                                    </strong>
+
+                                    {savedSettings
+                                        .updated_by && (
+                                            <small>
+                                                By{' '}
+                                                {
+                                                    savedSettings
+                                                        .updated_by
+                                                        .name
+                                                }
+                                            </small>
+                                        )}
+                                </div>
+                            )}
+                    </section>
+
+                    <nav
+                        className="stg-tabs"
+                        aria-label="Settings sections"
+                    >
+                        <button
+                            type="button"
+                            className={
+                                activeTab === 'business'
+                                    ? 'stg-tab stg-tab-active'
+                                    : 'stg-tab'
+                            }
+                            onClick={() => {
+                                setActiveTab(
+                                    'business',
+                                );
+                            }}
+                        >
+                            <span>B</span>
+
+                            <div>
+                                <strong>
+                                    Business Settings
+                                </strong>
+
+                                <small>
+                                    Identity and contact details
+                                </small>
+                            </div>
+                        </button>
+
+                        <button
+                            type="button"
+                            className={
+                                activeTab === 'printing'
+                                    ? 'stg-tab stg-tab-active'
+                                    : 'stg-tab'
+                            }
+                            onClick={() => {
+                                setActiveTab(
+                                    'printing',
+                                );
+                            }}
+                        >
+                            <span>P</span>
+
+                            <div>
+                                <strong>
+                                    Receipt and Invoice
+                                </strong>
+
+                                <small>
+                                    Paper, content and printing
+                                </small>
+                            </div>
+                        </button>
+                    </nav>
+
+                    {successMessage && (
+                        <div
+                            className="stg-success-alert"
+                            role="status"
+                        >
+                            <span>✓</span>
+
+                            <p>
+                                {successMessage}
+                            </p>
+
+                            <button
+                                type="button"
+                                aria-label="Dismiss"
+                                onClick={() => {
+                                    setSuccessMessage('');
+                                }}
+                            >
+                                ×
+                            </button>
                         </div>
                     )}
-            </section>
 
-            <nav
-                className="settings-tabs"
-                aria-label="Settings sections"
-            >
-                <button
-                    type="button"
-                    className={
-                        activeTab === 'business'
-                            ? 'settings-tab settings-tab-active'
-                            : 'settings-tab'
-                    }
-                    onClick={() => {
-                        setActiveTab(
-                            'business',
-                        );
-                    }}
-                >
-                    <span>B</span>
-
-                    <div>
-                        <strong>
-                            Business Settings
-                        </strong>
-
-                        <small>
-                            Identity and contact details
-                        </small>
-                    </div>
-                </button>
-
-                <button
-                    type="button"
-                    className={
-                        activeTab === 'printing'
-                            ? 'settings-tab settings-tab-active'
-                            : 'settings-tab'
-                    }
-                    onClick={() => {
-                        setActiveTab(
-                            'printing',
-                        );
-                    }}
-                >
-                    <span>P</span>
-
-                    <div>
-                        <strong>
-                            Receipt and Invoice
-                        </strong>
-
-                        <small>
-                            Paper, content and printing
-                        </small>
-                    </div>
-                </button>
-            </nav>
-
-            {successMessage && (
-                <div
-                    className="success-alert"
-                    role="status"
-                >
-                    <span>✓</span>
-
-                    <p>
-                        {successMessage}
-                    </p>
-
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setSuccessMessage('');
-                        }}
-                    >
-                        ×
-                    </button>
-                </div>
-            )}
-
-            {(pageError || formError) && (
-                <div
-                    className="form-alert"
-                    role="alert"
-                >
-                    {formError || pageError}
-                </div>
-            )}
-
-            {activeTab === 'business' && (
-                <>
-                    <section className="content-card settings-section">
-                        <header className="panel-heading">
-                            <div>
-                                <h2>
-                                    Business Identity
-                                </h2>
-
-                                <p>
-                                    Details printed on receipts
-                                    and invoices.
-                                </p>
-                            </div>
-                        </header>
-
-                        <div className="settings-form-grid">
-                            <label className="form-field">
-                                <span>
-                                    Business Name *
-                                </span>
-
-                                <input
-                                    type="text"
-                                    maxLength={150}
-                                    value={
-                                        values
-                                            .business_name
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'business_name',
-                                            event
-                                                .target
-                                                .value,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Short Business Name
-                                </span>
-
-                                <input
-                                    type="text"
-                                    maxLength={80}
-                                    value={
-                                        values
-                                            .business_short_name
-                                        ?? ''
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'business_short_name',
-                                            event
-                                                .target
-                                                .value
-                                            || null,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field settings-full-field">
-                                <span>
-                                    Address
-                                </span>
-
-                                <textarea
-                                    rows={3}
-                                    maxLength={1000}
-                                    value={
-                                        values.address
-                                        ?? ''
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'address',
-                                            event
-                                                .target
-                                                .value
-                                            || null,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Primary Phone
-                                </span>
-
-                                <input
-                                    type="tel"
-                                    maxLength={30}
-                                    value={
-                                        values.phone
-                                        ?? ''
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'phone',
-                                            event
-                                                .target
-                                                .value
-                                            || null,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Secondary Phone
-                                </span>
-
-                                <input
-                                    type="tel"
-                                    maxLength={30}
-                                    value={
-                                        values
-                                            .secondary_phone
-                                        ?? ''
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'secondary_phone',
-                                            event
-                                                .target
-                                                .value
-                                            || null,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Email
-                                </span>
-
-                                <input
-                                    type="email"
-                                    maxLength={150}
-                                    value={
-                                        values.email
-                                        ?? ''
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'email',
-                                            event
-                                                .target
-                                                .value
-                                            || null,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Website
-                                </span>
-
-                                <input
-                                    type="url"
-                                    maxLength={255}
-                                    placeholder="https://example.com"
-                                    value={
-                                        values.website
-                                        ?? ''
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'website',
-                                            event
-                                                .target
-                                                .value
-                                            || null,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Registration Number
-                                </span>
-
-                                <input
-                                    type="text"
-                                    maxLength={100}
-                                    value={
-                                        values
-                                            .registration_number
-                                        ?? ''
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'registration_number',
-                                            event
-                                                .target
-                                                .value
-                                            || null,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Tax Number
-                                </span>
-
-                                <input
-                                    type="text"
-                                    maxLength={100}
-                                    value={
-                                        values
-                                            .tax_number
-                                        ?? ''
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'tax_number',
-                                            event
-                                                .target
-                                                .value
-                                            || null,
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Currency Code *
-                                </span>
-
-                                <input
-                                    type="text"
-                                    maxLength={3}
-                                    value={
-                                        values
-                                            .currency_code
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'currency_code',
-                                            event
-                                                .target
-                                                .value
-                                                .toUpperCase(),
-                                        );
-                                    }}
-                                />
-                            </label>
-
-                            <label className="form-field">
-                                <span>
-                                    Timezone *
-                                </span>
-
-                                <input
-                                    type="text"
-                                    maxLength={100}
-                                    value={
-                                        values.timezone
-                                    }
-                                    onChange={(event) => {
-                                        setField(
-                                            'timezone',
-                                            event
-                                                .target
-                                                .value,
-                                        );
-                                    }}
-                                />
-                            </label>
+                    {(pageError || formError) && (
+                        <div
+                            className="stg-form-alert"
+                            role="alert"
+                        >
+                            {formError || pageError}
                         </div>
-                    </section>
+                    )}
 
-                    <section className="content-card settings-section">
-                        <header className="panel-heading">
-                            <div>
-                                <h2>
-                                    Business Logo
-                                </h2>
+                    {activeTab === 'business' && (
+                        <>
+                            <section className="stg-section">
+                                <header className="stg-panel-heading">
+                                    <div>
+                                        <h2>
+                                            Business Identity
+                                        </h2>
 
-                                <p>
-                                    PNG, JPEG or WebP,
-                                    maximum 1 MB.
-                                </p>
-                            </div>
-                        </header>
+                                        <p>
+                                            Details printed on receipts
+                                            and invoices.
+                                        </p>
+                                    </div>
+                                </header>
 
-                        <div className="settings-logo-panel">
-                            <div className="settings-logo-preview">
-                                {values
-                                    .logo_data_url ? (
-                                    <img
-                                        src={
-                                            values
-                                                .logo_data_url
-                                        }
-                                        alt="Business logo"
-                                    />
-                                ) : (
-                                    <span>
-                                        {
-                                            values
-                                                .business_name
-                                                .charAt(0)
-                                                .toUpperCase()
-                                            || 'B'
-                                        }
-                                    </span>
-                                )}
-                            </div>
+                                <div className="stg-form-grid">
+                                    <label className="stg-field">
+                                        <span>
+                                            Business Name *
+                                        </span>
 
-                            <div className="settings-logo-actions">
-                                <label className="secondary-button settings-file-button">
-                                    Select Logo
-
-                                    <input
-                                        type="file"
-                                        accept="
-                                            image/png,
-                                            image/jpeg,
-                                            image/webp
-                                        "
-                                        onChange={
-                                            handleLogoSelection
-                                        }
-                                    />
-                                </label>
-
-                                {values
-                                    .logo_data_url && (
-                                        <button
-                                            type="button"
-                                            className="cashier-danger-button"
-                                            onClick={() => {
+                                        <input
+                                            type="text"
+                                            maxLength={150}
+                                            value={
+                                                values
+                                                    .business_name
+                                            }
+                                            onChange={(event) => {
                                                 setField(
-                                                    'logo_data_url',
-                                                    null,
+                                                    'business_name',
+                                                    event
+                                                        .target
+                                                        .value,
                                                 );
                                             }}
-                                        >
-                                            Remove Logo
-                                        </button>
-                                    )}
+                                        />
+                                    </label>
 
-                                <p>
-                                    A square or horizontal
-                                    transparent logo produces
-                                    the best print result.
-                                </p>
-                            </div>
-                        </div>
-                    </section>
-                </>
-            )}
+                                    <label className="stg-field">
+                                        <span>
+                                            Short Business Name
+                                        </span>
 
-            {activeTab === 'printing' && (
-                <div className="settings-print-layout">
-                    <div className="settings-print-forms">
-                        <section className="content-card settings-section">
-                            <header className="panel-heading">
-                                <div>
-                                    <h2>
-                                        Document Format
-                                    </h2>
-
-                                    <p>
-                                        Configure receipt paper,
-                                        invoices and copies.
-                                    </p>
-                                </div>
-                            </header>
-
-                            <div className="settings-form-grid">
-                                <label className="form-field">
-                                    <span>
-                                        Receipt Paper
-                                    </span>
-
-                                    <select
-                                        value={
-                                            values
-                                                .receipt_paper_size
-                                        }
-                                        onChange={(event) => {
-                                            setField(
-                                                'receipt_paper_size',
-                                                parsePaperSize(
+                                        <input
+                                            type="text"
+                                            maxLength={80}
+                                            value={
+                                                values
+                                                    .business_short_name
+                                                ?? ''
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'business_short_name',
                                                     event
                                                         .target
-                                                        .value,
-                                                ),
-                                            );
-                                        }}
-                                    >
-                                        <option value="58mm">
-                                            58 mm Thermal
-                                        </option>
+                                                        .value
+                                                    || null,
+                                                );
+                                            }}
+                                        />
+                                    </label>
 
-                                        <option value="80mm">
-                                            80 mm Thermal
-                                        </option>
-                                    </select>
-                                </label>
+                                    <label className="stg-field stg-full-field">
+                                        <span>
+                                            Address
+                                        </span>
 
-                                <label className="form-field">
-                                    <span>
-                                        Default Document
-                                    </span>
+                                        <textarea
+                                            rows={3}
+                                            maxLength={1000}
+                                            value={
+                                                values.address
+                                                ?? ''
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'address',
+                                                    event
+                                                        .target
+                                                        .value
+                                                    || null,
+                                                );
+                                            }}
+                                        />
+                                    </label>
 
-                                    <select
-                                        value={
-                                            values
-                                                .default_print_document
-                                        }
-                                        onChange={(event) => {
-                                            const type =
-                                                parseDocumentType(
+                                    <label className="stg-field">
+                                        <span>
+                                            Primary Phone
+                                        </span>
+
+                                        <input
+                                            type="tel"
+                                            maxLength={30}
+                                            value={
+                                                values.phone
+                                                ?? ''
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'phone',
+                                                    event
+                                                        .target
+                                                        .value
+                                                    || null,
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    <label className="stg-field">
+                                        <span>
+                                            Secondary Phone
+                                        </span>
+
+                                        <input
+                                            type="tel"
+                                            maxLength={30}
+                                            value={
+                                                values
+                                                    .secondary_phone
+                                                ?? ''
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'secondary_phone',
+                                                    event
+                                                        .target
+                                                        .value
+                                                    || null,
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    <label className="stg-field">
+                                        <span>
+                                            Email
+                                        </span>
+
+                                        <input
+                                            type="email"
+                                            maxLength={150}
+                                            value={
+                                                values.email
+                                                ?? ''
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'email',
+                                                    event
+                                                        .target
+                                                        .value
+                                                    || null,
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    <label className="stg-field">
+                                        <span>
+                                            Website
+                                        </span>
+
+                                        <input
+                                            type="url"
+                                            maxLength={255}
+                                            placeholder="https://example.com"
+                                            value={
+                                                values.website
+                                                ?? ''
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'website',
+                                                    event
+                                                        .target
+                                                        .value
+                                                    || null,
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    <label className="stg-field">
+                                        <span>
+                                            Registration Number
+                                        </span>
+
+                                        <input
+                                            type="text"
+                                            maxLength={100}
+                                            value={
+                                                values
+                                                    .registration_number
+                                                ?? ''
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'registration_number',
+                                                    event
+                                                        .target
+                                                        .value
+                                                    || null,
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    <label className="stg-field">
+                                        <span>
+                                            Tax Number
+                                        </span>
+
+                                        <input
+                                            type="text"
+                                            maxLength={100}
+                                            value={
+                                                values
+                                                    .tax_number
+                                                ?? ''
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'tax_number',
+                                                    event
+                                                        .target
+                                                        .value
+                                                    || null,
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    <label className="stg-field">
+                                        <span>
+                                            Currency Code *
+                                        </span>
+
+                                        <input
+                                            type="text"
+                                            maxLength={3}
+                                            value={
+                                                values
+                                                    .currency_code
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'currency_code',
+                                                    event
+                                                        .target
+                                                        .value
+                                                        .toUpperCase(),
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    <label className="stg-field">
+                                        <span>
+                                            Timezone *
+                                        </span>
+
+                                        <input
+                                            type="text"
+                                            maxLength={100}
+                                            value={
+                                                values.timezone
+                                            }
+                                            onChange={(event) => {
+                                                setField(
+                                                    'timezone',
                                                     event
                                                         .target
                                                         .value,
                                                 );
-
-                                            setField(
-                                                'default_print_document',
-                                                type,
-                                            );
-
-                                            setPreviewDocument(
-                                                type,
-                                            );
-                                        }}
-                                    >
-                                        <option value="receipt">
-                                            Thermal Receipt
-                                        </option>
-
-                                        <option value="invoice">
-                                            A4 Invoice
-                                        </option>
-                                    </select>
-                                </label>
-
-                                <label className="form-field">
-                                    <span>
-                                        Receipt Copies
-                                    </span>
-
-                                    <select
-                                        value={
-                                            values
-                                                .receipt_copies
-                                        }
-                                        onChange={(event) => {
-                                            setField(
-                                                'receipt_copies',
-                                                Number(
-                                                    event
-                                                        .target
-                                                        .value,
-                                                ),
-                                            );
-                                        }}
-                                    >
-                                        <option value={1}>
-                                            1 Copy
-                                        </option>
-
-                                        <option value={2}>
-                                            2 Copies
-                                        </option>
-
-                                        <option value={3}>
-                                            3 Copies
-                                        </option>
-                                    </select>
-                                </label>
-
-                                <label className="form-field">
-                                    <span>
-                                        Printer Name
-                                    </span>
-
-                                    <input
-                                        type="text"
-                                        maxLength={150}
-                                        placeholder="Example: EPSON TM-T82"
-                                        value={
-                                            values
-                                                .printer_name
-                                            ?? ''
-                                        }
-                                        onChange={(event) => {
-                                            setField(
-                                                'printer_name',
-                                                event
-                                                    .target
-                                                    .value
-                                                || null,
-                                            );
-                                        }}
-                                    />
-                                </label>
-                            </div>
-
-                            <div className="printer-information-banner">
-                                Printer selection is controlled
-                                by the system print dialog.
-                                The printer name above is stored
-                                as a reference for staff.
-                            </div>
-                        </section>
-
-                        <section className="content-card settings-section">
-                            <header className="panel-heading">
-                                <div>
-                                    <h2>
-                                        Receipt Text
-                                    </h2>
-
-                                    <p>
-                                        Header and footer shown
-                                        on thermal receipts.
-                                    </p>
+                                            }}
+                                        />
+                                    </label>
                                 </div>
-                            </header>
+                            </section>
 
-                            <div className="settings-form-grid">
-                                <label className="form-field settings-full-field">
-                                    <span>
-                                        Receipt Title *
-                                    </span>
+                            <section className="stg-section">
+                                <header className="stg-panel-heading">
+                                    <div>
+                                        <h2>
+                                            Business Logo
+                                        </h2>
 
-                                    <input
-                                        type="text"
-                                        maxLength={100}
-                                        value={
-                                            values
-                                                .receipt_title
-                                        }
-                                        onChange={(event) => {
-                                            setField(
-                                                'receipt_title',
-                                                event
-                                                    .target
-                                                    .value,
-                                            );
-                                        }}
-                                    />
-                                </label>
+                                        <p>
+                                            PNG, JPEG or WebP,
+                                            maximum 1 MB.
+                                        </p>
+                                    </div>
+                                </header>
 
-                                <label className="form-field settings-full-field">
-                                    <span>
-                                        Receipt Footer
-                                    </span>
+                                <div className="stg-logo-panel">
+                                    <div className="stg-logo-preview">
+                                        {values
+                                            .logo_data_url ? (
+                                            <img
+                                                src={
+                                                    values
+                                                        .logo_data_url
+                                                }
+                                                alt="Business logo"
+                                            />
+                                        ) : (
+                                            <span>
+                                                {
+                                                    values
+                                                        .business_name
+                                                        .charAt(0)
+                                                        .toUpperCase()
+                                                    || 'B'
+                                                }
+                                            </span>
+                                        )}
+                                    </div>
 
-                                    <textarea
-                                        rows={4}
-                                        maxLength={1000}
-                                        value={
-                                            values
-                                                .receipt_footer
-                                            ?? ''
-                                        }
-                                        onChange={(event) => {
-                                            setField(
-                                                'receipt_footer',
-                                                event
-                                                    .target
-                                                    .value
-                                                || null,
-                                            );
-                                        }}
-                                    />
-                                </label>
-                            </div>
-                        </section>
+                                    <div className="stg-logo-actions">
+                                        <label className="stg-file-button">
+                                            Select Logo
 
-                        <section className="content-card settings-section">
-                            <header className="panel-heading">
-                                <div>
-                                    <h2>
-                                        Invoice Text
-                                    </h2>
+                                            <input
+                                                type="file"
+                                                accept="
+                                                    image/png,
+                                                    image/jpeg,
+                                                    image/webp
+                                                "
+                                                onChange={
+                                                    handleLogoSelection
+                                                }
+                                            />
+                                        </label>
 
-                                    <p>
-                                        Header and footer shown
-                                        on A4 invoices.
-                                    </p>
-                                </div>
-                            </header>
-
-                            <div className="settings-form-grid">
-                                <label className="form-field settings-full-field">
-                                    <span>
-                                        Invoice Title *
-                                    </span>
-
-                                    <input
-                                        type="text"
-                                        maxLength={100}
-                                        value={
-                                            values
-                                                .invoice_title
-                                        }
-                                        onChange={(event) => {
-                                            setField(
-                                                'invoice_title',
-                                                event
-                                                    .target
-                                                    .value,
-                                            );
-                                        }}
-                                    />
-                                </label>
-
-                                <label className="form-field settings-full-field">
-                                    <span>
-                                        Invoice Footer
-                                    </span>
-
-                                    <textarea
-                                        rows={4}
-                                        maxLength={1000}
-                                        value={
-                                            values
-                                                .invoice_footer
-                                            ?? ''
-                                        }
-                                        onChange={(event) => {
-                                            setField(
-                                                'invoice_footer',
-                                                event
-                                                    .target
-                                                    .value
-                                                || null,
-                                            );
-                                        }}
-                                    />
-                                </label>
-                            </div>
-                        </section>
-
-                        <section className="content-card settings-section">
-                            <header className="panel-heading">
-                                <div>
-                                    <h2>
-                                        Printed Information
-                                    </h2>
-
-                                    <p>
-                                        Choose information included
-                                        in receipts and invoices.
-                                    </p>
-                                </div>
-                            </header>
-
-                            <div className="settings-switch-grid">
-                                {[
-                                    {
-                                        key:
-                                            'show_logo_on_receipt',
-                                        label:
-                                            'Show Business Logo',
-                                    },
-                                    {
-                                        key:
-                                            'show_business_address',
-                                        label:
-                                            'Show Business Address',
-                                    },
-                                    {
-                                        key:
-                                            'show_customer_details',
-                                        label:
-                                            'Show Customer Details',
-                                    },
-                                    {
-                                        key:
-                                            'show_cashier_name',
-                                        label:
-                                            'Show Cashier Name',
-                                    },
-                                    {
-                                        key:
-                                            'show_payment_reference',
-                                        label:
-                                            'Show Payment Reference',
-                                    },
-                                    {
-                                        key:
-                                            'show_due_date',
-                                        label:
-                                            'Show Due Date',
-                                    },
-                                    {
-                                        key:
-                                            'show_sku',
-                                        label:
-                                            'Show Product SKU',
-                                    },
-                                    {
-                                        key:
-                                            'show_batch_number',
-                                        label:
-                                            'Show Batch Number',
-                                    },
-                                    {
-                                        key:
-                                            'auto_print_after_sale',
-                                        label:
-                                            'Open Print Dialog After Sale',
-                                    },
-                                    {
-                                        key:
-                                            'print_duplicate_label',
-                                        label:
-                                            'Mark Additional Copies',
-                                    },
-                                ].map(
-                                    (option) => {
-                                        const key =
-                                            option.key as
-                                            | 'show_logo_on_receipt'
-                                            | 'show_business_address'
-                                            | 'show_customer_details'
-                                            | 'show_cashier_name'
-                                            | 'show_payment_reference'
-                                            | 'show_due_date'
-                                            | 'show_sku'
-                                            | 'show_batch_number'
-                                            | 'auto_print_after_sale'
-                                            | 'print_duplicate_label';
-
-                                        return (
-                                            <label
-                                                className="settings-switch"
-                                                key={key}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={
-                                                        values[
-                                                        key
-                                                        ]
-                                                    }
-                                                    onChange={(event) => {
+                                        {values
+                                            .logo_data_url && (
+                                                <button
+                                                    type="button"
+                                                    className="stg-danger-button"
+                                                    onClick={() => {
                                                         setField(
-                                                            key,
-                                                            event
-                                                                .target
-                                                                .checked,
+                                                            'logo_data_url',
+                                                            null,
                                                         );
                                                     }}
-                                                />
+                                                >
+                                                    Remove Logo
+                                                </button>
+                                            )}
 
-                                                <span>
-                                                    {
-                                                        option
-                                                            .label
-                                                    }
-                                                </span>
-                                            </label>
-                                        );
-                                    },
-                                )}
+                                        <p>
+                                            A square or horizontal
+                                            transparent logo produces
+                                            the best print result.
+                                        </p>
+                                    </div>
+                                </div>
+                            </section>
+                        </>
+                    )}
+
+                    {activeTab === 'printing' && (
+                        <div className="stg-print-layout">
+                            <div className="stg-print-forms">
+                                <section className="stg-section">
+                                    <header className="stg-panel-heading">
+                                        <div>
+                                            <h2>
+                                                Document Format
+                                            </h2>
+
+                                            <p>
+                                                Configure receipt paper,
+                                                invoices and copies.
+                                            </p>
+                                        </div>
+                                    </header>
+
+                                    <div className="stg-form-grid">
+                                        <label className="stg-field">
+                                            <span>
+                                                Receipt Paper
+                                            </span>
+
+                                            <select
+                                                value={
+                                                    values
+                                                        .receipt_paper_size
+                                                }
+                                                onChange={(event) => {
+                                                    setField(
+                                                        'receipt_paper_size',
+                                                        parsePaperSize(
+                                                            event
+                                                                .target
+                                                                .value,
+                                                        ),
+                                                    );
+                                                }}
+                                            >
+                                                <option value="58mm">
+                                                    58 mm Thermal
+                                                </option>
+
+                                                <option value="80mm">
+                                                    80 mm Thermal
+                                                </option>
+                                            </select>
+                                        </label>
+
+                                        <label className="stg-field">
+                                            <span>
+                                                Default Document
+                                            </span>
+
+                                            <select
+                                                value={
+                                                    values
+                                                        .default_print_document
+                                                }
+                                                onChange={(event) => {
+                                                    const type =
+                                                        parseDocumentType(
+                                                            event
+                                                                .target
+                                                                .value,
+                                                        );
+
+                                                    setField(
+                                                        'default_print_document',
+                                                        type,
+                                                    );
+
+                                                    setPreviewDocument(
+                                                        type,
+                                                    );
+                                                }}
+                                            >
+                                                <option value="receipt">
+                                                    Thermal Receipt
+                                                </option>
+
+                                                <option value="invoice">
+                                                    A4 Invoice
+                                                </option>
+                                            </select>
+                                        </label>
+
+                                        <label className="stg-field">
+                                            <span>
+                                                Receipt Copies
+                                            </span>
+
+                                            <select
+                                                value={
+                                                    values
+                                                        .receipt_copies
+                                                }
+                                                onChange={(event) => {
+                                                    setField(
+                                                        'receipt_copies',
+                                                        Number(
+                                                            event
+                                                                .target
+                                                                .value,
+                                                        ),
+                                                    );
+                                                }}
+                                            >
+                                                <option value={1}>
+                                                    1 Copy
+                                                </option>
+
+                                                <option value={2}>
+                                                    2 Copies
+                                                </option>
+
+                                                <option value={3}>
+                                                    3 Copies
+                                                </option>
+                                            </select>
+                                        </label>
+
+                                        <label className="stg-field">
+                                            <span>
+                                                Printer Name
+                                            </span>
+
+                                            <input
+                                                type="text"
+                                                maxLength={150}
+                                                placeholder="Example: EPSON TM-T82"
+                                                value={
+                                                    values
+                                                        .printer_name
+                                                    ?? ''
+                                                }
+                                                onChange={(event) => {
+                                                    setField(
+                                                        'printer_name',
+                                                        event
+                                                            .target
+                                                            .value
+                                                        || null,
+                                                    );
+                                                }}
+                                            />
+                                        </label>
+
+                                        <label className="stg-field">
+                                            <span>
+                                                Printer Network Address
+                                            </span>
+
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                maxLength={45}
+                                                placeholder="Example: 192.168.1.50"
+                                                value={
+                                                    values
+                                                        .printer_ip_address
+                                                    ?? ''
+                                                }
+                                                onChange={(event) => {
+                                                    setField(
+                                                        'printer_ip_address',
+                                                        event
+                                                            .target
+                                                            .value
+                                                        || null,
+                                                    );
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
+
+                                    <div className="stg-printer-banner">
+                                        Printer selection is controlled
+                                        by the system print dialog.
+                                        The printer name above is stored
+                                        as a reference for staff.
+                                    </div>
+                                </section>
+
+                                <section className="stg-section">
+                                    <header className="stg-panel-heading">
+                                        <div>
+                                            <h2>
+                                                Receipt Text
+                                            </h2>
+
+                                            <p>
+                                                Header and footer shown
+                                                on thermal receipts.
+                                            </p>
+                                        </div>
+                                    </header>
+
+                                    <div className="stg-form-grid">
+                                        <label className="stg-field stg-full-field">
+                                            <span>
+                                                Receipt Title *
+                                            </span>
+
+                                            <input
+                                                type="text"
+                                                maxLength={100}
+                                                value={
+                                                    values
+                                                        .receipt_title
+                                                }
+                                                onChange={(event) => {
+                                                    setField(
+                                                        'receipt_title',
+                                                        event
+                                                            .target
+                                                            .value,
+                                                    );
+                                                }}
+                                            />
+                                        </label>
+
+                                        <label className="stg-field stg-full-field">
+                                            <span>
+                                                Receipt Footer
+                                            </span>
+
+                                            <textarea
+                                                rows={4}
+                                                maxLength={1000}
+                                                value={
+                                                    values
+                                                        .receipt_footer
+                                                    ?? ''
+                                                }
+                                                onChange={(event) => {
+                                                    setField(
+                                                        'receipt_footer',
+                                                        event
+                                                            .target
+                                                            .value
+                                                        || null,
+                                                    );
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
+                                </section>
+
+                                <section className="stg-section">
+                                    <header className="stg-panel-heading">
+                                        <div>
+                                            <h2>
+                                                Invoice Text
+                                            </h2>
+
+                                            <p>
+                                                Header and footer shown
+                                                on A4 invoices.
+                                            </p>
+                                        </div>
+                                    </header>
+
+                                    <div className="stg-form-grid">
+                                        <label className="stg-field stg-full-field">
+                                            <span>
+                                                Invoice Title *
+                                            </span>
+
+                                            <input
+                                                type="text"
+                                                maxLength={100}
+                                                value={
+                                                    values
+                                                        .invoice_title
+                                                }
+                                                onChange={(event) => {
+                                                    setField(
+                                                        'invoice_title',
+                                                        event
+                                                            .target
+                                                            .value,
+                                                    );
+                                                }}
+                                            />
+                                        </label>
+
+                                        <label className="stg-field stg-full-field">
+                                            <span>
+                                                Invoice Footer
+                                            </span>
+
+                                            <textarea
+                                                rows={4}
+                                                maxLength={1000}
+                                                value={
+                                                    values
+                                                        .invoice_footer
+                                                    ?? ''
+                                                }
+                                                onChange={(event) => {
+                                                    setField(
+                                                        'invoice_footer',
+                                                        event
+                                                            .target
+                                                            .value
+                                                        || null,
+                                                    );
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
+                                </section>
+
+                                <section className="stg-section">
+                                    <header className="stg-panel-heading">
+                                        <div>
+                                            <h2>
+                                                Printed Information
+                                            </h2>
+
+                                            <p>
+                                                Choose information included
+                                                in receipts and invoices.
+                                            </p>
+                                        </div>
+                                    </header>
+
+                                    <div className="stg-switch-grid">
+                                        {[
+                                            {
+                                                key:
+                                                    'show_logo_on_receipt',
+                                                label:
+                                                    'Show Business Logo',
+                                            },
+                                            {
+                                                key:
+                                                    'show_business_address',
+                                                label:
+                                                    'Show Business Address',
+                                            },
+                                            {
+                                                key:
+                                                    'show_customer_details',
+                                                label:
+                                                    'Show Customer Details',
+                                            },
+                                            {
+                                                key:
+                                                    'show_cashier_name',
+                                                label:
+                                                    'Show Cashier Name',
+                                            },
+                                            {
+                                                key:
+                                                    'show_payment_reference',
+                                                label:
+                                                    'Show Payment Reference',
+                                            },
+                                            {
+                                                key:
+                                                    'show_due_date',
+                                                label:
+                                                    'Show Due Date',
+                                            },
+                                            {
+                                                key:
+                                                    'show_sku',
+                                                label:
+                                                    'Show Product SKU',
+                                            },
+                                            {
+                                                key:
+                                                    'show_batch_number',
+                                                label:
+                                                    'Show Batch Number',
+                                            },
+                                            {
+                                                key:
+                                                    'auto_print_after_sale',
+                                                label:
+                                                    'Open Print Dialog After Sale',
+                                            },
+                                            {
+                                                key:
+                                                    'print_duplicate_label',
+                                                label:
+                                                    'Mark Additional Copies',
+                                            },
+                                        ].map(
+                                            (option) => {
+                                                const key =
+                                                    option.key as
+                                                    | 'show_logo_on_receipt'
+                                                    | 'show_business_address'
+                                                    | 'show_customer_details'
+                                                    | 'show_cashier_name'
+                                                    | 'show_payment_reference'
+                                                    | 'show_due_date'
+                                                    | 'show_sku'
+                                                    | 'show_batch_number'
+                                                    | 'auto_print_after_sale'
+                                                    | 'print_duplicate_label';
+
+                                                return (
+                                                    <label
+                                                        className="stg-switch"
+                                                        key={key}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={
+                                                                values[
+                                                                key
+                                                                ]
+                                                            }
+                                                            onChange={(event) => {
+                                                                setField(
+                                                                    key,
+                                                                    event
+                                                                        .target
+                                                                        .checked,
+                                                                );
+                                                            }}
+                                                        />
+
+                                                        <span>
+                                                            {
+                                                                option
+                                                                    .label
+                                                            }
+                                                        </span>
+                                                    </label>
+                                                );
+                                            },
+                                        )}
+                                    </div>
+                                </section>
                             </div>
-                        </section>
-                    </div>
 
-                    <aside className="content-card settings-preview-panel">
-                        <header className="panel-heading">
-                            <div>
-                                <h2>
-                                    Print Preview
-                                </h2>
+                            <aside className="stg-section stg-preview-panel">
+                                <header className="stg-panel-heading">
+                                    <div>
+                                        <h2>
+                                            Print Preview
+                                        </h2>
 
-                                <p>
-                                    Preview receipt or A4 invoice.
-                                </p>
-                            </div>
-                        </header>
+                                        <p>
+                                            Preview receipt or A4 invoice.
+                                        </p>
+                                    </div>
+                                </header>
 
-                        <div className="settings-preview-toolbar">
-                            <button
-                                type="button"
-                                className={
-                                    previewDocument
-                                        === 'receipt'
-                                        ? 'settings-preview-button active'
-                                        : 'settings-preview-button'
-                                }
-                                onClick={() => {
-                                    setPreviewDocument(
-                                        'receipt',
-                                    );
-                                }}
-                            >
-                                Receipt
-                            </button>
+                                <div className="stg-preview-toolbar">
+                                    <button
+                                        type="button"
+                                        className={
+                                            previewDocument
+                                                === 'receipt'
+                                                ? 'stg-preview-button stg-preview-active'
+                                                : 'stg-preview-button'
+                                        }
+                                        onClick={() => {
+                                            setPreviewDocument(
+                                                'receipt',
+                                            );
+                                        }}
+                                    >
+                                        Receipt
+                                    </button>
 
-                            <button
-                                type="button"
-                                className={
-                                    previewDocument
-                                        === 'invoice'
-                                        ? 'settings-preview-button active'
-                                        : 'settings-preview-button'
-                                }
-                                onClick={() => {
-                                    setPreviewDocument(
-                                        'invoice',
-                                    );
-                                }}
-                            >
-                                Invoice
-                            </button>
+                                    <button
+                                        type="button"
+                                        className={
+                                            previewDocument
+                                                === 'invoice'
+                                                ? 'stg-preview-button stg-preview-active'
+                                                : 'stg-preview-button'
+                                        }
+                                        onClick={() => {
+                                            setPreviewDocument(
+                                                'invoice',
+                                            );
+                                        }}
+                                    >
+                                        Invoice
+                                    </button>
+                                </div>
+
+                                <div className="stg-preview-scroll">
+                                    <SettingsPreview
+                                        values={values}
+                                        documentType={
+                                            previewDocument
+                                        }
+                                    />
+                                </div>
+
+                                <div className="stg-printer-actions">
+                                    <button
+                                        type="button"
+                                        className="stg-secondary-button"
+                                        onClick={() => {
+                                            window.print();
+                                        }}
+                                    >
+                                        Test Print
+                                    </button>
+                                </div>
+                            </aside>
                         </div>
+                    )}
 
-                        <div className="settings-preview-scroll">
-                            <SettingsPreview
-                                values={values}
-                                documentType={
-                                    previewDocument
-                                }
-                            />
-                        </div>
+                    <footer className="stg-save-bar">
+                        <button
+                            type="button"
+                            className="stg-secondary-button"
+                            disabled={
+                                isSaving
+                                || !hasUnsavedChanges
+                            }
+                            onClick={() => {
+                                setValues(
+                                    toInput(
+                                        savedSettings,
+                                    ),
+                                );
 
-                        <div className="settings-printer-actions">
-                            <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => {
-                                    window.print();
-                                }}
-                            >
-                                Test Print
-                            </button>
-                        </div>
-                    </aside>
+                                setFormError('');
+                                setSuccessMessage('');
+                            }}
+                        >
+                            Discard Changes
+                        </button>
+
+                        <button
+                            type="submit"
+                            className="stg-primary-button"
+                            disabled={
+                                isSaving
+                                || !hasUnsavedChanges
+                            }
+                        >
+                            {isSaving
+                                ? 'Saving Settings...'
+                                : 'Save Settings'}
+                        </button>
+                    </footer>
                 </div>
-            )}
-
-            <footer className="settings-save-bar">
-                <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={
-                        isSaving
-                        || !hasUnsavedChanges
-                    }
-                    onClick={() => {
-                        setValues(
-                            toInput(
-                                savedSettings,
-                            ),
-                        );
-
-                        setFormError('');
-                        setSuccessMessage('');
-                    }}
-                >
-                    Discard Changes
-                </button>
-
-                <button
-                    type="submit"
-                    className="primary-button"
-                    disabled={
-                        isSaving
-                        || !hasUnsavedChanges
-                    }
-                >
-                    {isSaving
-                        ? 'Saving Settings...'
-                        : 'Save Settings'}
-                </button>
-            </footer>
-        </form>
+            </form>
+        </div>
     );
 }

@@ -85,6 +85,10 @@ import SalesReturnsPage
 import ShiftRegisterPage
     from './pages/shared/ShiftRegisterPage';
 
+import ProductDetailsPage
+    from './pages/admin/ProductDetailsPage';
+
+
 export default function App() {
     return (
         <Routes>
@@ -174,6 +178,11 @@ export default function App() {
                         element={
                             <ProductsPage />
                         }
+                    />
+
+                    <Route
+                        path="/admin/products/:productId"
+                        element={<ProductDetailsPage />}
                     />
 
                     <Route

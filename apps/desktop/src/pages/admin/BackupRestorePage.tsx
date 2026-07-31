@@ -30,8 +30,7 @@ import type {
     PosPaginationMeta,
 } from '../../types/sale';
 
-const emptySummary:
-    DatabaseBackupSummary = {
+const emptySummary: DatabaseBackupSummary = {
     total_backups: 0,
     completed_backups: 0,
     failed_backups: 0,
@@ -39,15 +38,13 @@ const emptySummary:
     latest_completed_at: null,
 };
 
-const emptySettings:
-    DatabaseBackupSettings = {
+const emptySettings: DatabaseBackupSettings = {
     automatic_enabled: false,
     automatic_time: '02:00',
     retention_days: 30,
 };
 
-const emptyPagination:
-    PosPaginationMeta = {
+const emptyPagination: PosPaginationMeta = {
     current_page: 1,
     last_page: 1,
     per_page: 20,
@@ -139,6 +136,678 @@ function statusName(
     }
 }
 
+const backupPageStyles = `
+    #sapo-backup-page,
+    #sapo-backup-page *,
+    #sapo-backup-page *::before,
+    #sapo-backup-page *::after {
+        box-sizing: border-box !important;
+    }
+
+    #sapo-backup-page {
+        --bkp-green-800: #166534;
+        --bkp-green-700: #15803d;
+        --bkp-green-100: #dcfce7;
+        --bkp-green-50: #f0fdf4;
+        --bkp-red: #dc2626;
+        --bkp-red-light: #fef2f2;
+        --bkp-amber: #b45309;
+        --bkp-amber-light: #fffbeb;
+        --bkp-blue: #2563eb;
+        --bkp-blue-light: #eff6ff;
+        --bkp-text: #111827;
+        --bkp-text-secondary: #1f2937;
+        --bkp-muted: #6b7280;
+        --bkp-border: #e5e7eb;
+        --bkp-border-strong: #d1d5db;
+        --bkp-bg: #f9fafb;
+        --bkp-white: #ffffff;
+        --bkp-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 20px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: var(--bkp-text-secondary) !important;
+        font-family: var(--bkp-font) !important;
+        font-size: 14px !important;
+        line-height: 1.5 !important;
+        background: transparent !important;
+        isolation: isolate !important;
+    }
+
+    #sapo-backup-page h2,
+    #sapo-backup-page h3,
+    #sapo-backup-page p,
+    #sapo-backup-page span,
+    #sapo-backup-page strong,
+    #sapo-backup-page small,
+    #sapo-backup-page label,
+    #sapo-backup-page button,
+    #sapo-backup-page input,
+    #sapo-backup-page select,
+    #sapo-backup-page textarea,
+    #sapo-backup-page table,
+    #sapo-backup-page th,
+    #sapo-backup-page td {
+        font-family: var(--bkp-font) !important;
+        letter-spacing: normal !important;
+    }
+
+    #sapo-backup-page h2,
+    #sapo-backup-page h3,
+    #sapo-backup-page p {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* ---------- Header ---------- */
+    #sapo-backup-page .bkp-header {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        gap: 16px !important;
+        padding: 20px 24px !important;
+        background: var(--bkp-white) !important;
+        border: 1px solid var(--bkp-border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-backup-page .bkp-kicker {
+        display: inline-block !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.04em !important;
+        text-transform: uppercase !important;
+        color: var(--bkp-green-700) !important;
+        margin-bottom: 6px !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-header h2 {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: var(--bkp-text) !important;
+        margin-bottom: 4px !important;
+    }
+
+    #sapo-backup-page .bkp-header p {
+        font-size: 13.5px !important;
+        color: var(--bkp-muted) !important;
+    }
+
+    /* ---------- Buttons ---------- */
+    #sapo-backup-page .bkp-primary-button,
+    #sapo-backup-page .bkp-secondary-button {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        height: 38px !important;
+        padding: 0 16px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+    }
+
+    #sapo-backup-page .bkp-primary-button {
+        color: #ffffff !important;
+        background: var(--bkp-green-700) !important;
+        border: 1px solid var(--bkp-green-700) !important;
+    }
+
+    #sapo-backup-page .bkp-primary-button:hover:not(:disabled) {
+        background: var(--bkp-green-800) !important;
+    }
+
+    #sapo-backup-page .bkp-secondary-button {
+        color: #374151 !important;
+        background: var(--bkp-white) !important;
+        border: 1px solid var(--bkp-border-strong) !important;
+    }
+
+    #sapo-backup-page .bkp-secondary-button:hover:not(:disabled) {
+        background: var(--bkp-bg) !important;
+        border-color: #9ca3af !important;
+    }
+
+    #sapo-backup-page button:disabled {
+        opacity: 0.55 !important;
+        cursor: not-allowed !important;
+    }
+
+    /* ---------- Summary cards ---------- */
+    #sapo-backup-page .bkp-summary-grid {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+        gap: 16px !important;
+    }
+
+    #sapo-backup-page .bkp-summary-grid article {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 6px !important;
+        padding: 18px 20px !important;
+        background: var(--bkp-white) !important;
+        border: 1px solid var(--bkp-border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-backup-page .bkp-summary-grid span {
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        color: var(--bkp-muted) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-summary-grid strong {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: var(--bkp-text) !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-failed-value {
+        color: var(--bkp-red) !important;
+    }
+
+    #sapo-backup-page .bkp-date-value {
+        font-size: 15px !important;
+    }
+
+    /* ---------- Settings banner ---------- */
+    #sapo-backup-page .bkp-settings-banner {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+        gap: 16px !important;
+        padding: 16px 20px !important;
+        background: var(--bkp-blue-light) !important;
+        border: 1px solid #bfdbfe !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-backup-page .bkp-settings-banner > div {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 3px !important;
+    }
+
+    #sapo-backup-page .bkp-settings-banner span {
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        color: var(--bkp-blue) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-settings-banner strong {
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        color: var(--bkp-text) !important;
+        background: transparent !important;
+    }
+
+    /* ---------- Alerts ---------- */
+    #sapo-backup-page .bkp-success-alert {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        background: var(--bkp-green-50) !important;
+        border: 1px solid var(--bkp-green-100) !important;
+    }
+
+    #sapo-backup-page .bkp-success-alert span:first-child {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 20px !important;
+        height: 20px !important;
+        flex-shrink: 0 !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        color: #ffffff !important;
+        background: var(--bkp-green-700) !important;
+        border-radius: 999px !important;
+    }
+
+    #sapo-backup-page .bkp-success-alert p {
+        flex: 1 !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        color: #15803d !important;
+    }
+
+    #sapo-backup-page .bkp-success-alert button {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 24px !important;
+        height: 24px !important;
+        flex-shrink: 0 !important;
+        font-size: 16px !important;
+        line-height: 1 !important;
+        color: #15803d !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+    }
+
+    #sapo-backup-page .bkp-success-alert button:hover {
+        background: rgba(21, 128, 61, 0.1) !important;
+    }
+
+    #sapo-backup-page .bkp-form-alert {
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        background: var(--bkp-red-light) !important;
+        border: 1px solid #fecaca !important;
+        color: #b91c1c !important;
+    }
+
+    /* ---------- Content card ---------- */
+    #sapo-backup-page .bkp-content-card {
+        background: var(--bkp-white) !important;
+        border: 1px solid var(--bkp-border) !important;
+        border-radius: 10px !important;
+        padding: 20px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 16px !important;
+    }
+
+    /* ---------- Create backup panel ---------- */
+    #sapo-backup-page .bkp-create-panel header {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+        margin-bottom: 4px !important;
+    }
+
+    #sapo-backup-page .bkp-create-panel h3 {
+        font-size: 17px !important;
+        font-weight: 700 !important;
+        color: var(--bkp-text) !important;
+    }
+
+    #sapo-backup-page .bkp-create-panel > header > p {
+        font-size: 13px !important;
+        color: var(--bkp-muted) !important;
+    }
+
+    #sapo-backup-page .bkp-create-form {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 14px !important;
+        max-width: 520px !important;
+    }
+
+    #sapo-backup-page .bkp-create-form label {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 6px !important;
+    }
+
+    #sapo-backup-page .bkp-create-form label span {
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        color: var(--bkp-text-secondary) !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-create-form textarea {
+        width: 100% !important;
+        padding: 10px 12px !important;
+        font-size: 13.5px !important;
+        color: var(--bkp-text-secondary) !important;
+        background: var(--bkp-white) !important;
+        border: 1px solid var(--bkp-border-strong) !important;
+        border-radius: 8px !important;
+        outline: none !important;
+        resize: vertical !important;
+        min-height: 72px !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    }
+
+    #sapo-backup-page .bkp-create-form textarea:focus {
+        border-color: var(--bkp-green-700) !important;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important;
+    }
+
+    #sapo-backup-page .bkp-create-form textarea:disabled {
+        background: var(--bkp-bg) !important;
+        color: var(--bkp-muted) !important;
+        cursor: not-allowed !important;
+    }
+
+    #sapo-backup-page .bkp-create-form .bkp-primary-button {
+        align-self: flex-start !important;
+    }
+
+    /* ---------- Toolbar ---------- */
+    #sapo-backup-page .bkp-toolbar {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 10px !important;
+    }
+
+    #sapo-backup-page .bkp-toolbar input[type="search"] {
+        flex: 1 1 240px !important;
+        height: 38px !important;
+        padding: 0 14px !important;
+        font-size: 13.5px !important;
+        color: var(--bkp-text-secondary) !important;
+        border: 1px solid var(--bkp-border-strong) !important;
+        border-radius: 8px !important;
+        outline: none !important;
+        background: var(--bkp-bg) !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-backup-page .bkp-toolbar input[type="search"]::placeholder {
+        color: #9ca3af !important;
+    }
+
+    #sapo-backup-page .bkp-toolbar select {
+        height: 38px !important;
+        padding: 0 12px !important;
+        font-size: 13px !important;
+        border: 1px solid var(--bkp-border-strong) !important;
+        border-radius: 8px !important;
+        background: var(--bkp-bg) !important;
+        color: var(--bkp-text-secondary) !important;
+        outline: none !important;
+        cursor: pointer !important;
+        min-width: 150px !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-backup-page .bkp-toolbar input:focus,
+    #sapo-backup-page .bkp-toolbar select:focus {
+        border-color: var(--bkp-green-700) !important;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important;
+        background: var(--bkp-white) !important;
+    }
+
+    /* ---------- Scrollable table ---------- */
+    #sapo-backup-page .bkp-table-container {
+        max-height: 560px !important;
+        overflow-y: auto !important;
+        overflow-x: auto !important;
+        border: 1px solid var(--bkp-border) !important;
+        border-radius: 8px !important;
+        background: var(--bkp-white) !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: var(--bkp-border-strong) transparent !important;
+    }
+
+    #sapo-backup-page .bkp-table-container::-webkit-scrollbar {
+        width: 8px !important;
+        height: 8px !important;
+    }
+
+    #sapo-backup-page .bkp-table-container::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-table-container::-webkit-scrollbar-thumb {
+        background: var(--bkp-border-strong) !important;
+        border-radius: 8px !important;
+    }
+
+    #sapo-backup-page .bkp-table {
+        width: 100% !important;
+        min-width: 1080px !important;
+        border-collapse: collapse !important;
+        font-size: 13.5px !important;
+        background: var(--bkp-white) !important;
+    }
+
+    #sapo-backup-page .bkp-table thead {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 1 !important;
+    }
+
+    #sapo-backup-page .bkp-table thead th {
+        background: #f9fafb !important;
+        color: var(--bkp-muted) !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        text-align: left !important;
+        padding: 12px 16px !important;
+        border-bottom: 1px solid var(--bkp-border) !important;
+        white-space: nowrap !important;
+    }
+
+    #sapo-backup-page .bkp-table tbody td {
+        padding: 14px 16px !important;
+        border-bottom: 1px solid #f1f5f9 !important;
+        vertical-align: middle !important;
+        color: var(--bkp-text-secondary) !important;
+        background: var(--bkp-white) !important;
+    }
+
+    #sapo-backup-page .bkp-table tbody tr:last-child td {
+        border-bottom: none !important;
+    }
+
+    #sapo-backup-page .bkp-table tbody tr:hover td {
+        background: #f9fafb !important;
+    }
+
+    #sapo-backup-page .bkp-table td strong {
+        font-weight: 600 !important;
+        color: var(--bkp-text) !important;
+        display: block !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-table td small {
+        display: block !important;
+        margin-top: 2px !important;
+        font-size: 12px !important;
+        color: #9ca3af !important;
+        background: transparent !important;
+        white-space: normal !important;
+    }
+
+    #sapo-backup-page .bkp-error-message {
+        color: var(--bkp-red) !important;
+    }
+
+    #sapo-backup-page .bkp-table-state {
+        text-align: center !important;
+        padding: 44px 16px !important;
+        color: #9ca3af !important;
+        font-size: 13.5px !important;
+        background: var(--bkp-white) !important;
+        white-space: normal !important;
+    }
+
+    /* ---------- Status badges ---------- */
+    #sapo-backup-page .bkp-status {
+        display: inline-block !important;
+        padding: 4px 10px !important;
+        border-radius: 999px !important;
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+    }
+
+    #sapo-backup-page .bkp-status-completed {
+        background: var(--bkp-green-100) !important;
+        color: var(--bkp-green-800) !important;
+    }
+
+    #sapo-backup-page .bkp-status-restored {
+        background: var(--bkp-blue-light) !important;
+        color: var(--bkp-blue) !important;
+    }
+
+    #sapo-backup-page .bkp-status-failed {
+        background: var(--bkp-red-light) !important;
+        color: #b91c1c !important;
+    }
+
+    #sapo-backup-page .bkp-status-processing,
+    #sapo-backup-page .bkp-status-restoring {
+        background: var(--bkp-amber-light) !important;
+        color: var(--bkp-amber) !important;
+    }
+
+    /* ---------- Row actions ---------- */
+    #sapo-backup-page .bkp-actions {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        gap: 6px !important;
+    }
+
+    #sapo-backup-page .bkp-download-button,
+    #sapo-backup-page .bkp-restore-button,
+    #sapo-backup-page .bkp-delete-button {
+        padding: 6px 12px !important;
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+    }
+
+    #sapo-backup-page .bkp-download-button {
+        color: var(--bkp-blue) !important;
+        background: var(--bkp-blue-light) !important;
+        border: 1px solid #bfdbfe !important;
+    }
+
+    #sapo-backup-page .bkp-download-button:hover:not(:disabled) {
+        background: var(--bkp-blue) !important;
+        color: #ffffff !important;
+        border-color: var(--bkp-blue) !important;
+    }
+
+    #sapo-backup-page .bkp-restore-button {
+        color: var(--bkp-amber) !important;
+        background: var(--bkp-amber-light) !important;
+        border: 1px solid #fde68a !important;
+    }
+
+    #sapo-backup-page .bkp-restore-button:hover:not(:disabled) {
+        background: var(--bkp-amber) !important;
+        color: #ffffff !important;
+        border-color: var(--bkp-amber) !important;
+    }
+
+    #sapo-backup-page .bkp-delete-button {
+        color: var(--bkp-red) !important;
+        background: var(--bkp-red-light) !important;
+        border: 1px solid #fecaca !important;
+    }
+
+    #sapo-backup-page .bkp-delete-button:hover:not(:disabled) {
+        background: var(--bkp-red) !important;
+        color: #ffffff !important;
+        border-color: var(--bkp-red) !important;
+    }
+
+    /* ---------- Pagination ---------- */
+    #sapo-backup-page .bkp-pagination {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 12px !important;
+        padding-top: 4px !important;
+    }
+
+    #sapo-backup-page .bkp-pagination p {
+        font-size: 13px !important;
+        color: var(--bkp-muted) !important;
+        font-weight: 500 !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-pagination p strong {
+        color: var(--bkp-text) !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-pagination-controls {
+        display: flex !important;
+        align-items: center !important;
+        gap: 16px !important;
+    }
+
+    #sapo-backup-page .bkp-pagination-controls span {
+        font-size: 13px !important;
+        color: var(--bkp-muted) !important;
+        font-weight: 500 !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-pagination-controls span strong {
+        color: var(--bkp-text) !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-pagination-button {
+        padding: 7px 16px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #374151 !important;
+        background: var(--bkp-white) !important;
+        border: 1px solid var(--bkp-border-strong) !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, border-color 0.15s ease !important;
+    }
+
+    #sapo-backup-page .bkp-pagination-button:hover:not(:disabled) {
+        background: #f9fafb !important;
+        border-color: #9ca3af !important;
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 760px) {
+        #sapo-backup-page .bkp-header {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+
+        #sapo-backup-page .bkp-toolbar {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+
+        #sapo-backup-page .bkp-toolbar select {
+            width: 100% !important;
+        }
+
+        #sapo-backup-page .bkp-pagination {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+    }
+`;
+
 export default function BackupRestorePage() {
     const {
         token,
@@ -147,30 +816,22 @@ export default function BackupRestorePage() {
     const [
         backups,
         setBackups,
-    ] = useState<
-        DatabaseBackup[]
-    >([]);
+    ] = useState<DatabaseBackup[]>([]);
 
     const [
         summary,
         setSummary,
-    ] = useState(
-        emptySummary,
-    );
+    ] = useState(emptySummary);
 
     const [
         settings,
         setSettings,
-    ] = useState(
-        emptySettings,
-    );
+    ] = useState(emptySettings);
 
     const [
         pagination,
         setPagination,
-    ] = useState(
-        emptyPagination,
-    );
+    ] = useState(emptyPagination);
 
     const [
         notes,
@@ -215,9 +876,7 @@ export default function BackupRestorePage() {
     const [
         busyBackupId,
         setBusyBackupId,
-    ] = useState<number | null>(
-        null,
-    );
+    ] = useState<number | null>(null);
 
     const [
         pageError,
@@ -482,10 +1141,14 @@ export default function BackupRestorePage() {
         };
 
     return (
-        <div className="page-stack">
-            <section className="backup-page-header">
+        <div id="sapo-backup-page">
+            <style>
+                {backupPageStyles}
+            </style>
+
+            <section className="bkp-header">
                 <div>
-                    <span className="page-kicker">
+                    <span className="bkp-kicker">
                         Data protection
                     </span>
 
@@ -501,7 +1164,7 @@ export default function BackupRestorePage() {
 
                 <button
                     type="button"
-                    className="secondary-button"
+                    className="bkp-secondary-button"
                     disabled={
                         isLoading
                         || isCreating
@@ -514,7 +1177,7 @@ export default function BackupRestorePage() {
                 </button>
             </section>
 
-            <section className="backup-summary-grid">
+            <section className="bkp-summary-grid">
                 <article>
                     <span>
                         Total Backups
@@ -543,7 +1206,7 @@ export default function BackupRestorePage() {
                         Failed
                     </span>
 
-                    <strong className="backup-failed-value">
+                    <strong className="bkp-failed-value">
                         {
                             summary
                                 .failed_backups
@@ -568,7 +1231,7 @@ export default function BackupRestorePage() {
                         Latest Backup
                     </span>
 
-                    <strong className="backup-date-value">
+                    <strong className="bkp-date-value">
                         {formatDateTime(
                             summary
                                 .latest_completed_at,
@@ -577,7 +1240,7 @@ export default function BackupRestorePage() {
                 </article>
             </section>
 
-            <section className="backup-settings-banner">
+            <section className="bkp-settings-banner">
                 <div>
                     <span>
                         Automatic Backups
@@ -617,7 +1280,7 @@ export default function BackupRestorePage() {
 
             {successMessage && (
                 <div
-                    className="success-alert"
+                    className="bkp-success-alert"
                     role="status"
                 >
                     <span>✓</span>
@@ -628,6 +1291,7 @@ export default function BackupRestorePage() {
 
                     <button
                         type="button"
+                        aria-label="Dismiss"
                         onClick={() => {
                             setSuccessMessage('');
                         }}
@@ -639,16 +1303,16 @@ export default function BackupRestorePage() {
 
             {pageError && (
                 <div
-                    className="form-alert"
+                    className="bkp-form-alert"
                     role="alert"
                 >
                     {pageError}
                 </div>
             )}
 
-            <section className="content-card backup-create-panel">
+            <section className="bkp-content-card bkp-create-panel">
                 <header>
-                    <span className="page-kicker">
+                    <span className="bkp-kicker">
                         Manual backup
                     </span>
 
@@ -663,7 +1327,7 @@ export default function BackupRestorePage() {
                     </p>
                 </header>
 
-                <div className="backup-create-form">
+                <div className="bkp-create-form">
                     <label>
                         <span>
                             Backup Notes
@@ -685,7 +1349,7 @@ export default function BackupRestorePage() {
 
                     <button
                         type="button"
-                        className="primary-button"
+                        className="bkp-primary-button"
                         disabled={isCreating}
                         onClick={() => {
                             void handleCreate();
@@ -698,8 +1362,8 @@ export default function BackupRestorePage() {
                 </div>
             </section>
 
-            <section className="content-card">
-                <div className="backup-toolbar">
+            <section className="bkp-content-card">
+                <div className="bkp-toolbar">
                     <input
                         type="search"
                         value={searchInput}
@@ -772,8 +1436,8 @@ export default function BackupRestorePage() {
                     </select>
                 </div>
 
-                <div className="backup-table-container">
-                    <table className="backup-table">
+                <div className="bkp-table-container">
+                    <table className="bkp-table">
                         <thead>
                             <tr>
                                 <th>Backup</th>
@@ -792,7 +1456,7 @@ export default function BackupRestorePage() {
                                 <tr>
                                     <td
                                         colSpan={8}
-                                        className="table-state"
+                                        className="bkp-table-state"
                                     >
                                         Loading database backups...
                                     </td>
@@ -802,7 +1466,7 @@ export default function BackupRestorePage() {
                                 <tr>
                                     <td
                                         colSpan={8}
-                                        className="table-state"
+                                        className="bkp-table-state"
                                     >
                                         No database backups found.
                                     </td>
@@ -841,7 +1505,7 @@ export default function BackupRestorePage() {
 
                                                 {backup
                                                     .error_message && (
-                                                        <small className="backup-error-message">
+                                                        <small className="bkp-error-message">
                                                             {
                                                                 backup
                                                                     .error_message
@@ -880,7 +1544,7 @@ export default function BackupRestorePage() {
 
                                             <td>
                                                 <span
-                                                    className={`backup-status backup-status-${backup.status}`}
+                                                    className={`bkp-status bkp-status-${backup.status}`}
                                                 >
                                                     {statusName(
                                                         backup
@@ -902,10 +1566,10 @@ export default function BackupRestorePage() {
                                             </td>
 
                                             <td>
-                                                <div className="backup-actions">
+                                                <div className="bkp-actions">
                                                     <button
                                                         type="button"
-                                                        className="view-sale-button"
+                                                        className="bkp-download-button"
                                                         disabled={
                                                             !backup
                                                                 .can_download
@@ -923,7 +1587,7 @@ export default function BackupRestorePage() {
 
                                                     <button
                                                         type="button"
-                                                        className="backup-restore-button"
+                                                        className="bkp-restore-button"
                                                         disabled={
                                                             !backup
                                                                 .can_restore
@@ -941,7 +1605,7 @@ export default function BackupRestorePage() {
 
                                                     <button
                                                         type="button"
-                                                        className="cashier-danger-button"
+                                                        className="bkp-delete-button"
                                                         disabled={
                                                             busyBackupId
                                                             === backup.id
@@ -965,7 +1629,7 @@ export default function BackupRestorePage() {
                 </div>
 
                 {pagination.total > 0 && (
-                    <footer className="category-pagination">
+                    <footer className="bkp-pagination">
                         <p>
                             Showing{' '}
 
@@ -988,10 +1652,10 @@ export default function BackupRestorePage() {
                             {' '}backups
                         </p>
 
-                        <div>
+                        <div className="bkp-pagination-controls">
                             <button
                                 type="button"
-                                className="pagination-button"
+                                className="bkp-pagination-button"
                                 disabled={page <= 1}
                                 onClick={() => {
                                     setPage(
@@ -1028,7 +1692,7 @@ export default function BackupRestorePage() {
 
                             <button
                                 type="button"
-                                className="pagination-button"
+                                className="bkp-pagination-button"
                                 disabled={
                                     page
                                     >= pagination

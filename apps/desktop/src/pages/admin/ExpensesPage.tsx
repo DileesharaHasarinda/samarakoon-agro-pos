@@ -52,16 +52,14 @@ const currencyFormatter =
         },
     );
 
-const initialSummary:
-    ExpenseSummary = {
+const initialSummary: ExpenseSummary = {
     total_expenses: 0,
     total_amount: 0,
     one_time_amount: 0,
     recurring_amount: 0,
 };
 
-const initialPagination:
-    PosPaginationMeta = {
+const initialPagination: PosPaginationMeta = {
     current_page: 1,
     last_page: 1,
     per_page: 20,
@@ -110,6 +108,638 @@ function expenseTypeName(
         : 'One-time';
 }
 
+const expensesPageStyles = `
+    #sapo-expenses-page,
+    #sapo-expenses-page *,
+    #sapo-expenses-page *::before,
+    #sapo-expenses-page *::after {
+        box-sizing: border-box !important;
+    }
+
+    #sapo-expenses-page {
+        --exp-green-800: #166534;
+        --exp-green-700: #15803d;
+        --exp-green-100: #dcfce7;
+        --exp-green-50: #f0fdf4;
+        --exp-red: #dc2626;
+        --exp-red-light: #fef2f2;
+        --exp-amber: #b45309;
+        --exp-amber-light: #fffbeb;
+        --exp-blue: #2563eb;
+        --exp-blue-light: #eff6ff;
+        --exp-text: #111827;
+        --exp-text-secondary: #1f2937;
+        --exp-muted: #6b7280;
+        --exp-border: #e5e7eb;
+        --exp-border-strong: #d1d5db;
+        --exp-bg: #f9fafb;
+        --exp-white: #ffffff;
+        --exp-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 20px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: var(--exp-text-secondary) !important;
+        font-family: var(--exp-font) !important;
+        font-size: 14px !important;
+        line-height: 1.5 !important;
+        background: transparent !important;
+        isolation: isolate !important;
+    }
+
+    #sapo-expenses-page h2,
+    #sapo-expenses-page p,
+    #sapo-expenses-page span,
+    #sapo-expenses-page strong,
+    #sapo-expenses-page small,
+    #sapo-expenses-page label,
+    #sapo-expenses-page button,
+    #sapo-expenses-page input,
+    #sapo-expenses-page select,
+    #sapo-expenses-page table,
+    #sapo-expenses-page th,
+    #sapo-expenses-page td {
+        font-family: var(--exp-font) !important;
+        letter-spacing: normal !important;
+    }
+
+    #sapo-expenses-page h2,
+    #sapo-expenses-page p {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* ---------- Header ---------- */
+    #sapo-expenses-page .exp-header {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        gap: 16px !important;
+        padding: 20px 24px !important;
+        background: var(--exp-white) !important;
+        border: 1px solid var(--exp-border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-expenses-page .exp-kicker {
+        display: inline-block !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.04em !important;
+        text-transform: uppercase !important;
+        color: var(--exp-green-700) !important;
+        margin-bottom: 6px !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-header h2 {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: var(--exp-text) !important;
+        margin-bottom: 4px !important;
+    }
+
+    #sapo-expenses-page .exp-header p {
+        font-size: 13.5px !important;
+        color: var(--exp-muted) !important;
+    }
+
+    #sapo-expenses-page .exp-header-actions {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        gap: 10px !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* ---------- Buttons ---------- */
+    #sapo-expenses-page .exp-primary-button,
+    #sapo-expenses-page .exp-secondary-button {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        height: 38px !important;
+        padding: 0 16px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+    }
+
+    #sapo-expenses-page .exp-primary-button {
+        color: #ffffff !important;
+        background: var(--exp-green-700) !important;
+        border: 1px solid var(--exp-green-700) !important;
+    }
+
+    #sapo-expenses-page .exp-primary-button:hover:not(:disabled) {
+        background: var(--exp-green-800) !important;
+    }
+
+    #sapo-expenses-page .exp-secondary-button {
+        color: #374151 !important;
+        background: var(--exp-white) !important;
+        border: 1px solid var(--exp-border-strong) !important;
+    }
+
+    #sapo-expenses-page .exp-secondary-button:hover:not(:disabled) {
+        background: var(--exp-bg) !important;
+        border-color: #9ca3af !important;
+    }
+
+    #sapo-expenses-page button:disabled {
+        opacity: 0.55 !important;
+        cursor: not-allowed !important;
+    }
+
+    /* ---------- Alerts ---------- */
+    #sapo-expenses-page .exp-success-alert {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        background: var(--exp-green-50) !important;
+        border: 1px solid var(--exp-green-100) !important;
+    }
+
+    #sapo-expenses-page .exp-success-alert span:first-child {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 20px !important;
+        height: 20px !important;
+        flex-shrink: 0 !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        color: #ffffff !important;
+        background: var(--exp-green-700) !important;
+        border-radius: 999px !important;
+    }
+
+    #sapo-expenses-page .exp-success-alert p {
+        flex: 1 !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        color: #15803d !important;
+    }
+
+    #sapo-expenses-page .exp-success-alert button {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 24px !important;
+        height: 24px !important;
+        flex-shrink: 0 !important;
+        font-size: 16px !important;
+        line-height: 1 !important;
+        color: #15803d !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+    }
+
+    #sapo-expenses-page .exp-success-alert button:hover {
+        background: rgba(21, 128, 61, 0.1) !important;
+    }
+
+    #sapo-expenses-page .exp-form-alert {
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        background: var(--exp-red-light) !important;
+        border: 1px solid #fecaca !important;
+        color: #b91c1c !important;
+    }
+
+    /* ---------- Summary cards ---------- */
+    #sapo-expenses-page .exp-summary-grid {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) !important;
+        gap: 16px !important;
+    }
+
+    #sapo-expenses-page .exp-summary-grid article {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+        padding: 18px 20px !important;
+        background: var(--exp-white) !important;
+        border: 1px solid var(--exp-border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-expenses-page .exp-summary-grid span {
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        color: var(--exp-muted) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-summary-grid strong {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: var(--exp-text) !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-summary-grid small {
+        font-size: 12px !important;
+        color: #9ca3af !important;
+        background: transparent !important;
+    }
+
+    /* ---------- Content card ---------- */
+    #sapo-expenses-page .exp-content-card {
+        background: var(--exp-white) !important;
+        border: 1px solid var(--exp-border) !important;
+        border-radius: 10px !important;
+        padding: 20px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 16px !important;
+    }
+
+    /* ---------- Toolbar ---------- */
+    #sapo-expenses-page .exp-toolbar {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: flex-end !important;
+        gap: 10px !important;
+    }
+
+    #sapo-expenses-page .exp-toolbar input[type="search"] {
+        flex: 1 1 240px !important;
+        height: 38px !important;
+        padding: 0 14px !important;
+        font-size: 13.5px !important;
+        color: var(--exp-text-secondary) !important;
+        border: 1px solid var(--exp-border-strong) !important;
+        border-radius: 8px !important;
+        outline: none !important;
+        background: var(--exp-bg) !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-expenses-page .exp-toolbar input[type="search"]::placeholder {
+        color: #9ca3af !important;
+    }
+
+    #sapo-expenses-page .exp-toolbar select {
+        height: 38px !important;
+        padding: 0 12px !important;
+        font-size: 13px !important;
+        border: 1px solid var(--exp-border-strong) !important;
+        border-radius: 8px !important;
+        background: var(--exp-bg) !important;
+        color: var(--exp-text-secondary) !important;
+        outline: none !important;
+        cursor: pointer !important;
+        min-width: 150px !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-expenses-page .exp-toolbar label {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+    }
+
+    #sapo-expenses-page .exp-toolbar label span {
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        color: var(--exp-muted) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-toolbar label input[type="date"] {
+        height: 38px !important;
+        padding: 0 12px !important;
+        font-size: 13px !important;
+        color: var(--exp-text-secondary) !important;
+        border: 1px solid var(--exp-border-strong) !important;
+        border-radius: 8px !important;
+        outline: none !important;
+        background: var(--exp-bg) !important;
+        min-width: 140px !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-expenses-page .exp-toolbar input:focus,
+    #sapo-expenses-page .exp-toolbar select:focus {
+        border-color: var(--exp-green-700) !important;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important;
+        background: var(--exp-white) !important;
+    }
+
+    #sapo-expenses-page .exp-clear-filter-button {
+        height: 38px !important;
+        padding: 0 14px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: var(--exp-red) !important;
+        background: var(--exp-red-light) !important;
+        border: 1px solid #fecaca !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+    }
+
+    #sapo-expenses-page .exp-clear-filter-button:hover {
+        background: var(--exp-red) !important;
+        color: #ffffff !important;
+        border-color: var(--exp-red) !important;
+    }
+
+    /* ---------- Scrollable table ---------- */
+    #sapo-expenses-page .exp-table-container {
+        max-height: 560px !important;
+        overflow-y: auto !important;
+        overflow-x: auto !important;
+        border: 1px solid var(--exp-border) !important;
+        border-radius: 8px !important;
+        background: var(--exp-white) !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: var(--exp-border-strong) transparent !important;
+    }
+
+    #sapo-expenses-page .exp-table-container::-webkit-scrollbar {
+        width: 8px !important;
+        height: 8px !important;
+    }
+
+    #sapo-expenses-page .exp-table-container::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-table-container::-webkit-scrollbar-thumb {
+        background: var(--exp-border-strong) !important;
+        border-radius: 8px !important;
+    }
+
+    #sapo-expenses-page .exp-table-container::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af !important;
+    }
+
+    #sapo-expenses-page .exp-table {
+        width: 100% !important;
+        min-width: 1120px !important;
+        border-collapse: collapse !important;
+        font-size: 13.5px !important;
+        background: var(--exp-white) !important;
+    }
+
+    #sapo-expenses-page .exp-table thead {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 1 !important;
+    }
+
+    #sapo-expenses-page .exp-table thead th {
+        background: #f9fafb !important;
+        color: var(--exp-muted) !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        text-align: left !important;
+        padding: 12px 16px !important;
+        border-bottom: 1px solid var(--exp-border) !important;
+        white-space: nowrap !important;
+    }
+
+    #sapo-expenses-page .exp-table tbody td {
+        padding: 14px 16px !important;
+        border-bottom: 1px solid #f1f5f9 !important;
+        vertical-align: middle !important;
+        color: var(--exp-text-secondary) !important;
+        background: var(--exp-white) !important;
+    }
+
+    #sapo-expenses-page .exp-table tbody tr:last-child td {
+        border-bottom: none !important;
+    }
+
+    #sapo-expenses-page .exp-table tbody tr:hover td {
+        background: #f9fafb !important;
+    }
+
+    #sapo-expenses-page .exp-table td strong {
+        font-weight: 600 !important;
+        color: var(--exp-text) !important;
+        display: block !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-table td small {
+        display: block !important;
+        margin-top: 2px !important;
+        font-size: 12px !important;
+        color: #9ca3af !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-amount {
+        color: var(--exp-red) !important;
+    }
+
+    #sapo-expenses-page .exp-table-state {
+        text-align: center !important;
+        padding: 44px 16px !important;
+        background: var(--exp-white) !important;
+    }
+
+    #sapo-expenses-page .exp-table-state strong {
+        display: block !important;
+        font-size: 13.5px !important;
+        font-weight: 600 !important;
+        color: var(--exp-text) !important;
+        margin-bottom: 4px !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-table-state span {
+        display: block !important;
+        font-size: 13px !important;
+        color: var(--exp-muted) !important;
+        background: transparent !important;
+    }
+
+    /* ---------- Badges ---------- */
+    #sapo-expenses-page .exp-recurring-badge,
+    #sapo-expenses-page .exp-one-time-badge {
+        display: inline-block !important;
+        padding: 4px 10px !important;
+        border-radius: 999px !important;
+        font-size: 11.5px !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+    }
+
+    #sapo-expenses-page .exp-recurring-badge {
+        background: var(--exp-blue-light) !important;
+        color: var(--exp-blue) !important;
+    }
+
+    #sapo-expenses-page .exp-one-time-badge {
+        background: #f1f5f9 !important;
+        color: #475569 !important;
+    }
+
+    /* ---------- Row actions ---------- */
+    #sapo-expenses-page .exp-table-actions {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+    }
+
+    #sapo-expenses-page .exp-edit-button,
+    #sapo-expenses-page .exp-delete-button {
+        padding: 6px 12px !important;
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+    }
+
+    #sapo-expenses-page .exp-edit-button {
+        color: var(--exp-blue) !important;
+        background: var(--exp-blue-light) !important;
+        border: 1px solid #bfdbfe !important;
+    }
+
+    #sapo-expenses-page .exp-edit-button:hover {
+        background: var(--exp-blue) !important;
+        color: #ffffff !important;
+        border-color: var(--exp-blue) !important;
+    }
+
+    #sapo-expenses-page .exp-delete-button {
+        color: var(--exp-red) !important;
+        background: var(--exp-red-light) !important;
+        border: 1px solid #fecaca !important;
+    }
+
+    #sapo-expenses-page .exp-delete-button:hover {
+        background: var(--exp-red) !important;
+        color: #ffffff !important;
+        border-color: var(--exp-red) !important;
+    }
+
+    /* ---------- Pagination ---------- */
+    #sapo-expenses-page .exp-pagination {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 12px !important;
+        padding-top: 4px !important;
+    }
+
+    #sapo-expenses-page .exp-pagination p {
+        font-size: 13px !important;
+        color: var(--exp-muted) !important;
+        font-weight: 500 !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-pagination p strong {
+        color: var(--exp-text) !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-pagination-controls {
+        display: flex !important;
+        align-items: center !important;
+        gap: 16px !important;
+    }
+
+    #sapo-expenses-page .exp-pagination-controls span {
+        font-size: 13px !important;
+        color: var(--exp-muted) !important;
+        font-weight: 500 !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-pagination-controls span strong {
+        color: var(--exp-text) !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+    }
+
+    #sapo-expenses-page .exp-pagination-button {
+        padding: 7px 16px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #374151 !important;
+        background: var(--exp-white) !important;
+        border: 1px solid var(--exp-border-strong) !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, border-color 0.15s ease !important;
+    }
+
+    #sapo-expenses-page .exp-pagination-button:hover:not(:disabled) {
+        background: #f9fafb !important;
+        border-color: #9ca3af !important;
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 760px) {
+        #sapo-expenses-page .exp-header {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+
+        #sapo-expenses-page .exp-header-actions {
+            width: 100% !important;
+        }
+
+        #sapo-expenses-page .exp-header-actions button {
+            flex: 1 1 auto !important;
+        }
+
+        #sapo-expenses-page .exp-toolbar {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+
+        #sapo-expenses-page .exp-toolbar select,
+        #sapo-expenses-page .exp-toolbar label {
+            width: 100% !important;
+        }
+
+        #sapo-expenses-page .exp-toolbar label input {
+            width: 100% !important;
+        }
+
+        #sapo-expenses-page .exp-pagination {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+
+        #sapo-expenses-page .exp-pagination-controls {
+            justify-content: space-between !important;
+        }
+    }
+`;
+
 export default function ExpensesPage() {
     const {
         token,
@@ -128,16 +758,12 @@ export default function ExpensesPage() {
     const [
         summary,
         setSummary,
-    ] = useState<ExpenseSummary>(
-        initialSummary,
-    );
+    ] = useState<ExpenseSummary>(initialSummary);
 
     const [
         pagination,
         setPagination,
-    ] = useState<PosPaginationMeta>(
-        initialPagination,
-    );
+    ] = useState<PosPaginationMeta>(initialPagination);
 
     const [
         page,
@@ -227,9 +853,7 @@ export default function ExpensesPage() {
     const [
         selectedExpense,
         setSelectedExpense,
-    ] = useState<Expense | null>(
-        null,
-    );
+    ] = useState<Expense | null>(null);
 
     const formCategories =
         useMemo(
@@ -580,10 +1204,14 @@ export default function ExpensesPage() {
         || dateTo !== '';
 
     return (
-        <div className="page-stack">
-            <section className="expenses-page-header">
+        <div id="sapo-expenses-page">
+            <style>
+                {expensesPageStyles}
+            </style>
+
+            <section className="exp-header">
                 <div>
-                    <span className="page-kicker">
+                    <span className="exp-kicker">
                         Business costs
                     </span>
 
@@ -598,10 +1226,10 @@ export default function ExpensesPage() {
                     </p>
                 </div>
 
-                <div className="expense-header-actions">
+                <div className="exp-header-actions">
                     <button
                         type="button"
-                        className="secondary-button"
+                        className="exp-secondary-button"
                         onClick={() => {
                             setCategoryError('');
                             setCategoryModalOpen(
@@ -614,7 +1242,7 @@ export default function ExpensesPage() {
 
                     <button
                         type="button"
-                        className="primary-button"
+                        className="exp-primary-button"
                         disabled={
                             categories.length
                             === 0
@@ -637,7 +1265,7 @@ export default function ExpensesPage() {
 
             {successMessage && (
                 <div
-                    className="success-alert"
+                    className="exp-success-alert"
                     role="status"
                 >
                     <span>✓</span>
@@ -651,6 +1279,7 @@ export default function ExpensesPage() {
                         onClick={() => {
                             setSuccessMessage('');
                         }}
+                        aria-label="Dismiss"
                     >
                         ×
                     </button>
@@ -659,14 +1288,14 @@ export default function ExpensesPage() {
 
             {pageError && (
                 <div
-                    className="form-alert"
+                    className="exp-form-alert"
                     role="alert"
                 >
                     {pageError}
                 </div>
             )}
 
-            <section className="expense-summary-grid">
+            <section className="exp-summary-grid">
                 <article>
                     <span>
                         Expense Records
@@ -736,8 +1365,8 @@ export default function ExpensesPage() {
                 </article>
             </section>
 
-            <section className="content-card">
-                <div className="expense-toolbar">
+            <section className="exp-content-card">
+                <div className="exp-toolbar">
                     <input
                         type="search"
                         value={searchInput}
@@ -899,7 +1528,7 @@ export default function ExpensesPage() {
                     {hasFilters && (
                         <button
                             type="button"
-                            className="clear-filter-button"
+                            className="exp-clear-filter-button"
                             onClick={clearFilters}
                         >
                             Clear Filters
@@ -907,8 +1536,8 @@ export default function ExpensesPage() {
                     )}
                 </div>
 
-                <div className="expense-table-container">
-                    <table className="expense-table">
+                <div className="exp-table-container">
+                    <table className="exp-table">
                         <thead>
                             <tr>
                                 <th>
@@ -931,7 +1560,7 @@ export default function ExpensesPage() {
                                 <tr>
                                     <td
                                         colSpan={9}
-                                        className="table-state"
+                                        className="exp-table-state"
                                     >
                                         Loading expenses...
                                     </td>
@@ -941,7 +1570,7 @@ export default function ExpensesPage() {
                                 <tr>
                                     <td
                                         colSpan={9}
-                                        className="table-state"
+                                        className="exp-table-state"
                                     >
                                         <strong>
                                             No expenses found
@@ -1022,8 +1651,8 @@ export default function ExpensesPage() {
                                                         expense
                                                             .expense_type
                                                             === 'recurring'
-                                                            ? 'recurring-expense-badge'
-                                                            : 'one-time-expense-badge'
+                                                            ? 'exp-recurring-badge'
+                                                            : 'exp-one-time-badge'
                                                     }
                                                 >
                                                     {expenseTypeName(
@@ -1051,7 +1680,7 @@ export default function ExpensesPage() {
                                             </td>
 
                                             <td>
-                                                <strong className="expense-amount">
+                                                <strong className="exp-amount">
                                                     {currencyFormatter
                                                         .format(
                                                             expense
@@ -1069,10 +1698,10 @@ export default function ExpensesPage() {
                                             </td>
 
                                             <td>
-                                                <div className="table-actions">
+                                                <div className="exp-table-actions">
                                                     <button
                                                         type="button"
-                                                        className="view-sale-button"
+                                                        className="exp-edit-button"
                                                         onClick={() => {
                                                             setSelectedExpense(
                                                                 expense,
@@ -1092,7 +1721,7 @@ export default function ExpensesPage() {
 
                                                     <button
                                                         type="button"
-                                                        className="delete-button"
+                                                        className="exp-delete-button"
                                                         onClick={() => {
                                                             void removeExpense(
                                                                 expense,
@@ -1112,7 +1741,7 @@ export default function ExpensesPage() {
                 </div>
 
                 {pagination.total > 0 && (
-                    <footer className="category-pagination">
+                    <footer className="exp-pagination">
                         <p>
                             Showing{' '}
                             <strong>
@@ -1129,10 +1758,10 @@ export default function ExpensesPage() {
                             {' '}expenses
                         </p>
 
-                        <div>
+                        <div className="exp-pagination-controls">
                             <button
                                 type="button"
-                                className="pagination-button"
+                                className="exp-pagination-button"
                                 disabled={
                                     page <= 1
                                 }
@@ -1168,7 +1797,7 @@ export default function ExpensesPage() {
 
                             <button
                                 type="button"
-                                className="pagination-button"
+                                className="exp-pagination-button"
                                 disabled={
                                     page
                                     >= pagination

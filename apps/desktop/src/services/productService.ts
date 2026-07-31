@@ -1,109 +1,120 @@
 import { apiRequest } from "../lib/api";
 
 import type {
-  CategoryOptionsResponse,
-  DeleteProductResponse,
-  ProductFormValues,
-  ProductListParameters,
+  ProductCategoryOptionsResponse,
+  ProductDeleteResponse,
+  ProductDetailsResponse,
+  ProductInput,
+  ProductListFilters,
   ProductListResponse,
+  ProductOptionsResponse,
   ProductResponse,
 } from "../types/product";
 
-function createProductQuery(parameters: ProductListParameters): string {
-  const query = new URLSearchParams();
+function buildProductQuery(filters: ProductListFilters): string {
+  const params = new URLSearchParams();
 
-  query.set("page", String(parameters.page ?? 1));
-
-  query.set("per_page", String(parameters.perPage ?? 10));
-
-  const search = parameters.search?.trim();
-
-  if (search) {
-    query.set("search", search);
+  if (filters.search?.trim()) {
+    params.set("search", filters.search.trim());
   }
 
-  if (parameters.categoryId) {
-    query.set("category_id", parameters.categoryId);
+  if (filters.page) {
+    params.set("page", String(filters.page));
   }
 
-  return query.toString();
+  if (filters.per_page) {
+    params.set("per_page", String(filters.per_page));
+  }
+
+  const query = params.toString();
+
+  return query ? `/products?${query}` : "/products";
 }
 
-function createProductPayload(values: ProductFormValues) {
-  return {
-    category_id: Number(values.category_id),
-
-    name: values.name.trim(),
-
-    sku: values.sku.trim() || null,
-
-    barcode: values.barcode.trim() || null,
-
-    description: values.description.trim() || null,
-
-    cost_price: Number(values.cost_price),
-
-    selling_price: Number(values.selling_price),
-
-    reorder_level: Number(values.reorder_level),
-
-    unit: values.unit,
-
-    expiry_date: values.expiry_date || null,
-  };
-}
-
-export async function getProductCategoryOptions(
-  token: string
-): Promise<CategoryOptionsResponse> {
-  return apiRequest<CategoryOptionsResponse>("/categories/options", {
-    method: "GET",
-    token,
-  });
-}
-
-export async function getProducts(
+export function getProducts(
   token: string,
-  parameters: ProductListParameters
+  filters: ProductListFilters = {}
 ): Promise<ProductListResponse> {
-  const query = createProductQuery(parameters);
-
-  return apiRequest<ProductListResponse>(`/products?${query}`, {
+  return apiRequest<ProductListResponse>(buildProductQuery(filters), {
     method: "GET",
     token,
   });
 }
 
-export async function createProduct(
+export function getProductDetails(
   token: string,
-  values: ProductFormValues
+  productId: number
+): Promise<ProductDetailsResponse> {
+  return apiRequest<ProductDetailsResponse>(`/products/${productId}`, {
+    method: "GET",
+    token,
+  });
+}
+
+export function getProductOptions(
+  token: string
+): Promise<ProductOptionsResponse> {
+  return apiRequest<ProductOptionsResponse>("/products/options", {
+    method: "GET",
+    token,
+  });
+}
+
+export function getProductCategoryOptions(
+  token: string
+): Promise<ProductCategoryOptionsResponse> {
+  return apiRequest<ProductCategoryOptionsResponse>("/categories/options", {
+    method: "GET",
+    token,
+  });
+}
+
+export function createProduct(
+  token: string,
+  values: ProductInput
 ): Promise<ProductResponse> {
   return apiRequest<ProductResponse>("/products", {
     method: "POST",
     token,
 
-    body: JSON.stringify(createProductPayload(values)),
+    body: JSON.stringify({
+      category_id: values.category_id,
+
+      name: values.name.trim(),
+
+      unit: values.unit.trim(),
+
+      barcode: values.barcode.trim() || null,
+    }),
   });
 }
 
-export async function updateProduct(
+export function updateProduct(
   token: string,
   productId: number,
-  values: ProductFormValues
+  values: ProductInput
 ): Promise<ProductResponse> {
   return apiRequest<ProductResponse>(`/products/${productId}`, {
     method: "PUT",
     token,
 
-    body: JSON.stringify(createProductPayload(values)),
+    body: JSON.stringify({
+      category_id: values.category_id,
+
+      name: values.name.trim(),
+
+      unit: values.unit.trim(),
+
+      barcode: values.barcode.trim() || null,
+    }),
   });
 }
 
-export async function deleteProduct(
+export function deleteProduct(
   token: string,
   productId: number
-): Promise<DeleteProductResponse> {
-  return apiRequest<DeleteProductResponse>(`/products/${productId}`, {
+): Promise<ProductDeleteResponse> {
+  return apiRequest<ProductDeleteResponse>(`/products/${productId}`, {
     method: "DELETE",
     token,
   });

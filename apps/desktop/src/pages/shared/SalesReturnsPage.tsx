@@ -75,6 +75,415 @@ function formatDateTime(
     ).format(new Date(value));
 }
 
+const returnsPageStyles = `
+    #sapo-returns-page,
+    #sapo-returns-page *,
+    #sapo-returns-page *::before,
+    #sapo-returns-page *::after {
+        box-sizing: border-box !important;
+    }
+
+    #sapo-returns-page {
+        --srp-green-800: #166534;
+        --srp-green-700: #15803d;
+        --srp-green-100: #dcfce7;
+        --srp-green-50: #f0fdf4;
+        --srp-red: #dc2626;
+        --srp-red-light: #fef2f2;
+        --srp-blue: #2563eb;
+        --srp-text: #111827;
+        --srp-text-secondary: #1f2937;
+        --srp-muted: #6b7280;
+        --srp-border: #e5e7eb;
+        --srp-border-strong: #d1d5db;
+        --srp-bg: #f9fafb;
+        --srp-white: #ffffff;
+        --srp-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 20px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: var(--srp-text-secondary) !important;
+        font-family: var(--srp-font) !important;
+        font-size: 14px !important;
+        line-height: 1.5 !important;
+        background: transparent !important;
+        isolation: isolate !important;
+    }
+
+    #sapo-returns-page h2,
+    #sapo-returns-page p,
+    #sapo-returns-page span,
+    #sapo-returns-page strong,
+    #sapo-returns-page small,
+    #sapo-returns-page button,
+    #sapo-returns-page input,
+    #sapo-returns-page select,
+    #sapo-returns-page table,
+    #sapo-returns-page th,
+    #sapo-returns-page td {
+        font-family: var(--srp-font) !important;
+        letter-spacing: normal !important;
+    }
+
+    #sapo-returns-page h2,
+    #sapo-returns-page p {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* ---------- Header ---------- */
+    #sapo-returns-page .srp-header {
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        padding: 20px 24px !important;
+        background: var(--srp-white) !important;
+        border: 1px solid var(--srp-border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-returns-page .srp-kicker {
+        display: inline-block !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.04em !important;
+        text-transform: uppercase !important;
+        color: var(--srp-green-700) !important;
+        margin-bottom: 6px !important;
+        background: transparent !important;
+    }
+
+    #sapo-returns-page .srp-header h2 {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: var(--srp-text) !important;
+        margin-bottom: 4px !important;
+    }
+
+    #sapo-returns-page .srp-header p {
+        font-size: 13.5px !important;
+        color: var(--srp-muted) !important;
+    }
+
+    /* ---------- Summary cards ---------- */
+    #sapo-returns-page .srp-summary-grid {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+        gap: 16px !important;
+    }
+
+    #sapo-returns-page .srp-summary-grid article {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 6px !important;
+        padding: 18px 20px !important;
+        background: var(--srp-white) !important;
+        border: 1px solid var(--srp-border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-returns-page .srp-summary-grid span {
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        color: var(--srp-muted) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        background: transparent !important;
+    }
+
+    #sapo-returns-page .srp-summary-grid strong {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: var(--srp-text) !important;
+        background: transparent !important;
+    }
+
+    #sapo-returns-page .srp-summary-refund strong {
+        color: var(--srp-red) !important;
+    }
+
+    #sapo-returns-page .srp-summary-profit strong {
+        color: var(--srp-green-700) !important;
+    }
+
+    /* ---------- Alerts ---------- */
+    #sapo-returns-page .srp-alert {
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+
+    #sapo-returns-page .srp-alert-error {
+        background: var(--srp-red-light) !important;
+        border: 1px solid #fecaca !important;
+        color: #b91c1c !important;
+    }
+
+    /* ---------- Content card ---------- */
+    #sapo-returns-page .srp-content-card {
+        background: var(--srp-white) !important;
+        border: 1px solid var(--srp-border) !important;
+        border-radius: 10px !important;
+        padding: 20px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 16px !important;
+    }
+
+    /* ---------- Toolbar ---------- */
+    #sapo-returns-page .srp-toolbar {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 12px !important;
+    }
+
+    #sapo-returns-page .srp-toolbar input[type="search"] {
+        flex: 1 1 240px !important;
+        height: 38px !important;
+        padding: 0 14px !important;
+        font-size: 13.5px !important;
+        color: var(--srp-text-secondary) !important;
+        border: 1px solid var(--srp-border-strong) !important;
+        border-radius: 8px !important;
+        outline: none !important;
+        background: var(--srp-bg) !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-returns-page .srp-toolbar input[type="search"]::placeholder {
+        color: #9ca3af !important;
+    }
+
+    #sapo-returns-page .srp-toolbar input[type="date"] {
+        height: 38px !important;
+        padding: 0 12px !important;
+        font-size: 13.5px !important;
+        color: var(--srp-text-secondary) !important;
+        border: 1px solid var(--srp-border-strong) !important;
+        border-radius: 8px !important;
+        outline: none !important;
+        background: var(--srp-bg) !important;
+        min-width: 150px !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-returns-page .srp-toolbar input:focus {
+        border-color: var(--srp-green-700) !important;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important;
+        background: var(--srp-white) !important;
+    }
+
+    #sapo-returns-page .srp-toolbar select {
+        height: 38px !important;
+        padding: 0 12px !important;
+        font-size: 13.5px !important;
+        border: 1px solid var(--srp-border-strong) !important;
+        border-radius: 8px !important;
+        background: var(--srp-bg) !important;
+        color: var(--srp-text-secondary) !important;
+        outline: none !important;
+        cursor: pointer !important;
+        min-width: 150px !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    }
+
+    #sapo-returns-page .srp-toolbar select:focus {
+        border-color: var(--srp-green-700) !important;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important;
+        background: var(--srp-white) !important;
+    }
+
+    /* ---------- Scrollable table ---------- */
+    #sapo-returns-page .srp-table-container {
+        max-height: 520px !important;
+        overflow-y: auto !important;
+        overflow-x: auto !important;
+        border: 1px solid var(--srp-border) !important;
+        border-radius: 8px !important;
+        background: var(--srp-white) !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: var(--srp-border-strong) transparent !important;
+    }
+
+    #sapo-returns-page .srp-table-container::-webkit-scrollbar {
+        width: 8px !important;
+        height: 8px !important;
+    }
+
+    #sapo-returns-page .srp-table-container::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+
+    #sapo-returns-page .srp-table-container::-webkit-scrollbar-thumb {
+        background: var(--srp-border-strong) !important;
+        border-radius: 8px !important;
+    }
+
+    #sapo-returns-page .srp-table-container::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af !important;
+    }
+
+    #sapo-returns-page .srp-table {
+        width: 100% !important;
+        min-width: 1080px !important;
+        border-collapse: collapse !important;
+        font-size: 13.5px !important;
+        background: var(--srp-white) !important;
+    }
+
+    #sapo-returns-page .srp-table thead {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 1 !important;
+    }
+
+    #sapo-returns-page .srp-table thead th {
+        background: #f9fafb !important;
+        color: var(--srp-muted) !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.03em !important;
+        text-align: left !important;
+        padding: 12px 16px !important;
+        border-bottom: 1px solid var(--srp-border) !important;
+        white-space: nowrap !important;
+    }
+
+    #sapo-returns-page .srp-table tbody td {
+        padding: 14px 16px !important;
+        border-bottom: 1px solid #f1f5f9 !important;
+        vertical-align: middle !important;
+        color: var(--srp-text-secondary) !important;
+        background: var(--srp-white) !important;
+        white-space: nowrap !important;
+    }
+
+    #sapo-returns-page .srp-table tbody tr:last-child td {
+        border-bottom: none !important;
+    }
+
+    #sapo-returns-page .srp-table tbody tr:hover td {
+        background: #f9fafb !important;
+    }
+
+    #sapo-returns-page .srp-table td strong {
+        font-weight: 600 !important;
+        color: var(--srp-text) !important;
+        background: transparent !important;
+    }
+
+    #sapo-returns-page .srp-table-state {
+        text-align: center !important;
+        padding: 40px 16px !important;
+        color: #9ca3af !important;
+        font-size: 13.5px !important;
+        background: var(--srp-white) !important;
+        white-space: normal !important;
+    }
+
+    /* ---------- Buttons ---------- */
+    #sapo-returns-page .srp-view-button {
+        padding: 7px 14px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: var(--srp-blue) !important;
+        background: #eff6ff !important;
+        border: 1px solid #bfdbfe !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+    }
+
+    #sapo-returns-page .srp-view-button:hover {
+        background: var(--srp-blue) !important;
+        color: #ffffff !important;
+        border-color: var(--srp-blue) !important;
+    }
+
+    /* ---------- Pagination ---------- */
+    #sapo-returns-page .srp-pagination {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 12px !important;
+        padding-top: 4px !important;
+    }
+
+    #sapo-returns-page .srp-pagination p {
+        font-size: 13px !important;
+        color: var(--srp-muted) !important;
+        font-weight: 500 !important;
+        background: transparent !important;
+    }
+
+    #sapo-returns-page .srp-pagination-controls {
+        display: flex !important;
+        align-items: center !important;
+        gap: 16px !important;
+    }
+
+    #sapo-returns-page .srp-pagination-controls span {
+        font-size: 13px !important;
+        color: var(--srp-muted) !important;
+        font-weight: 500 !important;
+        background: transparent !important;
+    }
+
+    #sapo-returns-page .srp-pagination-button {
+        padding: 7px 16px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #374151 !important;
+        background: var(--srp-white) !important;
+        border: 1px solid var(--srp-border-strong) !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, border-color 0.15s ease !important;
+    }
+
+    #sapo-returns-page .srp-pagination-button:hover:not(:disabled) {
+        background: #f9fafb !important;
+        border-color: #9ca3af !important;
+    }
+
+    #sapo-returns-page .srp-pagination-button:disabled {
+        opacity: 0.5 !important;
+        cursor: not-allowed !important;
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 640px) {
+        #sapo-returns-page .srp-header {
+            flex-direction: column !important;
+        }
+
+        #sapo-returns-page .srp-toolbar {
+            flex-direction: column !important;
+        }
+
+        #sapo-returns-page .srp-toolbar input,
+        #sapo-returns-page .srp-toolbar select {
+            width: 100% !important;
+        }
+
+        #sapo-returns-page .srp-pagination {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+    }
+`;
+
 export default function SalesReturnsPage() {
     const {
         token,
@@ -84,9 +493,7 @@ export default function SalesReturnsPage() {
     const [
         returns,
         setReturns,
-    ] = useState<
-        SalesReturnHistoryItem[]
-    >([]);
+    ] = useState<SalesReturnHistoryItem[]>([]);
 
     const [
         summary,
@@ -165,9 +572,7 @@ export default function SalesReturnsPage() {
     const [
         selectedDetails,
         setSelectedDetails,
-    ] = useState<
-        SalesReturnDetails | null
-    >(null);
+    ] = useState<SalesReturnDetails | null>(null);
 
     const [
         isLoadingDetails,
@@ -295,10 +700,14 @@ export default function SalesReturnsPage() {
         };
 
     return (
-        <div className="page-stack">
-            <section className="returns-page-header">
+        <div id="sapo-returns-page">
+            <style>
+                {returnsPageStyles}
+            </style>
+
+            <section className="srp-header">
                 <div>
-                    <span className="page-kicker">
+                    <span className="srp-kicker">
                         Refund and stock restoration
                     </span>
 
@@ -316,7 +725,7 @@ export default function SalesReturnsPage() {
                 </div>
             </section>
 
-            <section className="returns-summary-grid">
+            <section className="srp-summary-grid">
                 <article>
                     <span>Total Returns</span>
                     <strong>
@@ -324,7 +733,7 @@ export default function SalesReturnsPage() {
                     </strong>
                 </article>
 
-                <article>
+                <article className="srp-summary-refund">
                     <span>Total Refund</span>
 
                     <strong>
@@ -357,7 +766,7 @@ export default function SalesReturnsPage() {
                 </article>
 
                 {isAdmin && (
-                    <article>
+                    <article className="srp-summary-profit">
                         <span>Profit Reversal</span>
 
                         <strong>
@@ -372,13 +781,13 @@ export default function SalesReturnsPage() {
             </section>
 
             {pageError && (
-                <div className="form-alert">
+                <div className="srp-alert srp-alert-error">
                     {pageError}
                 </div>
             )}
 
-            <section className="content-card">
-                <div className="returns-toolbar">
+            <section className="srp-content-card">
+                <div className="srp-toolbar">
                     <input
                         type="search"
                         value={searchInput}
@@ -454,21 +863,21 @@ export default function SalesReturnsPage() {
                         }}
                     >
                         <option value={10}>
-                            10
+                            10 per page
                         </option>
 
                         <option value={20}>
-                            20
+                            20 per page
                         </option>
 
                         <option value={50}>
-                            50
+                            50 per page
                         </option>
                     </select>
                 </div>
 
-                <div className="returns-table-container">
-                    <table className="returns-table">
+                <div className="srp-table-container">
+                    <table className="srp-table">
                         <thead>
                             <tr>
                                 <th>Return</th>
@@ -489,7 +898,7 @@ export default function SalesReturnsPage() {
                                 <tr>
                                     <td
                                         colSpan={10}
-                                        className="table-state"
+                                        className="srp-table-state"
                                     >
                                         Loading sales returns...
                                     </td>
@@ -498,7 +907,7 @@ export default function SalesReturnsPage() {
                                 <tr>
                                     <td
                                         colSpan={10}
-                                        className="table-state"
+                                        className="srp-table-state"
                                     >
                                         No sales returns found.
                                     </td>
@@ -576,7 +985,7 @@ export default function SalesReturnsPage() {
                                             <td>
                                                 <button
                                                     type="button"
-                                                    className="view-sale-button"
+                                                    className="srp-view-button"
                                                     onClick={() => {
                                                         void openDetails(
                                                             item.id,
@@ -595,16 +1004,16 @@ export default function SalesReturnsPage() {
                 </div>
 
                 {total > 0 && (
-                    <footer className="category-pagination">
+                    <footer className="srp-pagination">
                         <p>
                             Showing {from} to {to}
                             {' '}of {total}
                         </p>
 
-                        <div>
+                        <div className="srp-pagination-controls">
                             <button
                                 type="button"
-                                className="pagination-button"
+                                className="srp-pagination-button"
                                 disabled={page <= 1}
                                 onClick={() => {
                                     setPage(
@@ -623,7 +1032,7 @@ export default function SalesReturnsPage() {
 
                             <button
                                 type="button"
-                                className="pagination-button"
+                                className="srp-pagination-button"
                                 disabled={
                                     page >= lastPage
                                 }
