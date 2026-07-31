@@ -112,13 +112,6 @@ class SaleController extends Controller
 
         $query = Sale::query();
 
-        if ($user->isCashier()) {
-            $query->where(
-                'created_by',
-                $user->id,
-            );
-        }
-
         $query
             ->when(
                 $search !== '',
@@ -431,10 +424,10 @@ class SaleController extends Controller
 
                     if (! $customer->is_active) {
                         throw ValidationException::withMessages([
-                                'customer_id' => [
-                                    'The selected customer is inactive.',
-                                ],
-                            ]);
+                            'customer_id' => [
+                                'The selected customer is inactive.',
+                            ],
+                        ]);
                     }
                 }
 
@@ -474,10 +467,10 @@ class SaleController extends Controller
                     !== $batchIds->count()
                 ) {
                     throw ValidationException::withMessages([
-                            'items' => [
-                                'One or more selected stock batches are unavailable.',
-                            ],
-                        ]);
+                        'items' => [
+                            'One or more selected stock batches are unavailable.',
+                        ],
+                    ]);
                 }
 
                 $computedItems = [];
@@ -500,10 +493,10 @@ class SaleController extends Controller
 
                     if (! $batch) {
                         throw ValidationException::withMessages([
-                                "items.{$index}.stock_batch_id" => [
-                                    'The selected stock batch is unavailable.',
-                                ],
-                            ]);
+                            "items.{$index}.stock_batch_id" => [
+                                'The selected stock batch is unavailable.',
+                            ],
+                        ]);
                     }
 
                     if (
@@ -515,10 +508,10 @@ class SaleController extends Controller
                         )
                     ) {
                         throw ValidationException::withMessages([
-                                "items.{$index}.stock_batch_id" => [
-                                    "{$batch->product->name} cannot be sold because the selected batch has expired.",
-                                ],
-                            ]);
+                            "items.{$index}.stock_batch_id" => [
+                                "{$batch->product->name} cannot be sold because the selected batch has expired.",
+                            ],
+                        ]);
                     }
 
                     $quantity = round(
@@ -538,10 +531,10 @@ class SaleController extends Controller
                         > $availableQuantity
                     ) {
                         throw ValidationException::withMessages([
-                                "items.{$index}.quantity" => [
-                                    "Only {$availableQuantity} {$batch->product->unit} are available.",
-                                ],
-                            ]);
+                            "items.{$index}.quantity" => [
+                                "Only {$availableQuantity} {$batch->product->unit} are available.",
+                            ],
+                        ]);
                     }
 
                     $sellingPrice =
@@ -578,10 +571,10 @@ class SaleController extends Controller
                         > $lineSubtotal
                     ) {
                         throw ValidationException::withMessages([
-                                "items.{$index}.discount" => [
-                                    'The item discount cannot exceed the item total.',
-                                ],
-                            ]);
+                            "items.{$index}.discount" => [
+                                'The item discount cannot exceed the item total.',
+                            ],
+                        ]);
                     }
 
                     $lineTotal =
@@ -652,10 +645,10 @@ class SaleController extends Controller
                     > $maximumDiscount
                 ) {
                     throw ValidationException::withMessages([
-                            'discount' => [
-                                'The sale discount cannot exceed the cart total.',
-                            ],
-                        ]);
+                        'discount' => [
+                            'The sale discount cannot exceed the cart total.',
+                        ],
+                    ]);
                 }
 
                 $grandTotal =
@@ -690,10 +683,10 @@ class SaleController extends Controller
                 ) {
                     if (! $paymentMethod) {
                         throw ValidationException::withMessages([
-                                'payment_method' => [
-                                    'Please select a payment method.',
-                                ],
-                            ]);
+                            'payment_method' => [
+                                'Please select a payment method.',
+                            ],
+                        ]);
                     }
 
                     if (
@@ -705,10 +698,10 @@ class SaleController extends Controller
                             < $grandTotal
                         ) {
                             throw ValidationException::withMessages([
-                                    'amount_received' => [
-                                        'The received cash amount is less than the sale total.',
-                                    ],
-                                ]);
+                                'amount_received' => [
+                                    'The received cash amount is less than the sale total.',
+                                ],
+                            ]);
                         }
 
                         $changeAmount =
@@ -724,10 +717,10 @@ class SaleController extends Controller
                         ) > 0.01
                     ) {
                         throw ValidationException::withMessages([
-                                'amount_received' => [
-                                    'Card and bank-transfer payments must equal the sale total.',
-                                ],
-                            ]);
+                            'amount_received' => [
+                                'Card and bank-transfer payments must equal the sale total.',
+                            ],
+                        ]);
                     }
 
                     $paidAmount =
@@ -738,10 +731,10 @@ class SaleController extends Controller
                 ) {
                     if (! $customer) {
                         throw ValidationException::withMessages([
-                                'customer_id' => [
-                                    'A customer is required for a partial payment sale.',
-                                ],
-                            ]);
+                            'customer_id' => [
+                                'A customer is required for a partial payment sale.',
+                            ],
+                        ]);
                     }
 
                     if (
@@ -751,10 +744,10 @@ class SaleController extends Controller
                         >= $grandTotal
                     ) {
                         throw ValidationException::withMessages([
-                                'amount_received' => [
-                                    'The partial payment must be greater than zero and less than the sale total.',
-                                ],
-                            ]);
+                            'amount_received' => [
+                                'The partial payment must be greater than zero and less than the sale total.',
+                            ],
+                        ]);
                     }
 
                     $paidAmount =
@@ -772,18 +765,18 @@ class SaleController extends Controller
                 } else {
                     if (! $customer) {
                         throw ValidationException::withMessages([
-                                'customer_id' => [
-                                    'A customer is required for a due sale.',
-                                ],
-                            ]);
+                            'customer_id' => [
+                                'A customer is required for a due sale.',
+                            ],
+                        ]);
                     }
 
                     if ($amountReceived > 0) {
                         throw ValidationException::withMessages([
-                                'amount_received' => [
-                                    'Use partial payment when an initial amount is received.',
-                                ],
-                            ]);
+                            'amount_received' => [
+                                'Use partial payment when an initial amount is received.',
+                            ],
+                        ]);
                     }
 
                     $paidAmount = 0;
@@ -817,10 +810,10 @@ class SaleController extends Controller
                             ->credit_limit
                     ) {
                         throw ValidationException::withMessages([
-                                'customer_id' => [
-                                    'This sale would exceed the customer credit limit.',
-                                ],
-                            ]);
+                            'customer_id' => [
+                                'This sale would exceed the customer credit limit.',
+                            ],
+                        ]);
                     }
                 }
 
@@ -1056,18 +1049,8 @@ class SaleController extends Controller
             ], 401);
         }
 
-        if (
-            $user->isCashier()
-            && $sale->created_by
-            !== $user->id
-        ) {
-            return response()->json([
-                'message' =>
-                'You are not allowed to view this sale.',
-            ], 403);
-        }
-
         return response()->json([
+            
             'data' =>
             $this->saleData(
                 $this->loadSale(
