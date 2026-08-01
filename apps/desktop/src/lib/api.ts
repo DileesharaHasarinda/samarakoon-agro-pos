@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "../config/app";
+import { getApiBaseUrl } from "./serverConfig";
 
 import type { ValidationErrors } from "../types/auth";
 
@@ -53,13 +53,13 @@ export async function apiRequest<T>(
   let response: Response;
 
   try {
-    response = await fetch(`${API_BASE_URL}${normalisedPath}`, {
+    response = await fetch(`${getApiBaseUrl()}${normalisedPath}`, {
       ...requestOptions,
       headers,
     });
   } catch {
     throw new ApiError(
-      "Unable to connect to the Samarakoon POS API. Make sure the Laravel server is running.",
+      "Unable to connect to the Samarakoon POS API. Make sure the Laravel server is running and the server address in Settings is correct.",
       0
     );
   }

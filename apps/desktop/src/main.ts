@@ -45,6 +45,62 @@ const createWindow = () => {
   }
 };
 
+// ---------------------------------------------------------------
+// Server configuration (persisted per-machine)
+//
+// Each installed copy of the desktop app (Admin PC, Cashier PC 1,
+// Cashier PC 2, etc.) needs to know the address of the machine
+// running the Laravel API. Rather than baking that address into
+// the build, it is entered once on first launch (via the
+// ServerSetupScreen in the renderer) and persisted to a small JSON
+// file inside this app's userData folder, so it survives restarts
+// and app updates without needing a rebuild.
+// ---------------------------------------------------------------
+
+interface ServerConfig {
+  apiBaseUrl: string;
+}
+
+function getServerConfigPath(): string {
+  return path.join(app.getPath("userData"), "server-config.json");
+}
+
+async function readServerConfig(): Promise<ServerConfig | null> {
+  try {
+    const raw = await fs.readFile(getServerConfigPath(), "utf-8");
+    const parsed = JSON.parse(raw);
+
+    if (
+      parsed &&
+      typeof parsed.apiBaseUrl === "string" &&
+      parsed.apiBaseUrl.trim().length > 0
+    ) {
+      return { apiBaseUrl: parsed.apiBaseUrl };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeServerConfig(config: ServerConfig): Promise<void> {
+  await fs.writeFile(
+    getServerConfigPath(),
+    JSON.stringify(config, null, 2),
+    "utf-8"
+  );
+}
+
+ipcMain.handle("get-server-config", async () => {
+  return readServerConfig();
+});
+
+ipcMain.handle("save-server-config", async (_event, config: ServerConfig) => {
+  await writeServerConfig(config);
+  return { success: true };
+});
+
 interface PosPrintOptions {
   printerName?: string | null;
   paperWidthMicrons?: number;
@@ -328,7 +384,7 @@ class EscPosBuilder {
     // predictable.
     const normalized = value.replace(
       /[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g,
-      " ",
+      " "
     );
 
     // Also normalize common "smart" punctuation that word

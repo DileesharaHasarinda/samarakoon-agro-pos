@@ -1,4 +1,9 @@
 import {
+    useEffect,
+    useState,
+} from 'react';
+
+import {
     Navigate,
     Route,
     Routes,
@@ -21,6 +26,17 @@ import LoginPage
 
 import NotFoundPage
     from './pages/NotFoundPage';
+
+import ServerSetupScreen
+    from './pages/ServerSetupScreen';
+
+import LoadingScreen
+from './components/LoadingScreen';
+
+import {
+    hasServerConfig,
+    loadServerConfig,
+} from './lib/serverConfig';
 
 import AdminDashboardPage
     from './pages/admin/AdminDashboardPage';
@@ -90,6 +106,52 @@ import ProductDetailsPage
 
 
 export default function App() {
+    const [
+        isCheckingServerConfig,
+        setIsCheckingServerConfig,
+    ] = useState(true);
+
+    const [
+        isServerConfigured,
+        setIsServerConfigured,
+    ] = useState(false);
+
+    useEffect(() => {
+        void (
+            async (): Promise<void> => {
+                const savedUrl =
+                    await loadServerConfig();
+
+                setIsServerConfigured(
+                    Boolean(savedUrl),
+                );
+
+                setIsCheckingServerConfig(
+                    false,
+                );
+            }
+        )();
+    }, []);
+
+    if (isCheckingServerConfig) {
+        return <LoadingScreen />;
+    }
+
+    if (
+        !isServerConfigured
+        && !hasServerConfig()
+    ) {
+        return (
+            <ServerSetupScreen
+                onConfigured={() => {
+                    setIsServerConfigured(
+                        true,
+                    );
+                }}
+            />
+        );
+    }
+
     return (
         <Routes>
             <Route
