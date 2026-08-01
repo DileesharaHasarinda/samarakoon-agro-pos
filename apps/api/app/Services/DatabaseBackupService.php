@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DatabaseBackup;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -243,6 +244,20 @@ class DatabaseBackupService
 
             $backup->save();
 
+            /*
+             * Mirror the completed backup file to off-site
+             * cloud storage (Cloudflare R2), so it survives
+             * even if this machine's disk is lost or damaged.
+             * A failure here must never fail the backup itself
+             * — the local file is already safely created and
+             * recorded; cloud upload is a best-effort addition
+             * on top of that.
+             */
+            $this->uploadToCloud(
+                $disk,
+                $path,
+            );
+
             return $backup->fresh([
                 'createdBy:id,name,username',
             ]);
@@ -446,6 +461,7 @@ class DatabaseBackupService
             $this->timeout(),
         );
 
+
         try {
             $process->run();
         } finally {
@@ -579,6 +595,7 @@ class DatabaseBackupService
             );
         }
 
+
         if (
             Storage::disk(
                 $backup->disk,
@@ -592,6 +609,10 @@ class DatabaseBackupService
                 $backup->path,
             );
         }
+
+        $this->deleteFromCloud(
+            $backup->path,
+        );
 
         $backup->delete();
     }
@@ -841,5 +862,140 @@ class DatabaseBackupService
                 900,
             ),
         );
+    }
+
+    private function cloudUploadEnabled(): bool
+    {
+        return filter_var(
+            config(
+                'backup.cloud_upload_enabled',
+                false,
+            ),
+            FILTER_VALIDATE_BOOL,
+        );
+    }
+
+    private function cloudDisk(): string
+    {
+        return (string) config(
+            'backup.cloud_disk',
+            'r2',
+        );
+    }
+
+    /**
+     * Uploads a locally-created backup file to the configured
+     * off-site cloud disk (Cloudflare R2), using the exact same
+     * relative path as the local disk so the two stay easy to
+     * correlate. Any failure here is logged but never thrown —
+     * a cloud upload problem must not cause the local backup
+     * (which already succeeded) to be reported as failed.
+     */
+    private function uploadToCloud(
+        string $sourceDisk,
+        string $path,
+    ): void {
+        if (! $this->cloudUploadEnabled()) {
+            return;
+        }
+
+        $cloudDisk =
+            $this->cloudDisk();
+
+        if ($cloudDisk === $sourceDisk) {
+            return;
+        }
+
+        try {
+            $stream =
+                Storage::disk(
+                    $sourceDisk,
+                )->readStream(
+                    $path,
+                );
+
+            if ($stream === null) {
+                throw new RuntimeException(
+                    'Unable to read the local backup file for cloud upload.',
+                );
+            }
+
+            try {
+                Storage::disk(
+                    $cloudDisk,
+                )->put(
+                    $path,
+                    $stream,
+                );
+            } finally {
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+            }
+        } catch (Throwable $exception) {
+            Log::warning(
+                'Database backup cloud upload failed.',
+                [
+                    'path' =>
+                    $path,
+
+                    'cloud_disk' =>
+                    $cloudDisk,
+
+                    'message' =>
+                    $exception
+                        ->getMessage(),
+                ],
+            );
+        }
+    }
+
+    /**
+     * Removes the matching backup file from the off-site cloud
+     * disk when a backup is deleted or pruned locally, so the
+     * two storage locations stay in sync. Failures are logged
+     * only — a cloud deletion problem must not block deletion
+     * of the local backup record.
+     */
+    private function deleteFromCloud(
+        string $path,
+    ): void {
+        if (! $this->cloudUploadEnabled()) {
+            return;
+        }
+
+        $cloudDisk =
+            $this->cloudDisk();
+
+        try {
+            if (
+                Storage::disk(
+                    $cloudDisk,
+                )->exists(
+                    $path,
+                )
+            ) {
+                Storage::disk(
+                    $cloudDisk,
+                )->delete(
+                    $path,
+                );
+            }
+        } catch (Throwable $exception) {
+            Log::warning(
+                'Database backup cloud deletion failed.',
+                [
+                    'path' =>
+                    $path,
+
+                    'cloud_disk' =>
+                    $cloudDisk,
+
+                    'message' =>
+                    $exception
+                        ->getMessage(),
+                ],
+            );
+        }
     }
 }

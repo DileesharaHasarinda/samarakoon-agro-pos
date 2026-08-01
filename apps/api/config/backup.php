@@ -86,4 +86,30 @@ return [
         'DATABASE_BACKUP_RETENTION_DAYS',
         30,
     ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Off-site cloud upload (Cloudflare R2)
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, every backup created is also uploaded to the "r2"
+    | filesystem disk (see config/filesystems.php), so backups survive
+    | even if this machine's disk is lost or damaged.
+    |
+    */
+
+    'cloud_upload_enabled' =>
+    filter_var(
+        env(
+            'DATABASE_BACKUP_CLOUD_UPLOAD',
+            false,
+        ),
+        FILTER_VALIDATE_BOOL,
+    ),
+
+    'cloud_disk' =>
+    env(
+        'DATABASE_BACKUP_CLOUD_DISK',
+        'r2',
+    ),
 ];
