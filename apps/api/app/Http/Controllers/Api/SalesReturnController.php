@@ -101,19 +101,8 @@ class SalesReturnController extends Controller
 
         $query = SaleReturn::query();
 
-        if ($user->isCashier()) {
-            $query->whereHas(
-                'sale',
-                fn(
-                    Builder $saleQuery,
-                ) => $saleQuery->where(
-                    'created_by',
-                    $user->id,
-                ),
-            );
-        }
-
         $query
+
             ->when(
                 $search !== '',
                 function (
@@ -367,11 +356,6 @@ class SalesReturnController extends Controller
             ], 401);
         }
 
-        $this->ensureSaleAccess(
-            $user,
-            $sale,
-        );
-
         $sale->load([
             'createdBy:id,name,username',
 
@@ -576,11 +560,6 @@ class SalesReturnController extends Controller
             ], 401);
         }
 
-        $this->ensureSaleAccess(
-            $user,
-            $sale,
-        );
-
         $validated =
             $request->validated();
 
@@ -637,10 +616,10 @@ class SalesReturnController extends Controller
                     ->count()
                 ) {
                     throw ValidationException::withMessages([
-                            'items' => [
-                                'One or more selected items do not belong to this sale.',
-                            ],
-                        ]);
+                        'items' => [
+                            'One or more selected items do not belong to this sale.',
+                        ],
+                    ]);
                 }
 
                 $allSaleItems =
@@ -735,10 +714,10 @@ class SalesReturnController extends Controller
 
                     if (! $saleItem) {
                         throw ValidationException::withMessages([
-                                "items.{$index}.sale_item_id" => [
-                                    'The selected sale item is unavailable.',
-                                ],
-                            ]);
+                            "items.{$index}.sale_item_id" => [
+                                'The selected sale item is unavailable.',
+                            ],
+                        ]);
                     }
 
                     $soldQuantity =
@@ -777,10 +756,10 @@ class SalesReturnController extends Controller
                         > $remainingQuantity
                     ) {
                         throw ValidationException::withMessages([
-                                "items.{$index}.quantity" => [
-                                    "Only {$remainingQuantity} units remain available for return.",
-                                ],
-                            ]);
+                            "items.{$index}.quantity" => [
+                                "Only {$remainingQuantity} units remain available for return.",
+                            ],
+                        ]);
                     }
 
                     $saleDiscountShare =
@@ -1019,10 +998,10 @@ class SalesReturnController extends Controller
                             ->product_id
                         ) {
                             throw ValidationException::withMessages([
-                                    'items' => [
-                                        'The original stock batch does not match the returned product.',
-                                    ],
-                                ]);
+                                'items' => [
+                                    'The original stock batch does not match the returned product.',
+                                ],
+                            ]);
                         }
 
                         $quantityBefore =
@@ -1156,19 +1135,6 @@ class SalesReturnController extends Controller
         $salesReturn->loadMissing(
             'sale',
         );
-
-        if (
-            $user->isCashier()
-            && $salesReturn
-            ->sale
-            ->created_by
-            !== $user->id
-        ) {
-            return response()->json([
-                'message' =>
-                'You are not allowed to view this return.',
-            ], 403);
-        }
 
         return response()->json([
             'data' =>

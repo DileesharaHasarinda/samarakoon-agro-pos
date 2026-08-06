@@ -390,6 +390,10 @@ class PosController extends Controller
                         (float) $batch
                             ->selling_price,
 
+                        'unit_cost' =>
+                        (float) $batch
+                            ->purchase_cost,
+
                         'available_quantity' =>
                         (float) $batch
                             ->available_quantity,

@@ -4,6 +4,8 @@ import {
     useState,
 } from 'react';
 
+import { createPortal } from 'react-dom';
+
 import type {
     FormEvent,
 } from 'react';
@@ -88,7 +90,7 @@ const salesReturnModalStyles = `
 
         position: fixed !important;
         inset: 0 !important;
-        z-index: 1000 !important;
+        z-index: 2000 !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -989,7 +991,7 @@ export default function CreateSalesReturnModal({
         });
     };
 
-    return (
+    return createPortal(
         <div
             id="sapo-sales-return-modal"
             role="presentation"
@@ -1422,6 +1424,7 @@ export default function CreateSalesReturnModal({
                     </div>
                 )}
             </section>
-        </div>
+        </div>,
+        document.body,
     );
 }
