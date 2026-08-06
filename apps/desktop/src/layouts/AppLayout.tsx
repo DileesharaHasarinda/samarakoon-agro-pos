@@ -25,6 +25,7 @@ type IconName =
     | 'cart'
     | 'cash'
     | 'chart'
+    | 'cheque'
     | 'chevron-right'
     | 'clock'
     | 'close'
@@ -529,6 +530,11 @@ const adminNavigation: NavigationSection[] = [
     {
         title: 'Finance',
         items: [
+            {
+                label: 'Cheques',
+                path: '/admin/cheques',
+                icon: 'cheque',
+            },
             {
                 label: 'Expenses',
                 path: '/admin/expenses',

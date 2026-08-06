@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BusinessSettingController;
 use App\Http\Controllers\Api\CashierAccountController;
 use App\Http\Controllers\Api\CashierShiftController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ChequeController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerDueController;
 use App\Http\Controllers\Api\DashboardController;
@@ -241,6 +242,7 @@ Route::prefix('v1')
                         'index',
                     ],
                 );
+
 
                 Route::get(
                     '/sales-returns/{salesReturn}',
@@ -478,6 +480,35 @@ Route::prefix('v1')
                         InventoryAlertController::class,
                         'updateSettings',
                     ],
+                );
+
+                /*
+                 * Cheque management.
+                 *
+                 * The alerts route is declared before
+                 * the apiResource routes so it is not
+                 * captured by the dynamic {cheque}
+                 * route.
+                 */
+                Route::get(
+                    '/cheques/alerts',
+                    [
+                        ChequeController::class,
+                        'alerts',
+                    ],
+                );
+
+                Route::patch(
+                    '/cheques/{cheque}/status',
+                    [
+                        ChequeController::class,
+                        'updateStatus',
+                    ],
+                );
+
+                Route::apiResource(
+                    'cheques',
+                    ChequeController::class,
                 );
 
                 /*

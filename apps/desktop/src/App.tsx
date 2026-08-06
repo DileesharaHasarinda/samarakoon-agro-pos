@@ -30,8 +30,11 @@ import NotFoundPage
 import ServerSetupScreen
     from './pages/ServerSetupScreen';
 
+import ChequesPage
+    from './pages/admin/ChequesPage';
+
 import LoadingScreen
-from './components/LoadingScreen';
+    from './components/LoadingScreen';
 
 import {
     hasServerConfig,
@@ -293,6 +296,13 @@ export default function App() {
                         path="expenses"
                         element={
                             <ExpensesPage />
+                        }
+                    />
+
+                    <Route
+                        path="cheques"
+                        element={
+                            <ChequesPage />
                         }
                     />
 

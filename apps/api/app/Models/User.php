@@ -17,6 +17,8 @@ class User extends Authenticatable
 
     public const ROLE_CASHIER = 'cashier';
 
+    public const ROLE_RESTRICTED_CASHIER = 'restricted_cashier';
+
     /**
      * @var array<int, string>
      */
@@ -28,6 +30,7 @@ class User extends Authenticatable
         'role',
         'is_active',
         'last_login_at',
+        'restricted_category_ids',
     ];
 
     /**
@@ -48,6 +51,7 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
             'email_verified_at' => 'datetime',
+            'restricted_category_ids' => 'array',
         ];
     }
 
@@ -59,5 +63,49 @@ class User extends Authenticatable
     public function isCashier(): bool
     {
         return $this->role === self::ROLE_CASHIER;
+    }
+
+    public function isRestrictedCashier(): bool
+    {
+        return $this->role === self::ROLE_RESTRICTED_CASHIER;
+    }
+
+    /**
+     * True for any user who is allowed to see every category
+     * (admins and regular cashiers). Restricted cashiers are
+     * limited to their assigned category list.
+     */
+    public function hasUnrestrictedCategoryAccess(): bool
+    {
+        return $this->isAdmin() || $this->isCashier();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function restrictedCategoryIds(): array
+    {
+        if (! $this->isRestrictedCashier()) {
+            return [];
+        }
+
+        $ids = $this->restricted_category_ids ?? [];
+
+        return array_values(
+            array_map('intval', $ids),
+        );
+    }
+
+    public function canAccessCategory(int $categoryId): bool
+    {
+        if ($this->hasUnrestrictedCategoryAccess()) {
+            return true;
+        }
+
+        return in_array(
+            $categoryId,
+            $this->restrictedCategoryIds(),
+            true,
+        );
     }
 }

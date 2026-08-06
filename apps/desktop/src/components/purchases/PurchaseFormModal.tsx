@@ -2467,13 +2467,13 @@ export default function PurchaseFormModal({
                                                                         </p>
                                                                     ) : (
                                                                         <span className="pfm-help">
-                                                                            <Icon name="info" />
+                                                                            {/* <Icon name="info" />
 
                                                                             Unit:
                                                                             {' '}
 
                                                                             {selectedProduct?.unit
-                                                                                ?? 'Not selected'}
+                                                                                ?? 'Not selected'} */}
                                                                         </span>
                                                                     )}
                                                                 </label>
@@ -2627,9 +2627,9 @@ export default function PurchaseFormModal({
                                                                     <span className="pfm-label">
                                                                         Item Discount
 
-                                                                        <span className="pfm-optional">
+                                                                        {/* <span className="pfm-optional">
                                                                             Optional
-                                                                        </span>
+                                                                        </span> */}
                                                                     </span>
 
                                                                     <span className="pfm-control-wrap">
