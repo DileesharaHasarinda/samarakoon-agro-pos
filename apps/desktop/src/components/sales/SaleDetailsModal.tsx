@@ -2,7 +2,9 @@ import {
     useEffect,
 } from 'react';
 
-import { createPortal } from 'react-dom';
+import {
+    createPortal,
+} from 'react-dom';
 
 import type {
     SaleReceipt,
@@ -39,7 +41,9 @@ function formatDateTime(
             hour: '2-digit',
             minute: '2-digit',
         },
-    ).format(new Date(value));
+    ).format(
+        new Date(value),
+    );
 }
 
 function formatDate(
@@ -57,8 +61,22 @@ function formatDate(
             year: 'numeric',
         },
     ).format(
-        new Date(`${value}T00:00:00`),
+        new Date(
+            `${value}T00:00:00`,
+        ),
     );
+}
+
+function formatQuantity(
+    value: number,
+): string {
+    return new Intl.NumberFormat(
+        'en-GB',
+        {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 3,
+        },
+    ).format(value);
 }
 
 function paymentName(
@@ -70,6 +88,9 @@ function paymentName(
 
         case 'card':
             return 'Card';
+
+        case 'cheque':
+            return 'Cheque';
 
         default:
             return 'Cash';
@@ -146,17 +167,31 @@ const saleDetailsModalStyles = `
         right: 0 !important;
         bottom: 0 !important;
         z-index: 2147483000 !important;
+
         display: flex !important;
+
         width: 100vw !important;
         height: 100vh !important;
         height: 100dvh !important;
+
         align-items: center !important;
         justify-content: center !important;
+
         margin: 0 !important;
         padding: 24px !important;
+
         font-family: var(--sdm-font) !important;
-        background: rgba(15, 23, 42, 0.55) !important;
-        backdrop-filter: blur(2px) !important;
+
+        background:
+            rgba(
+                15,
+                23,
+                42,
+                0.55
+            ) !important;
+
+        backdrop-filter:
+            blur(2px) !important;
     }
 
     #sapo-sale-details-modal *,
@@ -168,73 +203,125 @@ const saleDetailsModalStyles = `
     #sapo-sale-details-modal strong,
     #sapo-sale-details-modal small,
     #sapo-sale-details-modal button {
-        font-family: var(--sdm-font) !important;
+        font-family:
+            var(--sdm-font) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-panel {
         display: flex !important;
+
         width: 100% !important;
         max-width: 1080px !important;
+
         height: 100% !important;
         max-height: 88vh !important;
+
         flex-direction: column !important;
+
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
-        background: var(--sdm-white) !important;
-        border-radius: var(--sdm-radius) !important;
-        box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28) !important;
-    }
 
-    /* ---------- Header ---------- */
+        overflow: hidden !important;
+
+        background:
+            var(--sdm-white) !important;
+
+        border-radius:
+            var(--sdm-radius) !important;
+
+        box-shadow:
+            0 24px 48px
+            rgba(
+                15,
+                23,
+                42,
+                0.28
+            ) !important;
+    }
 
     #sapo-sale-details-modal
     .sdm-header {
         display: flex !important;
-        flex: 0 0 auto !important;
-        align-items: flex-start !important;
-        justify-content: space-between !important;
+
+        flex:
+            0 0 auto !important;
+
+        align-items:
+            flex-start !important;
+
+        justify-content:
+            space-between !important;
+
         gap: 16px !important;
+
         margin: 0 !important;
-        padding: 18px 22px !important;
-        background: var(--sdm-white) !important;
-        border-bottom: 1px solid var(--sdm-border) !important;
+
+        padding:
+            18px 22px !important;
+
+        background:
+            var(--sdm-white) !important;
+
+        border-bottom:
+            1px solid
+            var(--sdm-border) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-header-copy {
         display: flex !important;
+
         min-width: 0 !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 3px !important;
     }
 
     #sapo-sale-details-modal
     .sdm-kicker {
         display: block !important;
+
         margin: 0 !important;
-        color: var(--sdm-green-700) !important;
+
+        color:
+            var(--sdm-green-700) !important;
+
         font-size: 11px !important;
         font-weight: 700 !important;
-        letter-spacing: 0.06em !important;
-        text-transform: uppercase !important;
+
+        letter-spacing:
+            0.06em !important;
+
+        text-transform:
+            uppercase !important;
     }
 
     #sapo-sale-details-modal
     .sdm-header-copy h2 {
         margin: 0 !important;
-        color: var(--sdm-text) !important;
+
+        color:
+            var(--sdm-text) !important;
+
         font-size: 18px !important;
         font-weight: 700 !important;
+
         line-height: 1.3 !important;
-        letter-spacing: -0.01em !important;
+
+        letter-spacing:
+            -0.01em !important;
     }
 
     #sapo-sale-details-modal
     .sdm-header-copy p {
         margin: 0 !important;
-        color: var(--sdm-muted) !important;
+
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 13px !important;
         font-weight: 500 !important;
     }
@@ -242,43 +329,82 @@ const saleDetailsModalStyles = `
     #sapo-sale-details-modal
     .sdm-close-button {
         display: grid !important;
+
         width: 32px !important;
         height: 32px !important;
         min-width: 32px !important;
+
         flex-shrink: 0 !important;
-        place-items: center !important;
+
+        place-items:
+            center !important;
+
         margin: 0 !important;
         padding: 0 !important;
-        color: var(--sdm-muted) !important;
+
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 20px !important;
         font-weight: 400 !important;
+
         line-height: 1 !important;
+
         appearance: none !important;
-        background: var(--sdm-bg) !important;
-        border: 1px solid var(--sdm-border) !important;
-        border-radius: var(--sdm-radius-sm) !important;
+
+        background:
+            var(--sdm-bg) !important;
+
+        border:
+            1px solid
+            var(--sdm-border) !important;
+
+        border-radius:
+            var(--sdm-radius-sm) !important;
+
         cursor: pointer !important;
-        transition: background-color 120ms ease, color 120ms ease !important;
+
+        transition:
+            background-color
+            120ms ease,
+            color
+            120ms ease !important;
     }
 
     #sapo-sale-details-modal
     .sdm-close-button:hover {
-        color: var(--sdm-text) !important;
-        background: #eef2f6 !important;
-    }
+        color:
+            var(--sdm-text) !important;
 
-    /* ---------- Scrollable body ---------- */
+        background:
+            #eef2f6 !important;
+    }
 
     #sapo-sale-details-modal
     .sdm-body {
-        flex: 1 1 auto !important;
+        flex:
+            1 1 auto !important;
+
         min-height: 0 !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
-        overscroll-behavior-y: contain !important;
-        scrollbar-gutter: stable !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: var(--sdm-border-strong) transparent !important;
+
+        overflow-x:
+            hidden !important;
+
+        overflow-y:
+            auto !important;
+
+        overscroll-behavior-y:
+            contain !important;
+
+        scrollbar-gutter:
+            stable !important;
+
+        scrollbar-width:
+            thin !important;
+
+        scrollbar-color:
+            var(--sdm-border-strong)
+            transparent !important;
     }
 
     #sapo-sale-details-modal
@@ -288,49 +414,76 @@ const saleDetailsModalStyles = `
 
     #sapo-sale-details-modal
     .sdm-body::-webkit-scrollbar-track {
-        background: transparent !important;
+        background:
+            transparent !important;
     }
 
     #sapo-sale-details-modal
     .sdm-body::-webkit-scrollbar-thumb {
-        background: var(--sdm-border-strong) !important;
-        border: 2px solid transparent !important;
-        border-radius: 999px !important;
-        background-clip: content-box !important;
+        background:
+            var(--sdm-border-strong) !important;
+
+        border:
+            2px solid
+            transparent !important;
+
+        border-radius:
+            999px !important;
+
+        background-clip:
+            content-box !important;
     }
 
     #sapo-sale-details-modal
     .sdm-content {
         display: flex !important;
-        flex-direction: column !important;
-        gap: 20px !important;
-        padding: 20px 22px !important;
-    }
 
-    /* ---------- Loading / error states ---------- */
+        flex-direction:
+            column !important;
+
+        gap: 20px !important;
+
+        padding:
+            20px 22px !important;
+    }
 
     #sapo-sale-details-modal
     .sdm-state {
         display: flex !important;
+
         min-height: 260px !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
+
+        flex-direction:
+            column !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
+
         gap: 10px !important;
+
         padding: 32px !important;
-        text-align: center !important;
+
+        text-align:
+            center !important;
     }
 
     #sapo-sale-details-modal
     .sdm-state strong {
-        color: var(--sdm-text) !important;
+        color:
+            var(--sdm-text) !important;
+
         font-size: 15px !important;
         font-weight: 600 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-state span {
-        color: var(--sdm-muted) !important;
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 13px !important;
         font-weight: 500 !important;
     }
@@ -339,25 +492,45 @@ const saleDetailsModalStyles = `
     .sdm-spinner {
         width: 30px !important;
         height: 30px !important;
-        border: 3px solid var(--sdm-green-100) !important;
-        border-top-color: var(--sdm-green-700) !important;
-        border-radius: 50% !important;
-        animation: sdm-spin 700ms linear infinite !important;
+
+        border:
+            3px solid
+            var(--sdm-green-100) !important;
+
+        border-top-color:
+            var(--sdm-green-700) !important;
+
+        border-radius:
+            50% !important;
+
+        animation:
+            sdm-spin
+            700ms
+            linear
+            infinite !important;
     }
 
     @keyframes sdm-spin {
         to {
-            transform: rotate(360deg);
+            transform:
+                rotate(
+                    360deg
+                );
         }
     }
-
-    /* ---------- Overview cards ---------- */
 
     #sapo-sale-details-modal
     .sdm-overview {
         display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important;
+
+        grid-template-columns:
+            repeat(
+                4,
+                1fr
+            ) !important;
+
         gap: 10px !important;
+
         margin: 0 !important;
         padding: 0 !important;
     }
@@ -365,73 +538,116 @@ const saleDetailsModalStyles = `
     #sapo-sale-details-modal
     .sdm-overview article {
         display: flex !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 3px !important;
-        padding: 12px 14px !important;
-        background: var(--sdm-bg) !important;
-        border: 1px solid var(--sdm-border) !important;
-        border-radius: var(--sdm-radius-sm) !important;
+
+        padding:
+            12px 14px !important;
+
+        background:
+            var(--sdm-bg) !important;
+
+        border:
+            1px solid
+            var(--sdm-border) !important;
+
+        border-radius:
+            var(--sdm-radius-sm) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-overview span {
-        color: var(--sdm-muted) !important;
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 11px !important;
         font-weight: 600 !important;
-        letter-spacing: 0.02em !important;
-        text-transform: uppercase !important;
+
+        letter-spacing:
+            0.02em !important;
+
+        text-transform:
+            uppercase !important;
     }
 
     #sapo-sale-details-modal
     .sdm-overview strong {
-        color: var(--sdm-text) !important;
+        color:
+            var(--sdm-text) !important;
+
         font-size: 14px !important;
         font-weight: 700 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-overview small {
-        color: var(--sdm-muted) !important;
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 12px !important;
         font-weight: 500 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-status-pill {
-        display: inline-flex !important;
-        width: fit-content !important;
-        align-items: center !important;
-        padding: 3px 9px !important;
+        display:
+            inline-flex !important;
+
+        width:
+            fit-content !important;
+
+        align-items:
+            center !important;
+
+        padding:
+            3px 9px !important;
+
         font-size: 12px !important;
         font-weight: 600 !important;
-        border-radius: 999px !important;
+
+        border-radius:
+            999px !important;
     }
 
     #sapo-sale-details-modal
     .sdm-status-paid {
-        color: var(--sdm-green-800) !important;
-        background: var(--sdm-green-100) !important;
+        color:
+            var(--sdm-green-800) !important;
+
+        background:
+            var(--sdm-green-100) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-status-partial {
-        color: var(--sdm-amber) !important;
-        background: var(--sdm-amber-light) !important;
+        color:
+            var(--sdm-amber) !important;
+
+        background:
+            var(--sdm-amber-light) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-status-due {
-        color: var(--sdm-red) !important;
-        background: var(--sdm-red-light) !important;
-    }
+        color:
+            var(--sdm-red) !important;
 
-    /* ---------- Section blocks ---------- */
+        background:
+            var(--sdm-red-light) !important;
+    }
 
     #sapo-sale-details-modal
     .sdm-section {
         display: flex !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 12px !important;
+
         padding: 0 !important;
         margin: 0 !important;
     }
@@ -439,23 +655,35 @@ const saleDetailsModalStyles = `
     #sapo-sale-details-modal
     .sdm-section-header {
         display: flex !important;
-        align-items: flex-start !important;
-        justify-content: space-between !important;
+
+        align-items:
+            flex-start !important;
+
+        justify-content:
+            space-between !important;
+
         gap: 12px !important;
     }
 
     #sapo-sale-details-modal
     .sdm-section-header h3 {
         margin: 0 !important;
-        color: var(--sdm-text) !important;
+
+        color:
+            var(--sdm-text) !important;
+
         font-size: 15px !important;
         font-weight: 700 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-section-header p {
-        margin: 2px 0 0 !important;
-        color: var(--sdm-muted) !important;
+        margin:
+            2px 0 0 !important;
+
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 12px !important;
         font-weight: 500 !important;
     }
@@ -463,71 +691,124 @@ const saleDetailsModalStyles = `
     #sapo-sale-details-modal
     .sdm-section-header > span {
         flex-shrink: 0 !important;
-        padding: 4px 10px !important;
-        color: var(--sdm-text-secondary) !important;
+
+        padding:
+            4px 10px !important;
+
+        color:
+            var(--sdm-text-secondary) !important;
+
         font-size: 12px !important;
         font-weight: 600 !important;
-        white-space: nowrap !important;
-        background: var(--sdm-bg) !important;
-        border: 1px solid var(--sdm-border) !important;
-        border-radius: 999px !important;
-    }
 
-    /* ---------- Items table ---------- */
+        white-space:
+            nowrap !important;
+
+        background:
+            var(--sdm-bg) !important;
+
+        border:
+            1px solid
+            var(--sdm-border) !important;
+
+        border-radius:
+            999px !important;
+    }
 
     #sapo-sale-details-modal
     .sdm-table-container {
         width: 100% !important;
-        overflow-x: auto !important;
-        border: 1px solid var(--sdm-border) !important;
-        border-radius: var(--sdm-radius-sm) !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: var(--sdm-border-strong) transparent !important;
+
+        overflow-x:
+            auto !important;
+
+        border:
+            1px solid
+            var(--sdm-border) !important;
+
+        border-radius:
+            var(--sdm-radius-sm) !important;
+
+        scrollbar-width:
+            thin !important;
+
+        scrollbar-color:
+            var(--sdm-border-strong)
+            transparent !important;
     }
 
     #sapo-sale-details-modal
     .sdm-table {
         width: 100% !important;
         min-width: 760px !important;
-        border-collapse: separate !important;
-        border-spacing: 0 !important;
+
+        border-collapse:
+            separate !important;
+
+        border-spacing:
+            0 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-table th,
     #sapo-sale-details-modal
     .sdm-table td {
-        padding: 10px 12px !important;
-        text-align: left !important;
-        vertical-align: middle !important;
-        border-bottom: 1px solid var(--sdm-border) !important;
-        white-space: nowrap !important;
+        padding:
+            10px 12px !important;
+
+        text-align:
+            left !important;
+
+        vertical-align:
+            middle !important;
+
+        border-bottom:
+            1px solid
+            var(--sdm-border) !important;
+
+        white-space:
+            nowrap !important;
     }
 
     #sapo-sale-details-modal
     .sdm-table thead th {
-        color: var(--sdm-text-secondary) !important;
+        color:
+            var(--sdm-text-secondary) !important;
+
         font-size: 11px !important;
         font-weight: 600 !important;
-        letter-spacing: 0.02em !important;
-        text-transform: uppercase !important;
-        background: #f1f5f9 !important;
-        border-bottom: 1px solid var(--sdm-border-strong) !important;
+
+        letter-spacing:
+            0.02em !important;
+
+        text-transform:
+            uppercase !important;
+
+        background:
+            #f1f5f9 !important;
+
+        border-bottom:
+            1px solid
+            var(--sdm-border-strong) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-table tbody tr:last-child td {
-        border-bottom: 0 !important;
+        border-bottom:
+            0 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-table tbody tr:hover td {
-        background: #f8fafc !important;
+        background:
+            #f8fafc !important;
     }
 
     #sapo-sale-details-modal
     .sdm-table td {
-        color: var(--sdm-text) !important;
+        color:
+            var(--sdm-text) !important;
+
         font-size: 13px !important;
         font-weight: 500 !important;
     }
@@ -537,9 +818,14 @@ const saleDetailsModalStyles = `
     #sapo-sale-details-modal
     .sdm-item-batch {
         display: flex !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 2px !important;
-        white-space: normal !important;
+
+        white-space:
+            normal !important;
     }
 
     #sapo-sale-details-modal
@@ -554,325 +840,557 @@ const saleDetailsModalStyles = `
     .sdm-item-product span,
     #sapo-sale-details-modal
     .sdm-item-batch span {
-        color: var(--sdm-muted) !important;
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 12px !important;
         font-weight: 500 !important;
     }
 
     #sapo-sale-details-modal
+    .sdm-unit-badge {
+        display:
+            inline-flex !important;
+
+        width:
+            fit-content !important;
+
+        align-items:
+            center !important;
+
+        margin-top:
+            3px !important;
+
+        padding:
+            2px 7px !important;
+
+        color:
+            var(--sdm-green-800) !important;
+
+        font-size: 10px !important;
+        font-weight: 700 !important;
+
+        background:
+            var(--sdm-green-50) !important;
+
+        border:
+            1px solid
+            var(--sdm-green-100) !important;
+
+        border-radius:
+            999px !important;
+    }
+
+    #sapo-sale-details-modal
     .sdm-cost-value {
         display: block !important;
+
         margin-top: 2px !important;
-        color: var(--sdm-muted) !important;
+
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 11px !important;
         font-weight: 500 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-expiry-value {
-        color: var(--sdm-text-secondary) !important;
+        color:
+            var(--sdm-text-secondary) !important;
+
         font-size: 13px !important;
     }
 
     #sapo-sale-details-modal
     .sdm-profit-value {
-        color: var(--sdm-green-800) !important;
+        color:
+            var(--sdm-green-800) !important;
     }
-
-    /* ---------- Lower grid: payments + totals ---------- */
 
     #sapo-sale-details-modal
     .sdm-lower-grid {
         display: grid !important;
-        grid-template-columns: 1.4fr 1fr !important;
+
+        grid-template-columns:
+            1.4fr
+            1fr !important;
+
         gap: 16px !important;
-        align-items: start !important;
+
+        align-items:
+            start !important;
     }
 
     #sapo-sale-details-modal
     .sdm-payment-list {
         display: flex !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 8px !important;
     }
 
     #sapo-sale-details-modal
     .sdm-payment-list article {
         display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 8px 14px !important;
-        padding: 12px 14px !important;
-        background: var(--sdm-bg) !important;
-        border: 1px solid var(--sdm-border) !important;
-        border-radius: var(--sdm-radius-sm) !important;
+
+        grid-template-columns:
+            repeat(
+                2,
+                1fr
+            ) !important;
+
+        gap:
+            8px 14px !important;
+
+        padding:
+            12px 14px !important;
+
+        background:
+            var(--sdm-bg) !important;
+
+        border:
+            1px solid
+            var(--sdm-border) !important;
+
+        border-radius:
+            var(--sdm-radius-sm) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-payment-list article > div {
         display: flex !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 2px !important;
     }
 
     #sapo-sale-details-modal
     .sdm-payment-list span {
-        color: var(--sdm-muted) !important;
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 11px !important;
         font-weight: 600 !important;
-        letter-spacing: 0.02em !important;
-        text-transform: uppercase !important;
+
+        letter-spacing:
+            0.02em !important;
+
+        text-transform:
+            uppercase !important;
     }
 
     #sapo-sale-details-modal
     .sdm-payment-list strong {
-        color: var(--sdm-text) !important;
+        color:
+            var(--sdm-text) !important;
+
         font-size: 13px !important;
         font-weight: 600 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-payment-list p {
-        grid-column: 1 / -1 !important;
-        margin: 4px 0 0 !important;
-        padding-top: 8px !important;
-        color: var(--sdm-text-secondary) !important;
+        grid-column:
+            1 / -1 !important;
+
+        margin:
+            4px 0 0 !important;
+
+        padding-top:
+            8px !important;
+
+        color:
+            var(--sdm-text-secondary) !important;
+
         font-size: 12px !important;
         font-weight: 500 !important;
-        border-top: 1px solid var(--sdm-border) !important;
-    }
 
-    /* ---------- Totals panel ---------- */
+        border-top:
+            1px solid
+            var(--sdm-border) !important;
+    }
 
     #sapo-sale-details-modal
     .sdm-totals {
         display: flex !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 9px !important;
-        padding: 16px !important;
-        background: var(--sdm-bg) !important;
-        border: 1px solid var(--sdm-border) !important;
-        border-radius: var(--sdm-radius-sm) !important;
+
+        padding:
+            16px !important;
+
+        background:
+            var(--sdm-bg) !important;
+
+        border:
+            1px solid
+            var(--sdm-border) !important;
+
+        border-radius:
+            var(--sdm-radius-sm) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-totals > div {
         display: flex !important;
-        align-items: center !important;
-        justify-content: space-between !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            space-between !important;
+
         gap: 12px !important;
     }
 
     #sapo-sale-details-modal
     .sdm-totals span {
-        color: var(--sdm-muted) !important;
+        color:
+            var(--sdm-muted) !important;
+
         font-size: 13px !important;
         font-weight: 500 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-totals strong {
-        color: var(--sdm-text) !important;
+        color:
+            var(--sdm-text) !important;
+
         font-size: 13px !important;
         font-weight: 600 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-grand-total {
-        margin: 4px 0 !important;
-        padding: 10px 0 !important;
-        border-top: 1px solid var(--sdm-border-strong) !important;
-        border-bottom: 1px solid var(--sdm-border-strong) !important;
+        margin:
+            4px 0 !important;
+
+        padding:
+            10px 0 !important;
+
+        border-top:
+            1px solid
+            var(--sdm-border-strong) !important;
+
+        border-bottom:
+            1px solid
+            var(--sdm-border-strong) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-grand-total span {
-        color: var(--sdm-text) !important;
+        color:
+            var(--sdm-text) !important;
+
         font-size: 13px !important;
         font-weight: 700 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-grand-total strong {
-        color: var(--sdm-green-800) !important;
+        color:
+            var(--sdm-green-800) !important;
+
         font-size: 17px !important;
         font-weight: 700 !important;
     }
 
     #sapo-sale-details-modal
     .sdm-profit-divider {
-        margin-top: 4px !important;
-        padding-top: 10px !important;
-        border-top: 1px dashed var(--sdm-border-strong) !important;
+        margin-top:
+            4px !important;
+
+        padding-top:
+            10px !important;
+
+        border-top:
+            1px dashed
+            var(--sdm-border-strong) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-net-profit {
-        color: var(--sdm-green-800) !important;
+        color:
+            var(--sdm-green-800) !important;
+
         font-size: 14px !important;
         font-weight: 700 !important;
     }
 
-    /* ---------- Notes ---------- */
-
     #sapo-sale-details-modal
     .sdm-notes {
         display: flex !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 6px !important;
-        padding: 14px 16px !important;
-        background: var(--sdm-amber-light) !important;
-        border: 1px solid #fde68a !important;
-        border-radius: var(--sdm-radius-sm) !important;
+
+        padding:
+            14px 16px !important;
+
+        background:
+            var(--sdm-amber-light) !important;
+
+        border:
+            1px solid
+            #fde68a !important;
+
+        border-radius:
+            var(--sdm-radius-sm) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-notes span {
-        color: var(--sdm-amber) !important;
+        color:
+            var(--sdm-amber) !important;
+
         font-size: 11px !important;
         font-weight: 700 !important;
-        letter-spacing: 0.03em !important;
-        text-transform: uppercase !important;
+
+        letter-spacing:
+            0.03em !important;
+
+        text-transform:
+            uppercase !important;
     }
 
     #sapo-sale-details-modal
     .sdm-notes p {
         margin: 0 !important;
-        color: var(--sdm-text-secondary) !important;
+
+        color:
+            var(--sdm-text-secondary) !important;
+
         font-size: 13px !important;
         font-weight: 500 !important;
+
         line-height: 1.5 !important;
     }
-
-    /* ---------- Footer / actions ---------- */
 
     #sapo-sale-details-modal
     .sdm-footer {
         display: flex !important;
-        flex: 0 0 auto !important;
-        align-items: center !important;
-        justify-content: flex-end !important;
+
+        flex:
+            0 0 auto !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            flex-end !important;
+
         gap: 10px !important;
-        padding: 14px 22px !important;
-        background: var(--sdm-white) !important;
-        border-top: 1px solid var(--sdm-border) !important;
+
+        padding:
+            14px 22px !important;
+
+        background:
+            var(--sdm-white) !important;
+
+        border-top:
+            1px solid
+            var(--sdm-border) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-button {
-        display: inline-flex !important;
+        display:
+            inline-flex !important;
+
         min-height: 38px !important;
-        align-items: center !important;
-        justify-content: center !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
+
         gap: 6px !important;
-        padding: 8px 16px !important;
+
+        padding:
+            8px 16px !important;
+
         font-size: 13px !important;
         font-weight: 600 !important;
+
         line-height: 1.2 !important;
+
         appearance: none !important;
-        border-radius: var(--sdm-radius-sm) !important;
+
+        border-radius:
+            var(--sdm-radius-sm) !important;
+
         cursor: pointer !important;
-        transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease !important;
+
+        transition:
+            background-color
+            120ms ease,
+            border-color
+            120ms ease,
+            color
+            120ms ease !important;
     }
 
     #sapo-sale-details-modal
     .sdm-primary-button {
-        color: #ffffff !important;
-        background: var(--sdm-green-700) !important;
-        border: 1px solid var(--sdm-green-700) !important;
+        color:
+            #ffffff !important;
+
+        background:
+            var(--sdm-green-700) !important;
+
+        border:
+            1px solid
+            var(--sdm-green-700) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-primary-button:hover {
-        background: var(--sdm-green-800) !important;
-        border-color: var(--sdm-green-800) !important;
+        background:
+            var(--sdm-green-800) !important;
+
+        border-color:
+            var(--sdm-green-800) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-secondary-button {
-        color: var(--sdm-text-secondary) !important;
-        background: var(--sdm-white) !important;
-        border: 1px solid var(--sdm-border-strong) !important;
+        color:
+            var(--sdm-text-secondary) !important;
+
+        background:
+            var(--sdm-white) !important;
+
+        border:
+            1px solid
+            var(--sdm-border-strong) !important;
     }
 
     #sapo-sale-details-modal
     .sdm-secondary-button:hover {
-        color: var(--sdm-text) !important;
-        background: var(--sdm-bg) !important;
-        border-color: #94a3b8 !important;
+        color:
+            var(--sdm-text) !important;
+
+        background:
+            var(--sdm-bg) !important;
+
+        border-color:
+            #94a3b8 !important;
     }
 
-    /* ---------- Responsive ---------- */
-
-    @media (max-width: 900px) {
+    @media (
+        max-width: 900px
+    ) {
         #sapo-sale-details-modal
         .sdm-overview {
-            grid-template-columns: repeat(2, 1fr) !important;
+            grid-template-columns:
+                repeat(
+                    2,
+                    1fr
+                ) !important;
         }
 
         #sapo-sale-details-modal
         .sdm-lower-grid {
-            grid-template-columns: 1fr !important;
+            grid-template-columns:
+                1fr !important;
         }
     }
 
-    @media (max-width: 640px) {
+    @media (
+        max-width: 640px
+    ) {
         #sapo-sale-details-modal {
             padding: 0 !important;
         }
 
         #sapo-sale-details-modal
         .sdm-panel {
-            max-width: 100% !important;
-            max-height: 100% !important;
-            height: 100% !important;
-            border-radius: 0 !important;
+            max-width:
+                100% !important;
+
+            max-height:
+                100% !important;
+
+            height:
+                100% !important;
+
+            border-radius:
+                0 !important;
         }
 
         #sapo-sale-details-modal
         .sdm-overview {
-            grid-template-columns: 1fr 1fr !important;
+            grid-template-columns:
+                1fr 1fr !important;
         }
 
         #sapo-sale-details-modal
         .sdm-payment-list article {
-            grid-template-columns: 1fr !important;
+            grid-template-columns:
+                1fr !important;
         }
 
         #sapo-sale-details-modal
         .sdm-footer {
-            flex-direction: column-reverse !important;
-            align-items: stretch !important;
+            flex-direction:
+                column-reverse !important;
+
+            align-items:
+                stretch !important;
         }
 
         #sapo-sale-details-modal
         .sdm-button {
-            width: 100% !important;
+            width:
+                100% !important;
         }
     }
 
     @media print {
         #sapo-sale-details-modal {
-            position: static !important;
-            padding: 0 !important;
-            background: none !important;
+            position:
+                static !important;
+
+            padding:
+                0 !important;
+
+            background:
+                none !important;
         }
 
         #sapo-sale-details-modal
         .sdm-panel {
-            max-height: none !important;
-            box-shadow: none !important;
+            max-height:
+                none !important;
+
+            box-shadow:
+                none !important;
         }
 
         #sapo-sale-details-modal
         .sdm-body {
-            overflow: visible !important;
+            overflow:
+                visible !important;
         }
 
         #sapo-sale-details-modal
         .sdm-footer,
         #sapo-sale-details-modal
         .sdm-close-button {
-            display: none !important;
+            display:
+                none !important;
         }
     }
 `;
@@ -886,14 +1404,20 @@ export default function SaleDetailsModal({
     onRetry,
 }: SaleDetailsModalProps) {
     useEffect(() => {
-        if (saleId === null) {
+        if (
+            saleId === null
+        ) {
             return;
         }
 
         const handleKeyDown = (
-            event: KeyboardEvent,
+            event:
+                KeyboardEvent,
         ): void => {
-            if (event.key === 'Escape') {
+            if (
+                event.key
+                === 'Escape'
+            ) {
                 onClose();
             }
         };
@@ -904,7 +1428,10 @@ export default function SaleDetailsModal({
         );
 
         const previousOverflow =
-            document.body.style.overflow;
+            document
+                .body
+                .style
+                .overflow;
 
         document.body.style.overflow =
             'hidden';
@@ -923,19 +1450,25 @@ export default function SaleDetailsModal({
         onClose,
     ]);
 
-    if (saleId === null) {
+    if (
+        saleId === null
+    ) {
         return null;
     }
 
     const hasProfitInformation =
-        sale?.net_profit !== null
-        && sale?.net_profit !== undefined;
+        sale?.net_profit
+        !== null
+        && sale?.net_profit
+        !== undefined;
 
     const modalMarkup = (
         <div
             id="sapo-sale-details-modal"
             role="presentation"
-            onMouseDown={(event) => {
+            onMouseDown={(
+                event,
+            ) => {
                 if (
                     event.target
                     === event.currentTarget
@@ -953,7 +1486,9 @@ export default function SaleDetailsModal({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="sale-details-title"
-                onMouseDown={(event) => {
+                onMouseDown={(
+                    event,
+                ) => {
                     event.stopPropagation();
                 }}
             >
@@ -965,14 +1500,16 @@ export default function SaleDetailsModal({
 
                         <h2 id="sale-details-title">
                             {sale
-                                ? sale.sale_number
+                                ? sale
+                                    .sale_number
                                 : 'Sale Details'}
                         </h2>
 
                         {sale && (
                             <p>
                                 {formatDateTime(
-                                    sale.sale_date,
+                                    sale
+                                        .sale_date,
                                 )}
                             </p>
                         )}
@@ -982,7 +1519,9 @@ export default function SaleDetailsModal({
                         type="button"
                         className="sdm-close-button"
                         aria-label="Close sale details"
-                        onClick={onClose}
+                        onClick={
+                            onClose
+                        }
                     >
                         ×
                     </button>
@@ -1003,12 +1542,16 @@ export default function SaleDetailsModal({
                                 Unable to load sale
                             </strong>
 
-                            <span>{errorMessage}</span>
+                            <span>
+                                {errorMessage}
+                            </span>
 
                             <button
                                 type="button"
                                 className="sdm-button sdm-primary-button"
-                                onClick={onRetry}
+                                onClick={
+                                    onRetry
+                                }
                             >
                                 Retry
                             </button>
@@ -1017,17 +1560,24 @@ export default function SaleDetailsModal({
                         <div className="sdm-content">
                             <section className="sdm-overview">
                                 <article>
-                                    <span>Cashier</span>
+                                    <span>
+                                        Cashier
+                                    </span>
 
                                     <strong>
-                                        {sale.created_by.name}
+                                        {sale
+                                            .created_by
+                                            ?.name
+                                            ?? 'Unknown Cashier'}
                                     </strong>
 
-                                    {sale.created_by
-                                        .username && (
+                                    {sale
+                                        .created_by
+                                        ?.username && (
                                             <small>
                                                 {
-                                                    sale.created_by
+                                                    sale
+                                                        .created_by
                                                         .username
                                                 }
                                             </small>
@@ -1035,34 +1585,60 @@ export default function SaleDetailsModal({
                                 </article>
 
                                 <article>
-                                    <span>Customer</span>
+                                    <span>
+                                        Customer
+                                    </span>
 
                                     <strong>
-                                        Walk-in Customer
+                                        {sale
+                                            .customer
+                                            ?.name
+                                            ?? 'Walk-in Customer'}
                                     </strong>
+
+                                    {sale
+                                        .customer
+                                        ?.mobile && (
+                                            <small>
+                                                {
+                                                    sale
+                                                        .customer
+                                                        .mobile
+                                                }
+                                            </small>
+                                        )}
                                 </article>
 
                                 <article>
-                                    <span>Payment Status</span>
+                                    <span>
+                                        Payment Status
+                                    </span>
 
                                     <strong
                                         className={
                                             `sdm-status-pill ${paymentStatusClass(
-                                                sale.payment_status,
+                                                sale
+                                                    .payment_status,
                                             )}`
                                         }
                                     >
                                         {paymentStatusLabel(
-                                            sale.payment_status,
+                                            sale
+                                                .payment_status,
                                         )}
                                     </strong>
                                 </article>
 
                                 <article>
-                                    <span>Total Quantity</span>
+                                    <span>
+                                        Total Quantity
+                                    </span>
 
                                     <strong>
-                                        {sale.total_quantity}
+                                        {formatQuantity(
+                                            sale
+                                                .total_quantity,
+                                        )}
                                     </strong>
                                 </article>
                             </section>
@@ -1070,7 +1646,9 @@ export default function SaleDetailsModal({
                             <section className="sdm-section">
                                 <header className="sdm-section-header">
                                     <div>
-                                        <h3>Sold Items</h3>
+                                        <h3>
+                                            Sold Items
+                                        </h3>
 
                                         <p>
                                             Products and exact
@@ -1080,8 +1658,15 @@ export default function SaleDetailsModal({
                                     </div>
 
                                     <span>
-                                        {sale.items_count}{' '}
-                                        {sale.items_count === 1
+                                        {
+                                            sale
+                                                .items_count
+                                        }
+                                        {' '}
+
+                                        {sale
+                                            .items_count
+                                            === 1
                                             ? 'item'
                                             : 'items'}
                                     </span>
@@ -1091,141 +1676,254 @@ export default function SaleDetailsModal({
                                     <table className="sdm-table">
                                         <thead>
                                             <tr>
-                                                <th>Product</th>
-                                                <th>Batch</th>
-                                                <th>Expiry</th>
-                                                <th>Quantity</th>
-                                                <th>Unit Price</th>
-                                                <th>Discount</th>
-                                                <th>Total</th>
+                                                <th>
+                                                    Product
+                                                </th>
+
+                                                <th>
+                                                    Batch
+                                                </th>
+
+                                                <th>
+                                                    Expiry
+                                                </th>
+
+                                                <th>
+                                                    Quantity
+                                                </th>
+
+                                                <th>
+                                                    Unit Price
+                                                </th>
+
+                                                <th>
+                                                    Discount
+                                                </th>
+
+                                                <th>
+                                                    Total
+                                                </th>
 
                                                 {hasProfitInformation && (
-                                                    <th>Profit</th>
+                                                    <th>
+                                                        Profit
+                                                    </th>
                                                 )}
                                             </tr>
                                         </thead>
 
                                         <tbody>
-                                            {sale.items.map(
-                                                (item) => (
-                                                    <tr key={item.id}>
-                                                        <td>
-                                                            <div className="sdm-item-product">
-                                                                <strong>
-                                                                    {
-                                                                        item
-                                                                            .product
-                                                                            .name
-                                                                    }
-                                                                </strong>
+                                            {sale
+                                                .items
+                                                .map(
+                                                    (
+                                                        item,
+                                                    ) => {
+                                                        const saleUnit =
+                                                            item
+                                                                .sale_unit
+                                                            ?? item
+                                                                .product
+                                                                ?.unit
+                                                            ?? 'Unit';
 
-                                                                <span>
-                                                                    SKU:{' '}
-                                                                    {item.product
-                                                                        .sku
-                                                                        || '—'}
-                                                                </span>
+                                                        const productName =
+                                                            item
+                                                                .product
+                                                                ?.name
+                                                            ?? 'Unavailable Product';
 
-                                                                <span>
-                                                                    Barcode:{' '}
-                                                                    {item.product
-                                                                        .barcode
-                                                                        || '—'}
-                                                                </span>
-                                                            </div>
-                                                        </td>
+                                                        const batchLabel =
+                                                            item
+                                                                .batch
+                                                                ?.batch_number
+                                                            ?? item
+                                                                .batch
+                                                                ?.batch_code
+                                                            ?? 'Batch unavailable';
 
-                                                        <td>
-                                                            <div className="sdm-item-batch">
-                                                                <strong>
-                                                                    {item.batch
-                                                                        .batch_number
-                                                                        || item.batch
-                                                                            .batch_code}
-                                                                </strong>
+                                                        const batchCode =
+                                                            item
+                                                                .batch
+                                                                ?.batch_code
+                                                            ?? '—';
 
-                                                                <span>
-                                                                    {
-                                                                        item
-                                                                            .batch
-                                                                            .batch_code
-                                                                    }
-                                                                </span>
-                                                            </div>
-                                                        </td>
+                                                        const expiryDate =
+                                                            item
+                                                                .batch
+                                                                ?.expiry_date
+                                                            ?? null;
 
-                                                        <td>
-                                                            <span className="sdm-expiry-value">
-                                                                {formatDate(
-                                                                    item.batch
-                                                                        .expiry_date,
-                                                                )}
-                                                            </span>
-                                                        </td>
-
-                                                        <td>
-                                                            <strong>
-                                                                {item.quantity}{' '}
-                                                                {
-                                                                    item
-                                                                        .product
-                                                                        .unit
+                                                        return (
+                                                            <tr
+                                                                key={
+                                                                    item.id
                                                                 }
-                                                            </strong>
-                                                        </td>
+                                                            >
+                                                                <td>
+                                                                    <div className="sdm-item-product">
+                                                                        <strong>
+                                                                            {
+                                                                                productName
+                                                                            }
+                                                                        </strong>
 
-                                                        <td>
-                                                            {currencyFormatter
-                                                                .format(
-                                                                    item
-                                                                        .selling_price,
-                                                                )}
+                                                                        <span>
+                                                                            SKU:
+                                                                            {' '}
 
-                                                            {item.purchase_cost
-                                                                !== null && (
-                                                                    <small className="sdm-cost-value">
-                                                                        Cost:{' '}
-                                                                        {currencyFormatter
-                                                                            .format(
-                                                                                item
-                                                                                    .purchase_cost,
-                                                                            )}
-                                                                    </small>
-                                                                )}
-                                                        </td>
+                                                                            {item
+                                                                                .product
+                                                                                ?.sku
+                                                                                || '—'}
+                                                                        </span>
 
-                                                        <td>
-                                                            {currencyFormatter
-                                                                .format(
-                                                                    item.discount,
-                                                                )}
-                                                        </td>
+                                                                        <span>
+                                                                            Barcode:
+                                                                            {' '}
 
-                                                        <td>
-                                                            <strong>
-                                                                {currencyFormatter
-                                                                    .format(
-                                                                        item
-                                                                            .line_total,
-                                                                    )}
-                                                            </strong>
-                                                        </td>
+                                                                            {item
+                                                                                .product
+                                                                                ?.barcode
+                                                                                || '—'}
+                                                                        </span>
 
-                                                        {hasProfitInformation && (
-                                                            <td>
-                                                                <strong className="sdm-profit-value">
+                                                                        <span className="sdm-unit-badge">
+                                                                            Sold as
+                                                                            {' '}
+
+                                                                            {
+                                                                                saleUnit
+                                                                            }
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+
+                                                                <td>
+                                                                    <div className="sdm-item-batch">
+                                                                        <strong>
+                                                                            {
+                                                                                batchLabel
+                                                                            }
+                                                                        </strong>
+
+                                                                        <span>
+                                                                            {
+                                                                                batchCode
+                                                                            }
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+
+                                                                <td>
+                                                                    <span className="sdm-expiry-value">
+                                                                        {formatDate(
+                                                                            expiryDate,
+                                                                        )}
+                                                                    </span>
+                                                                </td>
+
+                                                                <td>
+                                                                    <strong>
+                                                                        {formatQuantity(
+                                                                            item
+                                                                                .quantity,
+                                                                        )}
+                                                                        {' '}
+
+                                                                        {
+                                                                            saleUnit
+                                                                        }
+                                                                    </strong>
+
+                                                                    {item
+                                                                        .stock_quantity
+                                                                        !== null
+                                                                        && item
+                                                                            .stock_quantity
+                                                                        !== undefined
+                                                                        && item
+                                                                            .conversion_factor
+                                                                        > 1 && (
+                                                                            <small className="sdm-cost-value">
+                                                                                Stock used:
+                                                                                {' '}
+
+                                                                                {formatQuantity(
+                                                                                    item
+                                                                                        .stock_quantity,
+                                                                                )}
+                                                                                {' Kg'}
+                                                                            </small>
+                                                                        )}
+                                                                </td>
+
+                                                                <td>
                                                                     {currencyFormatter
                                                                         .format(
                                                                             item
-                                                                                .gross_profit
-                                                                            ?? 0,
+                                                                                .selling_price,
                                                                         )}
-                                                                </strong>
-                                                            </td>
-                                                        )}
-                                                    </tr>
-                                                ),
-                                            )}
+
+                                                                    <small className="sdm-cost-value">
+                                                                        per
+                                                                        {' '}
+
+                                                                        {
+                                                                            saleUnit
+                                                                        }
+                                                                    </small>
+
+                                                                    {item
+                                                                        .purchase_cost
+                                                                        !== null && (
+                                                                            <small className="sdm-cost-value">
+                                                                                Cost:
+                                                                                {' '}
+
+                                                                                {currencyFormatter
+                                                                                    .format(
+                                                                                        item
+                                                                                            .purchase_cost,
+                                                                                    )}
+                                                                            </small>
+                                                                        )}
+                                                                </td>
+
+                                                                <td>
+                                                                    {currencyFormatter
+                                                                        .format(
+                                                                            item
+                                                                                .discount,
+                                                                        )}
+                                                                </td>
+
+                                                                <td>
+                                                                    <strong>
+                                                                        {currencyFormatter
+                                                                            .format(
+                                                                                item
+                                                                                    .line_total,
+                                                                            )}
+                                                                    </strong>
+                                                                </td>
+
+                                                                {hasProfitInformation && (
+                                                                    <td>
+                                                                        <strong className="sdm-profit-value">
+                                                                            {currencyFormatter
+                                                                                .format(
+                                                                                    item
+                                                                                        .gross_profit
+                                                                                    ?? 0,
+                                                                                )}
+                                                                        </strong>
+                                                                    </td>
+                                                                )}
+                                                            </tr>
+                                                        );
+                                                    },
+                                                )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1235,7 +1933,9 @@ export default function SaleDetailsModal({
                                 <section className="sdm-section">
                                     <header className="sdm-section-header">
                                         <div>
-                                            <h3>Payments</h3>
+                                            <h3>
+                                                Payments
+                                            </h3>
 
                                             <p>
                                                 Payments recorded for
@@ -1245,80 +1945,112 @@ export default function SaleDetailsModal({
                                     </header>
 
                                     <div className="sdm-payment-list">
-                                        {sale.payments.map(
-                                            (payment) => (
-                                                <article
-                                                    key={payment.id}
-                                                >
-                                                    <div>
-                                                        <span>
-                                                            Payment Method
-                                                        </span>
+                                        {sale
+                                            .payments
+                                            .length
+                                            === 0 ? (
+                                            <article>
+                                                <div>
+                                                    <span>
+                                                        Payment
+                                                    </span>
 
-                                                        <strong>
-                                                            {paymentName(
-                                                                payment
-                                                                    .payment_method,
-                                                            )}
-                                                        </strong>
-                                                    </div>
+                                                    <strong>
+                                                        No payment recorded
+                                                    </strong>
+                                                </div>
+                                            </article>
+                                        ) : (
+                                            sale
+                                                .payments
+                                                .map(
+                                                    (
+                                                        payment,
+                                                    ) => (
+                                                        <article
+                                                            key={
+                                                                payment.id
+                                                            }
+                                                        >
+                                                            <div>
+                                                                <span>
+                                                                    Payment Method
+                                                                </span>
 
-                                                    <div>
-                                                        <span>Amount</span>
+                                                                <strong>
+                                                                    {paymentName(
+                                                                        payment
+                                                                            .payment_method,
+                                                                    )}
+                                                                </strong>
+                                                            </div>
 
-                                                        <strong>
-                                                            {currencyFormatter
-                                                                .format(
-                                                                    payment
-                                                                        .amount,
-                                                                )}
-                                                        </strong>
-                                                    </div>
+                                                            <div>
+                                                                <span>
+                                                                    Amount
+                                                                </span>
 
-                                                    <div>
-                                                        <span>
-                                                            Reference
-                                                        </span>
+                                                                <strong>
+                                                                    {currencyFormatter
+                                                                        .format(
+                                                                            payment
+                                                                                .amount,
+                                                                        )}
+                                                                </strong>
+                                                            </div>
 
-                                                        <strong>
+                                                            <div>
+                                                                <span>
+                                                                    Reference
+                                                                </span>
+
+                                                                <strong>
+                                                                    {payment
+                                                                        .reference_number
+                                                                        || '—'}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div>
+                                                                <span>
+                                                                    Payment Time
+                                                                </span>
+
+                                                                <strong>
+                                                                    {formatDateTime(
+                                                                        payment
+                                                                            .created_at,
+                                                                    )}
+                                                                </strong>
+                                                            </div>
+
                                                             {payment
-                                                                .reference_number
-                                                                || '—'}
-                                                        </strong>
-                                                    </div>
-
-                                                    <div>
-                                                        <span>
-                                                            Payment Time
-                                                        </span>
-
-                                                        <strong>
-                                                            {formatDateTime(
-                                                                payment
-                                                                    .created_at,
-                                                            )}
-                                                        </strong>
-                                                    </div>
-
-                                                    {payment.notes && (
-                                                        <p>
-                                                            {payment.notes}
-                                                        </p>
-                                                    )}
-                                                </article>
-                                            ),
+                                                                .notes && (
+                                                                    <p>
+                                                                        {
+                                                                            payment
+                                                                                .notes
+                                                                        }
+                                                                    </p>
+                                                                )}
+                                                        </article>
+                                                    ),
+                                                )
                                         )}
                                     </div>
                                 </section>
 
                                 <section className="sdm-totals">
                                     <div>
-                                        <span>Subtotal</span>
+                                        <span>
+                                            Subtotal
+                                        </span>
 
                                         <strong>
                                             {currencyFormatter
                                                 .format(
-                                                    sale.subtotal,
+                                                    sale
+                                                        .subtotal,
                                                 )}
                                         </strong>
                                     </div>
@@ -1347,40 +2079,68 @@ export default function SaleDetailsModal({
                                             -
                                             {currencyFormatter
                                                 .format(
-                                                    sale.discount,
+                                                    sale
+                                                        .discount,
                                                 )}
                                         </strong>
                                     </div>
 
                                     <div className="sdm-grand-total">
-                                        <span>Grand Total</span>
+                                        <span>
+                                            Grand Total
+                                        </span>
 
                                         <strong>
                                             {currencyFormatter
                                                 .format(
-                                                    sale.grand_total,
+                                                    sale
+                                                        .grand_total,
                                                 )}
                                         </strong>
                                     </div>
 
                                     <div>
-                                        <span>Paid Amount</span>
+                                        <span>
+                                            Paid Amount
+                                        </span>
 
                                         <strong>
                                             {currencyFormatter
                                                 .format(
-                                                    sale.paid_amount,
+                                                    sale
+                                                        .paid_amount,
                                                 )}
                                         </strong>
                                     </div>
 
+                                    {sale
+                                        .due_amount
+                                        > 0 && (
+                                            <div>
+                                                <span>
+                                                    Due Amount
+                                                </span>
+
+                                                <strong>
+                                                    {currencyFormatter
+                                                        .format(
+                                                            sale
+                                                                .due_amount,
+                                                        )}
+                                                </strong>
+                                            </div>
+                                        )}
+
                                     <div>
-                                        <span>Change</span>
+                                        <span>
+                                            Change
+                                        </span>
 
                                         <strong>
                                             {currencyFormatter
                                                 .format(
-                                                    sale.change_amount,
+                                                    sale
+                                                        .change_amount,
                                                 )}
                                         </strong>
                                     </div>
@@ -1423,9 +2183,13 @@ export default function SaleDetailsModal({
 
                             {sale.notes && (
                                 <section className="sdm-notes">
-                                    <span>Sale Notes</span>
+                                    <span>
+                                        Sale Notes
+                                    </span>
 
-                                    <p>{sale.notes}</p>
+                                    <p>
+                                        {sale.notes}
+                                    </p>
                                 </section>
                             )}
                         </div>
@@ -1439,7 +2203,9 @@ export default function SaleDetailsModal({
                             <button
                                 type="button"
                                 className="sdm-button sdm-secondary-button"
-                                onClick={onClose}
+                                onClick={
+                                    onClose
+                                }
                             >
                                 Close
                             </button>

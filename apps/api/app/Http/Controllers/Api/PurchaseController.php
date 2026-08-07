@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Purchase\ReceivePurchaseRequest;
 use App\Http\Requests\Purchase\StorePurchaseRequest;
 use App\Http\Requests\Purchase\UpdatePurchaseRequest;
+use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\StockBatch;
@@ -194,26 +195,30 @@ class PurchaseController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
-                'message' => 'Unauthenticated.',
+                'message' =>
+                'Unauthenticated.',
             ], 401);
         }
 
-        $validated = $request->validated();
+        $validated =
+            $request->validated();
 
         $purchase = DB::transaction(
             function () use (
                 $validated,
                 $user,
             ): Purchase {
-                $purchase = Purchase::query()
+                $purchase =
+                    Purchase::query()
                     ->create([
                         'supplier_id' =>
                         $validated['supplier_id'],
 
                         'supplier_invoice_number' =>
-                        $validated['supplier_invoice_number'] ?? null,
+                        $validated['supplier_invoice_number']
+                            ?? null,
 
                         'purchase_date' =>
                         $validated['purchase_date'],
@@ -222,10 +227,12 @@ class PurchaseController extends Controller
                         Purchase::STATUS_DRAFT,
 
                         'discount' =>
-                        $validated['discount'],
+                        $validated['discount']
+                            ?? 0,
 
                         'additional_cost' =>
-                        $validated['additional_cost'],
+                        $validated['additional_cost']
+                            ?? 0,
 
                         'notes' =>
                         $validated['notes']
@@ -237,9 +244,10 @@ class PurchaseController extends Controller
 
                 $purchase->update([
                     'purchase_number' =>
-                    $this->generatePurchaseNumber(
-                        $purchase,
-                    ),
+                    $this
+                        ->generatePurchaseNumber(
+                            $purchase,
+                        ),
                 ]);
 
                 $this->replaceItems(
@@ -252,12 +260,18 @@ class PurchaseController extends Controller
                 );
 
                 if (
-                    $validated['receive_now']
+                    (bool) (
+                        $validated['receive_now']
+                        ?? false
+                    )
                 ) {
-                    $purchase->load('items');
+                    $purchase->load(
+                        'items',
+                    );
 
                     $receiptItems =
-                        $purchase->items
+                        $purchase
+                        ->items
                         ->map(
                             fn(
                                 PurchaseItem $item,
@@ -294,11 +308,12 @@ class PurchaseController extends Controller
                         )
                         ->all();
 
-                    $this->receivePurchaseItems(
-                        $purchase,
-                        $receiptItems,
-                        $user->id,
-                    );
+                    $this
+                        ->receivePurchaseItems(
+                            $purchase,
+                            $receiptItems,
+                            $user->id,
+                        );
                 }
 
                 return $purchase;
@@ -342,13 +357,15 @@ class PurchaseController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
-                'message' => 'Unauthenticated.',
+                'message' =>
+                'Unauthenticated.',
             ], 401);
         }
 
-        $validated = $request->validated();
+        $validated =
+            $request->validated();
 
         $purchase = DB::transaction(
             function () use (
@@ -364,7 +381,10 @@ class PurchaseController extends Controller
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                if (! $lockedPurchase->isDraft()) {
+                if (
+                    !$lockedPurchase
+                        ->isDraft()
+                ) {
                     throw ValidationException::withMessages([
                         'purchase' => [
                             'Only draft purchases can be edited.',
@@ -377,16 +397,19 @@ class PurchaseController extends Controller
                     $validated['supplier_id'],
 
                     'supplier_invoice_number' =>
-                    $validated['supplier_invoice_number'] ?? null,
+                    $validated['supplier_invoice_number']
+                        ?? null,
 
                     'purchase_date' =>
                     $validated['purchase_date'],
 
                     'discount' =>
-                    $validated['discount'],
+                    $validated['discount']
+                        ?? 0,
 
                     'additional_cost' =>
-                    $validated['additional_cost'],
+                    $validated['additional_cost']
+                        ?? 0,
 
                     'notes' =>
                     $validated['notes']
@@ -403,7 +426,10 @@ class PurchaseController extends Controller
                 );
 
                 if (
-                    $validated['receive_now']
+                    (bool) (
+                        $validated['receive_now']
+                        ?? false
+                    )
                 ) {
                     $lockedPurchase->load(
                         'items',
@@ -448,11 +474,12 @@ class PurchaseController extends Controller
                         )
                         ->all();
 
-                    $this->receivePurchaseItems(
-                        $lockedPurchase,
-                        $receiptItems,
-                        $user->id,
-                    );
+                    $this
+                        ->receivePurchaseItems(
+                            $lockedPurchase,
+                            $receiptItems,
+                            $user->id,
+                        );
                 }
 
                 return $lockedPurchase;
@@ -483,13 +510,15 @@ class PurchaseController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
-                'message' => 'Unauthenticated.',
+                'message' =>
+                'Unauthenticated.',
             ], 401);
         }
 
-        $validated = $request->validated();
+        $validated =
+            $request->validated();
 
         $purchase = DB::transaction(
             function () use (
@@ -505,7 +534,10 @@ class PurchaseController extends Controller
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                if (! $lockedPurchase->isDraft()) {
+                if (
+                    !$lockedPurchase
+                        ->isDraft()
+                ) {
                     throw ValidationException::withMessages([
                         'purchase' => [
                             'Only draft purchases can be received.',
@@ -526,7 +558,7 @@ class PurchaseController extends Controller
 
         return response()->json([
             'message' =>
-            'Stock received successfully. New price batches were created.',
+            'Stock received successfully. New stock batches were created.',
 
             'data' =>
             $this->purchaseData(
@@ -540,7 +572,7 @@ class PurchaseController extends Controller
     public function destroy(
         Purchase $purchase,
     ): JsonResponse {
-        if (! $purchase->isDraft()) {
+        if (!$purchase->isDraft()) {
             return response()->json([
                 'message' =>
                 'Only draft purchases can be deleted.',
@@ -558,16 +590,59 @@ class PurchaseController extends Controller
         ]);
     }
 
-    /**
-     * @param array<int, array<string, mixed>> $items
-     */
     private function replaceItems(
         Purchase $purchase,
         array $items,
     ): void {
-        $purchase->items()->delete();
+        $productIds =
+            collect($items)
+            ->pluck('product_id')
+            ->filter()
+            ->map(
+                fn(
+                    mixed $id,
+                ): int =>
+                (int) $id,
+            )
+            ->unique()
+            ->values();
 
-        foreach ($items as $item) {
+        $products =
+            Product::query()
+            ->whereIn(
+                'id',
+                $productIds->all(),
+            )
+            ->get([
+                'id',
+                'name',
+                'unit',
+            ])
+            ->keyBy('id');
+
+        $purchase
+            ->items()
+            ->delete();
+
+        foreach (
+            $items as $index => $item
+        ) {
+            $productId =
+                (int) $item['product_id'];
+
+            $product =
+                $products->get(
+                    $productId,
+                );
+
+            if (!$product instanceof Product) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.product_id" => [
+                        'The selected product is invalid.',
+                    ],
+                ]);
+            }
+
             $quantity = round(
                 (float) $item['quantity'],
                 3,
@@ -578,59 +653,185 @@ class PurchaseController extends Controller
                 2,
             );
 
-            $discount = round(
-                (float) $item['discount'],
+            $sellingPrice = round(
+                (float) $item['selling_price'],
                 2,
             );
 
+            $discount = round(
+                (float) (
+                    $item['discount']
+                    ?? 0
+                ),
+                2,
+            );
+
+            $isDualUnit =
+                $this->booleanValue(
+                    $item['is_dual_unit']
+                        ?? false,
+                );
+
+            $secondaryUnit = null;
+            $conversionFactor = 1.0;
+            $secondarySellingPrice = null;
+
+            if ($isDualUnit) {
+                if (
+                    !$this->isBagUnit(
+                        $product->unit,
+                    )
+                ) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.is_dual_unit" => [
+                            'Loose Kg selling can only be enabled for products using Bag as the main unit.',
+                        ],
+                    ]);
+                }
+
+                $conversionFactor =
+                    round(
+                        (float) (
+                            $item['conversion_factor']
+                            ?? 0
+                        ),
+                        3,
+                    );
+
+                if (
+                    $conversionFactor <= 0
+                ) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.conversion_factor" => [
+                            'Weight per bag must be greater than zero.',
+                        ],
+                    ]);
+                }
+
+                $secondaryUnit =
+                    trim(
+                        (string) (
+                            $item['secondary_unit']
+                            ?? 'Kg'
+                        ),
+                    );
+
+                if (
+                    $this->normaliseUnit(
+                        $secondaryUnit,
+                    ) !== 'kg'
+                ) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.secondary_unit" => [
+                            'The loose selling unit must be Kg.',
+                        ],
+                    ]);
+                }
+
+                $secondaryUnit = 'Kg';
+
+                if (
+                    !array_key_exists(
+                        'secondary_selling_price',
+                        $item,
+                    )
+                ) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.secondary_selling_price" => [
+                            'Selling price for 1 Kg is required.',
+                        ],
+                    ]);
+                }
+
+                $secondarySellingPrice =
+                    round(
+                        (float) $item['secondary_selling_price'],
+                        2,
+                    );
+
+                if (
+                    $secondarySellingPrice <= 0
+                ) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.secondary_selling_price" => [
+                            'Selling price for 1 Kg must be greater than zero.',
+                        ],
+                    ]);
+                }
+            }
+
             $lineTotal = round(
-                ($quantity * $unitCost)
+                (
+                    $quantity
+                    * $unitCost
+                )
                     - $discount,
                 2,
             );
 
-            $purchase->items()->create([
-                'product_id' =>
-                $item['product_id'],
+            $purchase
+                ->items()
+                ->create([
+                    'product_id' =>
+                    $productId,
 
-                'quantity' => $quantity,
+                    'quantity' =>
+                    $quantity,
 
-                'received_quantity' => 0,
+                    'received_quantity' =>
+                    0,
 
-                'unit_cost' => $unitCost,
+                    'unit_cost' =>
+                    $unitCost,
 
-                'selling_price' => round(
-                    (float) $item['selling_price'],
-                    2,
-                ),
+                    'selling_price' =>
+                    $sellingPrice,
 
-                'discount' => $discount,
+                    'is_dual_unit' =>
+                    $isDualUnit,
 
-                'line_total' =>
-                max(0, $lineTotal),
+                    'secondary_unit' =>
+                    $secondaryUnit,
 
-                'batch_number' =>
-                $item['batch_number']
-                    ?? null,
+                    'conversion_factor' =>
+                    $conversionFactor,
 
-                'manufactured_date' =>
-                $item['manufactured_date'] ?? null,
+                    'secondary_selling_price' =>
+                    $secondarySellingPrice,
 
-                'expiry_date' =>
-                $item['expiry_date']
-                    ?? null,
+                    'discount' =>
+                    $discount,
 
-                'notes' =>
-                $item['notes']
-                    ?? null,
-            ]);
+                    'line_total' =>
+                    max(
+                        0,
+                        $lineTotal,
+                    ),
+
+                    'batch_number' =>
+                    $item['batch_number']
+                        ?? null,
+
+                    'manufactured_date' =>
+                    $item['manufactured_date']
+                        ?? null,
+
+                    'expiry_date' =>
+                    $item['expiry_date']
+                        ?? null,
+
+                    'notes' =>
+                    $item['notes']
+                        ?? null,
+                ]);
         }
     }
 
     private function recalculatePurchase(
         Purchase $purchase,
     ): void {
-        $items = $purchase
+        $items =
+            $purchase
             ->items()
             ->get();
 
@@ -639,45 +840,51 @@ class PurchaseController extends Controller
                 fn(
                     PurchaseItem $item,
                 ): float =>
-                (float) $item->quantity
-                    * (float) $item->unit_cost,
+                (float) $item
+                    ->quantity
+                    * (float) $item
+                        ->unit_cost,
             ),
             2,
         );
 
-        $itemDiscountTotal = round(
-            $items->sum(
-                fn(
-                    PurchaseItem $item,
-                ): float =>
-                (float) $item->discount,
-            ),
-            2,
-        );
+        $itemDiscountTotal =
+            round(
+                $items->sum(
+                    fn(
+                        PurchaseItem $item,
+                    ): float =>
+                    (float) $item
+                        ->discount,
+                ),
+                2,
+            );
 
         $grandTotal = round(
             $subtotal
                 - $itemDiscountTotal
-                - (float) $purchase->discount
+                - (float) $purchase
+                    ->discount
                 + (float) $purchase
                     ->additional_cost,
             2,
         );
 
         $purchase->update([
-            'subtotal' => $subtotal,
+            'subtotal' =>
+            $subtotal,
 
             'item_discount_total' =>
             $itemDiscountTotal,
 
             'grand_total' =>
-            max(0, $grandTotal),
+            max(
+                0,
+                $grandTotal,
+            ),
         ]);
     }
 
-    /**
-     * @param array<int, array<string, mixed>> $receiptItems
-     */
     private function receivePurchaseItems(
         Purchase $purchase,
         array $receiptItems,
@@ -686,7 +893,10 @@ class PurchaseController extends Controller
         $purchaseItems =
             $purchase
             ->items()
-            ->with('stockBatch')
+            ->with([
+                'stockBatch',
+                'product:id,name,unit',
+            ])
             ->lockForUpdate()
             ->get();
 
@@ -695,12 +905,15 @@ class PurchaseController extends Controller
             ->keyBy(
                 fn(
                     array $item,
-                ): int => (int) $item['purchase_item_id'],
+                ): int =>
+                (int) $item['purchase_item_id'],
             );
 
         if (
-            $receiptItemsById->count()
-            !== $purchaseItems->count()
+            $receiptItemsById
+            ->count()
+            !== $purchaseItems
+            ->count()
         ) {
             throw ValidationException::withMessages([
                 'items' => [
@@ -710,22 +923,30 @@ class PurchaseController extends Controller
         }
 
         foreach (
-            $purchaseItems as $purchaseItem
+            $purchaseItems
+            as $purchaseItem
         ) {
             $receiptItem =
                 $receiptItemsById->get(
                     $purchaseItem->id,
                 );
 
-            if (! is_array($receiptItem)) {
+            if (
+                !is_array(
+                    $receiptItem,
+                )
+            ) {
                 throw ValidationException::withMessages([
                     'items' => [
-                        "Missing stock intake details for {$purchaseItem->product_id}.",
+                        "Missing stock intake details for product {$purchaseItem->product_id}.",
                     ],
                 ]);
             }
 
-            if ($purchaseItem->stockBatch) {
+            if (
+                $purchaseItem
+                ->stockBatch
+            ) {
                 throw ValidationException::withMessages([
                     'purchase' => [
                         'A stock batch already exists for this purchase item.',
@@ -733,17 +954,41 @@ class PurchaseController extends Controller
                 ]);
             }
 
-            $remainingQuantity = round(
-                (float) $purchaseItem->quantity
-                    - (float) $purchaseItem
-                        ->received_quantity,
-                3,
-            );
+            if (
+                !$purchaseItem
+                    ->product
+            ) {
+                throw ValidationException::withMessages([
+                    'items' => [
+                        'The purchase item product could not be loaded.',
+                    ],
+                ]);
+            }
 
-            $receivedQuantity = round(
-                (float) $receiptItem['received_quantity'],
-                3,
-            );
+            $remainingQuantity =
+                round(
+                    (float) $purchaseItem
+                        ->quantity
+                        - (float) $purchaseItem
+                            ->received_quantity,
+                    3,
+                );
+
+            $receivedQuantity =
+                round(
+                    (float) $receiptItem['received_quantity'],
+                    3,
+                );
+
+            if (
+                $receivedQuantity <= 0
+            ) {
+                throw ValidationException::withMessages([
+                    'items' => [
+                        'Received quantity must be greater than zero.',
+                    ],
+                ]);
+            }
 
             if (
                 abs(
@@ -758,6 +1003,55 @@ class PurchaseController extends Controller
                 ]);
             }
 
+            if (
+                $purchaseItem
+                ->is_dual_unit
+                && !$this->isBagUnit(
+                    $purchaseItem
+                        ->product
+                        ->unit,
+                )
+            ) {
+                throw ValidationException::withMessages([
+                    'items' => [
+                        "{$purchaseItem->product->name} cannot use Bag to Kg conversion because its product unit is not Bag.",
+                    ],
+                ]);
+            }
+
+            if (
+                $purchaseItem
+                ->is_dual_unit
+                && $purchaseItem
+                ->conversionFactorValue()
+                <= 0
+            ) {
+                throw ValidationException::withMessages([
+                    'items' => [
+                        "Invalid Bag to Kg conversion for {$purchaseItem->product->name}.",
+                    ],
+                ]);
+            }
+
+            $stockUnit =
+                $purchaseItem
+                ->usesDualUnit()
+                ? (
+                    trim(
+                        (string) $purchaseItem
+                            ->secondary_unit,
+                    )
+                    ?: 'Kg'
+                )
+                : (
+                    trim(
+                        (string) $purchaseItem
+                            ->product
+                            ->unit,
+                    )
+                    ?: 'Unit'
+                );
+
             $existingBatches =
                 StockBatch::query()
                 ->where(
@@ -766,26 +1060,95 @@ class PurchaseController extends Controller
                         ->product_id,
                 )
                 ->lockForUpdate()
-                ->get([
-                    'id',
-                    'available_quantity',
+                ->get();
+
+            $this
+                ->ensureCompatibleStockUnit(
+                    $purchaseItem,
+                    $existingBatches,
+                    $stockUnit,
+                );
+
+            $quantityBefore =
+                round(
+                    $existingBatches
+                        ->filter(
+                            fn(
+                                StockBatch $batch,
+                            ): bool =>
+                            (float) $batch
+                                ->available_quantity
+                                > 0,
+                        )
+                        ->sum(
+                            fn(
+                                StockBatch $batch,
+                            ): float =>
+                            (float) $batch
+                                ->available_quantity,
+                        ),
+                    3,
+                );
+
+            $sellingPrice =
+                round(
+                    (float) $receiptItem['selling_price'],
+                    2,
+                );
+
+            if (
+                $sellingPrice <= 0
+            ) {
+                throw ValidationException::withMessages([
+                    'items' => [
+                        "Selling price for {$purchaseItem->product->name} must be greater than zero.",
+                    ],
                 ]);
+            }
 
-            $quantityBefore = round(
-                $existingBatches->sum(
-                    fn(
-                        StockBatch $batch,
-                    ): float =>
-                    (float) $batch
-                        ->available_quantity,
-                ),
-                3,
-            );
+            if (
+                $purchaseItem
+                ->usesDualUnit()
+                && (
+                    $purchaseItem
+                    ->secondary_selling_price
+                    === null
+                    || (float) $purchaseItem
+                        ->secondary_selling_price
+                    <= 0
+                )
+            ) {
+                throw ValidationException::withMessages([
+                    'items' => [
+                        "Loose Kg selling price is required for {$purchaseItem->product->name}.",
+                    ],
+                ]);
+            }
 
-            $sellingPrice = round(
-                (float) $receiptItem['selling_price'],
-                2,
-            );
+            $batchNumber =
+                $receiptItem['batch_number']
+                ?? $purchaseItem
+                ->batch_number;
+
+            $manufacturedDate =
+                $receiptItem['manufactured_date']
+                ?? (
+                    $purchaseItem
+                    ->manufactured_date
+                    ?->format(
+                        'Y-m-d',
+                    )
+                );
+
+            $expiryDate =
+                $receiptItem['expiry_date']
+                ?? (
+                    $purchaseItem
+                    ->expiry_date
+                    ?->format(
+                        'Y-m-d',
+                    )
+                );
 
             $purchaseItem->update([
                 'received_quantity' =>
@@ -795,16 +1158,39 @@ class PurchaseController extends Controller
                 $sellingPrice,
 
                 'batch_number' =>
-                $receiptItem['batch_number'] ?? null,
+                $batchNumber,
 
                 'manufactured_date' =>
-                $receiptItem['manufactured_date'] ?? null,
+                $manufacturedDate,
 
                 'expiry_date' =>
-                $receiptItem['expiry_date'] ?? null,
+                $expiryDate,
             ]);
 
-            $batch = StockBatch::query()
+            $purchaseItem->refresh();
+
+            $stockReceivedQuantity =
+                $purchaseItem
+                ->stockQuantityFor(
+                    $receivedQuantity,
+                );
+
+            if (
+                $stockReceivedQuantity <= 0
+            ) {
+                throw ValidationException::withMessages([
+                    'items' => [
+                        "Calculated stock quantity for {$purchaseItem->product->name} is invalid.",
+                    ],
+                ]);
+            }
+
+            $baseUnitCost =
+                $purchaseItem
+                ->baseUnitCost();
+
+            $batch =
+                StockBatch::query()
                 ->create([
                     'batch_code' =>
                     sprintf(
@@ -818,10 +1204,11 @@ class PurchaseController extends Controller
                         ->product_id,
 
                     'purchase_item_id' =>
-                    $purchaseItem->id,
+                    $purchaseItem
+                        ->id,
 
                     'batch_number' =>
-                    $receiptItem['batch_number'] ?? null,
+                    $batchNumber,
 
                     'purchase_cost' =>
                     $purchaseItem
@@ -830,26 +1217,59 @@ class PurchaseController extends Controller
                     'selling_price' =>
                     $sellingPrice,
 
+                    'is_dual_unit' =>
+                    $purchaseItem
+                        ->usesDualUnit(),
+
+                    'stock_unit' =>
+                    $stockUnit,
+
+                    'secondary_unit' =>
+                    $purchaseItem
+                        ->usesDualUnit()
+                        ? $purchaseItem
+                        ->secondary_unit
+                        : null,
+
+                    'conversion_factor' =>
+                    $purchaseItem
+                        ->usesDualUnit()
+                        ? $purchaseItem
+                        ->conversionFactorValue()
+                        : 1,
+
+                    'secondary_selling_price' =>
+                    $purchaseItem
+                        ->usesDualUnit()
+                        ? $purchaseItem
+                        ->secondary_selling_price
+                        : null,
+
+                    'base_unit_cost' =>
+                    $baseUnitCost,
+
                     'received_quantity' =>
-                    $receivedQuantity,
+                    $stockReceivedQuantity,
 
                     'available_quantity' =>
-                    $receivedQuantity,
+                    $stockReceivedQuantity,
 
                     'manufactured_date' =>
-                    $receiptItem['manufactured_date'] ?? null,
+                    $manufacturedDate,
 
                     'expiry_date' =>
-                    $receiptItem['expiry_date'] ?? null,
+                    $expiryDate,
 
-                    'received_at' => now(),
+                    'received_at' =>
+                    now(),
                 ]);
 
-            $quantityAfter = round(
-                $quantityBefore
-                    + $receivedQuantity,
-                3,
-            );
+            $quantityAfter =
+                round(
+                    $quantityBefore
+                        + $stockReceivedQuantity,
+                    3,
+                );
 
             StockMovement::query()
                 ->create([
@@ -867,7 +1287,7 @@ class PurchaseController extends Controller
                     $quantityBefore,
 
                     'quantity_change' =>
-                    $receivedQuantity,
+                    $stockReceivedQuantity,
 
                     'quantity_after' =>
                     $quantityAfter,
@@ -876,14 +1296,30 @@ class PurchaseController extends Controller
                     'purchase',
 
                     'reference_id' =>
-                    $purchase->id,
+                    $purchase
+                        ->id,
 
                     'reference_number' =>
                     $purchase
                         ->purchase_number,
 
                     'notes' =>
-                    'Stock received from purchase.',
+                    $purchaseItem
+                        ->usesDualUnit()
+                        ? sprintf(
+                            'Stock received from purchase: %s %s converted to %s %s.',
+                            $this->formatQuantity(
+                                $receivedQuantity,
+                            ),
+                            $purchaseItem
+                                ->product
+                                ->unit,
+                            $this->formatQuantity(
+                                $stockReceivedQuantity,
+                            ),
+                            $stockUnit,
+                        )
+                        : 'Stock received from purchase.',
 
                     'created_by' =>
                     $userId,
@@ -894,10 +1330,151 @@ class PurchaseController extends Controller
             'status' =>
             Purchase::STATUS_RECEIVED,
 
-            'received_by' => $userId,
+            'received_by' =>
+            $userId,
 
-            'received_at' => now(),
+            'received_at' =>
+            now(),
         ]);
+    }
+
+    private function ensureCompatibleStockUnit(
+        PurchaseItem $purchaseItem,
+        $existingBatches,
+        string $newStockUnit,
+    ): void {
+        foreach (
+            $existingBatches
+            as $existingBatch
+        ) {
+            if (
+                (float) $existingBatch
+                    ->available_quantity
+                <= 0
+            ) {
+                continue;
+            }
+
+            $existingStockUnit =
+                trim(
+                    (string) (
+                        $existingBatch
+                        ->stock_unit
+                        ?? ''
+                    ),
+                );
+
+            if (
+                $existingStockUnit === ''
+            ) {
+                if (
+                    $existingBatch
+                    ->is_dual_unit
+                    && trim(
+                        (string) $existingBatch
+                            ->secondary_unit,
+                    ) !== ''
+                ) {
+                    $existingStockUnit =
+                        trim(
+                            (string) $existingBatch
+                                ->secondary_unit,
+                        );
+                } else {
+                    $existingStockUnit =
+                        trim(
+                            (string) $purchaseItem
+                                ->product
+                                ->unit,
+                        );
+                }
+            }
+
+            if (
+                $this->normaliseUnit(
+                    $existingStockUnit,
+                )
+                !== $this->normaliseUnit(
+                    $newStockUnit,
+                )
+            ) {
+                throw ValidationException::withMessages([
+                    'items' => [
+                        "{$purchaseItem->product->name} already has available stock stored in {$existingStockUnit}. Finish or convert that stock before receiving new stock in {$newStockUnit}.",
+                    ],
+                ]);
+            }
+        }
+    }
+
+    private function booleanValue(
+        mixed $value,
+    ): bool {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (
+            is_int($value)
+            || is_float($value)
+        ) {
+            return (int) $value === 1;
+        }
+
+        return in_array(
+            strtolower(
+                trim(
+                    (string) $value,
+                ),
+            ),
+            [
+                '1',
+                'true',
+                'yes',
+                'on',
+            ],
+            true,
+        );
+    }
+
+    private function isBagUnit(
+        mixed $unit,
+    ): bool {
+        return in_array(
+            $this->normaliseUnit(
+                (string) $unit,
+            ),
+            [
+                'bag',
+                'bags',
+            ],
+            true,
+        );
+    }
+
+    private function normaliseUnit(
+        string $unit,
+    ): string {
+        return strtolower(
+            trim($unit),
+        );
+    }
+
+    private function formatQuantity(
+        float $quantity,
+    ): string {
+        return rtrim(
+            rtrim(
+                number_format(
+                    $quantity,
+                    3,
+                    '.',
+                    '',
+                ),
+                '0',
+            ),
+            '.',
+        );
     }
 
     private function generatePurchaseNumber(
@@ -920,9 +1497,12 @@ class PurchaseController extends Controller
             'createdBy:id,name',
             'receivedBy:id,name',
 
-            'items' => fn(
+            'items' =>
+            fn(
                 $query,
-            ) => $query->orderBy('id'),
+            ) =>
+            $query
+                ->orderBy('id'),
 
             'items.product:id,category_id,name,sku,barcode,unit',
             'items.product.category:id,name',
@@ -930,17 +1510,16 @@ class PurchaseController extends Controller
         ]);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private function purchaseSummaryData(
         Purchase $purchase,
     ): array {
         return [
-            'id' => $purchase->id,
+            'id' =>
+            $purchase->id,
 
             'purchase_number' =>
-            $purchase->purchase_number,
+            $purchase
+                ->purchase_number,
 
             'supplier_invoice_number' =>
             $purchase
@@ -949,19 +1528,24 @@ class PurchaseController extends Controller
             'purchase_date' =>
             $purchase
                 ->purchase_date
-                ->format('Y-m-d'),
+                ->format(
+                    'Y-m-d',
+                ),
 
-            'status' => $purchase->status,
+            'status' =>
+            $purchase->status,
 
             'subtotal' =>
-            (float) $purchase->subtotal,
+            (float) $purchase
+                ->subtotal,
 
             'item_discount_total' =>
             (float) $purchase
                 ->item_discount_total,
 
             'discount' =>
-            (float) $purchase->discount,
+            (float) $purchase
+                ->discount,
 
             'additional_cost' =>
             (float) $purchase
@@ -971,11 +1555,18 @@ class PurchaseController extends Controller
             (float) $purchase
                 ->grand_total,
 
-            'notes' => $purchase->notes,
+            'notes' =>
+            $purchase->notes,
 
             'items_count' =>
-            (int) $purchase
-                ->items_count,
+            (int) (
+                $purchase
+                ->items_count
+                ?? $purchase
+                ->items
+                ?->count()
+                ?? 0
+            ),
 
             'total_quantity' =>
             (float) (
@@ -984,25 +1575,40 @@ class PurchaseController extends Controller
                 ?? 0
             ),
 
-            'supplier' => [
-                'id' =>
-                $purchase->supplier->id,
+            'supplier' =>
+            $purchase->supplier
+                ? [
+                    'id' =>
+                    $purchase
+                        ->supplier
+                        ->id,
 
-                'name' =>
-                $purchase->supplier->name,
+                    'name' =>
+                    $purchase
+                        ->supplier
+                        ->name,
 
-                'phone' =>
-                $purchase->supplier->phone,
-            ],
+                    'phone' =>
+                    $purchase
+                        ->supplier
+                        ->phone,
+                ]
+                : null,
 
-            'created_by' => [
-                'id' =>
-                $purchase->createdBy->id,
+            'created_by' =>
+            $purchase->createdBy
+                ? [
+                    'id' =>
+                    $purchase
+                        ->createdBy
+                        ->id,
 
-                'name' =>
-                $purchase->createdBy
-                    ->name,
-            ],
+                    'name' =>
+                    $purchase
+                        ->createdBy
+                        ->name,
+                ]
+                : null,
 
             'received_by' =>
             $purchase->receivedBy
@@ -1036,27 +1642,28 @@ class PurchaseController extends Controller
         ];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private function purchaseData(
         Purchase $purchase,
     ): array {
         return [
-            ...$this->purchaseSummaryData(
-                $purchase,
-            ),
+            ...$this
+                ->purchaseSummaryData(
+                    $purchase,
+                ),
 
             'items' =>
-            $purchase->items
+            $purchase
+                ->items
                 ->map(
                     fn(
                         PurchaseItem $item,
                     ): array => [
-                        'id' => $item->id,
+                        'id' =>
+                        $item->id,
 
                         'product_id' =>
-                        $item->product_id,
+                        $item
+                            ->product_id,
 
                         'quantity' =>
                         (float) $item
@@ -1073,6 +1680,41 @@ class PurchaseController extends Controller
                         'selling_price' =>
                         (float) $item
                             ->selling_price,
+
+                        'is_dual_unit' =>
+                        (bool) $item
+                            ->is_dual_unit,
+
+                        'secondary_unit' =>
+                        $item
+                            ->secondary_unit,
+
+                        'conversion_factor' =>
+                        (float) (
+                            $item
+                            ->conversion_factor
+                            ?? 1
+                        ),
+
+                        'secondary_selling_price' =>
+                        $item
+                            ->secondary_selling_price
+                            !== null
+                            ? (float) $item
+                                ->secondary_selling_price
+                            : null,
+
+                        'total_stock_quantity' =>
+                        $item
+                            ->totalStockQuantity(),
+
+                        'received_stock_quantity' =>
+                        $item
+                            ->receivedStockQuantity(),
+
+                        'base_unit_cost' =>
+                        $item
+                            ->baseUnitCost(),
 
                         'discount' =>
                         (float) $item
@@ -1103,46 +1745,54 @@ class PurchaseController extends Controller
                         'notes' =>
                         $item->notes,
 
-                        'product' => [
-                            'id' =>
-                            $item
-                                ->product
-                                ->id,
-
-                            'name' =>
-                            $item
-                                ->product
-                                ->name,
-
-                            'sku' =>
-                            $item
-                                ->product
-                                ->sku,
-
-                            'barcode' =>
-                            $item
-                                ->product
-                                ->barcode,
-
-                            'unit' =>
-                            $item
-                                ->product
-                                ->unit,
-
-                            'category' => [
+                        'product' =>
+                        $item->product
+                            ? [
                                 'id' =>
                                 $item
                                     ->product
-                                    ->category
                                     ->id,
 
                                 'name' =>
                                 $item
                                     ->product
-                                    ->category
                                     ->name,
-                            ],
-                        ],
+
+                                'sku' =>
+                                $item
+                                    ->product
+                                    ->sku,
+
+                                'barcode' =>
+                                $item
+                                    ->product
+                                    ->barcode,
+
+                                'unit' =>
+                                $item
+                                    ->product
+                                    ->unit,
+
+                                'category' =>
+                                $item
+                                    ->product
+                                    ->category
+                                    ? [
+                                        'id' =>
+                                        $item
+                                            ->product
+                                            ->category
+                                            ->id,
+
+                                        'name' =>
+                                        $item
+                                            ->product
+                                            ->category
+                                            ->name,
+                                    ]
+                                    : null,
+                            ]
+                            : null,
 
                         'stock_batch' =>
                         $item->stockBatch
@@ -1172,6 +1822,49 @@ class PurchaseController extends Controller
                                     ->stockBatch
                                     ->selling_price,
 
+                                'is_dual_unit' =>
+                                (bool) $item
+                                    ->stockBatch
+                                    ->is_dual_unit,
+
+                                'stock_unit' =>
+                                $item
+                                    ->stockBatch
+                                    ->stock_unit,
+
+                                'secondary_unit' =>
+                                $item
+                                    ->stockBatch
+                                    ->secondary_unit,
+
+                                'conversion_factor' =>
+                                (float) (
+                                    $item
+                                    ->stockBatch
+                                    ->conversion_factor
+                                    ?? 1
+                                ),
+
+                                'secondary_selling_price' =>
+                                $item
+                                    ->stockBatch
+                                    ->secondary_selling_price
+                                    !== null
+                                    ? (float) $item
+                                        ->stockBatch
+                                        ->secondary_selling_price
+                                    : null,
+
+                                'base_unit_cost' =>
+                                $item
+                                    ->stockBatch
+                                    ->base_unit_cost
+                                    !== null
+                                    ? (float) $item
+                                        ->stockBatch
+                                        ->base_unit_cost
+                                    : null,
+
                                 'received_quantity' =>
                                 (float) $item
                                     ->stockBatch
@@ -1182,6 +1875,14 @@ class PurchaseController extends Controller
                                     ->stockBatch
                                     ->available_quantity,
 
+                                'manufactured_date' =>
+                                $item
+                                    ->stockBatch
+                                    ->manufactured_date
+                                    ?->format(
+                                        'Y-m-d',
+                                    ),
+
                                 'expiry_date' =>
                                 $item
                                     ->stockBatch
@@ -1189,6 +1890,12 @@ class PurchaseController extends Controller
                                     ?->format(
                                         'Y-m-d',
                                     ),
+
+                                'received_at' =>
+                                $item
+                                    ->stockBatch
+                                    ->received_at
+                                    ?->toISOString(),
                             ]
                             : null,
                     ],

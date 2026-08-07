@@ -1,100 +1,489 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 
-import { useAuth } from '../../auth/AuthContext';
-import BatchSelectionModal from '../../components/pos/BatchSelectionModal';
-import PaymentModal from '../../components/pos/PaymentModal';
-import SaleReceiptModal from '../../components/pos/SaleReceiptModal';
-import { ApiError } from '../../lib/api';
+import {
+    useAuth,
+} from '../../auth/AuthContext';
+
+import BatchSelectionModal
+    from '../../components/pos/BatchSelectionModal';
+
+import PaymentModal
+    from '../../components/pos/PaymentModal';
+
+import SaleReceiptModal
+    from '../../components/pos/SaleReceiptModal';
+
+import {
+    ApiError,
+} from '../../lib/api';
+
 import {
     completePosSale,
     getPosCategories,
     getPosProducts,
 } from '../../services/posService';
+
 import type {
     CompleteSaleValues,
     PosCartItem,
     PosCategory,
     PosPaginationMeta,
     PosProduct,
+    PosSaleOption,
     PosStockBatch,
     SaleReceipt,
 } from '../../types/sale';
 
 const PRODUCT_PAGE_SIZE = 24;
 
-const currencyFormatter = new Intl.NumberFormat('en-LK', {
-    style: 'currency',
-    currency: 'LKR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-});
+const currencyFormatter =
+    new Intl.NumberFormat(
+        'en-LK',
+        {
+            style: 'currency',
+            currency: 'LKR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        },
+    );
 
-const quantityFormatter = new Intl.NumberFormat('en-GB', {
-    maximumFractionDigits: 3,
-});
+const quantityFormatter =
+    new Intl.NumberFormat(
+        'en-GB',
+        {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 3,
+        },
+    );
 
-const initialPagination: PosPaginationMeta = {
+const initialPagination:
+    PosPaginationMeta = {
     current_page: 1,
     last_page: 1,
-    per_page: PRODUCT_PAGE_SIZE,
+    per_page:
+        PRODUCT_PAGE_SIZE,
     total: 0,
     from: null,
     to: null,
 };
 
-function getErrorMessage(error: unknown, fallback: string): string {
-    if (error instanceof ApiError || error instanceof Error) {
+function getErrorMessage(
+    error: unknown,
+    fallback: string,
+): string {
+    if (
+        error instanceof ApiError
+        || error instanceof Error
+    ) {
         return error.message;
     }
 
     return fallback;
 }
 
-function formatPriceRange(product: PosProduct): string {
-    if (product.minimum_price === null || product.maximum_price === null) {
-        return 'Price unavailable';
+function formatQuantity(
+    value:
+        | number
+        | string
+        | null
+        | undefined,
+): string {
+    const parsedValue =
+        Number(
+            value ?? 0,
+        );
+
+    if (
+        !Number.isFinite(
+            parsedValue,
+        )
+    ) {
+        return '0';
     }
 
-    if (product.minimum_price === product.maximum_price) {
-        return currencyFormatter.format(product.minimum_price);
-    }
-
-    return `${currencyFormatter.format(product.minimum_price)} – ${currencyFormatter.format(
-        product.maximum_price,
-    )}`;
+    return quantityFormatter.format(
+        parsedValue,
+    );
 }
 
-function formatQuantity(value: number | string | null | undefined): string {
-    const parsedValue = Number(value ?? 0);
-    return Number.isFinite(parsedValue) ? quantityFormatter.format(parsedValue) : '0';
-}
-
-function formatExpiryDate(value: string | null | undefined): string {
+function formatExpiryDate(
+    value:
+        | string
+        | null
+        | undefined,
+): string {
     if (!value) {
         return 'No expiry';
     }
 
-    const date = new Date(value);
+    const date =
+        new Date(
+            `${value.substring(
+                0,
+                10,
+            )}T00:00:00`,
+        );
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+        Number.isNaN(
+            date.getTime(),
+        )
+    ) {
         return value;
     }
 
-    return new Intl.DateTimeFormat('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-    }).format(date);
+    return new Intl.DateTimeFormat(
+        'en-GB',
+        {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        },
+    ).format(date);
+}
+
+function normaliseQuantity(
+    value: number,
+): number {
+    return Number(
+        value.toFixed(3),
+    );
+}
+
+function normaliseUnit(
+    value:
+        | string
+        | null
+        | undefined,
+): string {
+    return String(
+        value ?? '',
+    )
+        .trim()
+        .toLowerCase();
+}
+
+function isWholeNumber(
+    value: number,
+): boolean {
+    return Math.abs(
+        value - Math.round(value),
+    ) < 0.0001;
+}
+
+function getCartItemKey(
+    batchId: number,
+    saleUnit: string,
+): string {
+    return `${batchId}:${normaliseUnit(
+        saleUnit,
+    )}`;
+}
+
+function isSameCartItem(
+    item: PosCartItem,
+    batchId: number,
+    saleUnit: string,
+): boolean {
+    return (
+        item.stock_batch_id
+        === batchId
+        && normaliseUnit(
+            item.sale_unit,
+        )
+        === normaliseUnit(
+            saleUnit,
+        )
+    );
+}
+
+function calculateStockQuantity(
+    quantity: number,
+    conversionFactor: number,
+): number {
+    return normaliseQuantity(
+        quantity
+        * conversionFactor,
+    );
+}
+
+function getProductStockUnit(
+    product: PosProduct,
+): string {
+    return (
+        product.stock_unit
+        || product.unit
+        || 'Unit'
+    );
+}
+
+function getProductPriceLabel(
+    product: PosProduct,
+): string {
+    if (
+        !product.is_dual_unit
+    ) {
+        if (
+            product.minimum_price
+            === null
+            || product.maximum_price
+            === null
+        ) {
+            return 'Price unavailable';
+        }
+
+        if (
+            product.minimum_price
+            === product.maximum_price
+        ) {
+            return currencyFormatter.format(
+                product.minimum_price,
+            );
+        }
+
+        return `${currencyFormatter.format(
+            product.minimum_price,
+        )
+            } – ${currencyFormatter.format(
+                product.maximum_price,
+            )
+            }`;
+    }
+
+    const primaryPrices =
+        product.batches
+            .flatMap(
+                (
+                    batch,
+                ) =>
+                    batch.sale_options
+                    ?? [],
+            )
+            .filter(
+                (
+                    option,
+                ) =>
+                    option.key
+                    === 'primary',
+            )
+            .map(
+                (
+                    option,
+                ) =>
+                    Number(
+                        option
+                            .selling_price,
+                    ),
+            )
+            .filter(
+                (
+                    price,
+                ) =>
+                    Number.isFinite(
+                        price,
+                    ),
+            );
+
+    const secondaryPrices =
+        product.batches
+            .flatMap(
+                (
+                    batch,
+                ) =>
+                    batch.sale_options
+                    ?? [],
+            )
+            .filter(
+                (
+                    option,
+                ) =>
+                    option.key
+                    === 'secondary',
+            )
+            .map(
+                (
+                    option,
+                ) =>
+                    Number(
+                        option
+                            .selling_price,
+                    ),
+            )
+            .filter(
+                (
+                    price,
+                ) =>
+                    Number.isFinite(
+                        price,
+                    ),
+            );
+
+    const firstPrimary =
+        primaryPrices[0];
+
+    const firstSecondary =
+        secondaryPrices[0];
+
+    if (
+        firstPrimary !== undefined
+        && firstSecondary
+        !== undefined
+    ) {
+        return `${currencyFormatter.format(
+            firstPrimary,
+        )
+            } / ${product.primary_unit
+            || product.unit
+            } • ${currencyFormatter.format(
+                firstSecondary,
+            )
+            } / Kg`;
+    }
+
+    return 'Bag + Kg pricing';
+}
+
+function getProductAvailableLabel(
+    product: PosProduct,
+): string {
+    const stockUnit =
+        getProductStockUnit(
+            product,
+        );
+
+    if (
+        !product.is_dual_unit
+    ) {
+        return `${formatQuantity(
+            product
+                .total_available_quantity,
+        )
+            } ${stockUnit}`;
+    }
+
+    const totalFullBags =
+        product.batches.reduce(
+            (
+                total,
+                batch,
+            ) =>
+                total
+                + Number(
+                    batch
+                        .available_primary_quantity
+                    ?? 0,
+                ),
+            0,
+        );
+
+    return `${formatQuantity(
+        product
+            .total_available_quantity,
+    )
+        } ${stockUnit} • ${formatQuantity(
+            totalFullBags,
+        )
+        } ${product.primary_unit
+        || product.unit
+        }`;
+}
+
+function isFullPrimaryUnit(
+    item: PosCartItem,
+): boolean {
+    return (
+        item.is_dual_unit
+        && normaliseUnit(
+            item.sale_unit,
+        )
+        === normaliseUnit(
+            item.primary_unit,
+        )
+    );
+}
+
+function getCartQuantityStep(
+    item: PosCartItem,
+): number {
+    return isFullPrimaryUnit(
+        item,
+    )
+        ? 1
+        : 0.001;
+}
+
+function getCartMinimumQuantity(
+    item: PosCartItem,
+): number {
+    return isFullPrimaryUnit(
+        item,
+    )
+        ? 1
+        : 0.001;
+}
+
+function getBatchStockUsedByCart(
+    cart: PosCartItem[],
+    batchId: number,
+    excludedKey?: string,
+): number {
+    return normaliseQuantity(
+        cart.reduce(
+            (
+                total,
+                item,
+            ) => {
+                if (
+                    item.stock_batch_id
+                    !== batchId
+                ) {
+                    return total;
+                }
+
+                const itemKey =
+                    getCartItemKey(
+                        item
+                            .stock_batch_id,
+                        item.sale_unit,
+                    );
+
+                if (
+                    excludedKey
+                    && itemKey
+                    === excludedKey
+                ) {
+                    return total;
+                }
+
+                return (
+                    total
+                    + Number(
+                        item.stock_quantity
+                        ?? 0,
+                    )
+                );
+            },
+            0,
+        ),
+    );
 }
 
 type IconName =
     | 'alert'
+    | 'bag'
     | 'basket'
     | 'box'
     | 'chevron-left'
     | 'chevron-right'
     | 'close'
     | 'filter'
+    | 'kg'
     | 'minus'
     | 'plus'
     | 'receipt'
@@ -102,15 +491,23 @@ type IconName =
     | 'search'
     | 'trash';
 
-function Icon({ name, className = '' }: { name: IconName; className?: string }) {
+function Icon({
+    name,
+    className = '',
+}: {
+    name: IconName;
+    className?: string;
+}) {
     const props = {
         className,
         viewBox: '0 0 24 24',
         fill: 'none',
         stroke: 'currentColor',
         strokeWidth: 2,
-        strokeLinecap: 'round' as const,
-        strokeLinejoin: 'round' as const,
+        strokeLinecap:
+            'round' as const,
+        strokeLinejoin:
+            'round' as const,
         'aria-hidden': true,
         focusable: false,
     };
@@ -122,6 +519,15 @@ function Icon({ name, className = '' }: { name: IconName; className?: string }) 
                     <path d="M10.3 3.4 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.4a2 2 0 0 0-3.4 0Z" />
                     <path d="M12 9v4" />
                     <path d="M12 17h.01" />
+                </svg>
+            );
+
+        case 'bag':
+            return (
+                <svg {...props}>
+                    <path d="M7 4h10l2 5v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9Z" />
+                    <path d="M7 4c1.5 2 8.5 2 10 0" />
+                    <path d="M9 13h6" />
                 </svg>
             );
 
@@ -153,7 +559,7 @@ function Icon({ name, className = '' }: { name: IconName; className?: string }) 
         case 'chevron-right':
             return (
                 <svg {...props}>
-                    <path d="m9 18 6-6-6-6" />
+                    <path d="m9 18 6 6-6-6 6-6" />
                 </svg>
             );
 
@@ -168,6 +574,15 @@ function Icon({ name, className = '' }: { name: IconName; className?: string }) 
             return (
                 <svg {...props}>
                     <path d="M4 5h16M7 12h10M10 19h4" />
+                </svg>
+            );
+
+        case 'kg':
+            return (
+                <svg {...props}>
+                    <path d="M6 5h12l2 15H4Z" />
+                    <path d="M9 5a3 3 0 0 1 6 0" />
+                    <path d="M8.5 14h7" />
                 </svg>
             );
 
@@ -203,7 +618,12 @@ function Icon({ name, className = '' }: { name: IconName; className?: string }) 
         case 'search':
             return (
                 <svg {...props}>
-                    <circle cx="11" cy="11" r="7" />
+                    <circle
+                        cx="11"
+                        cy="11"
+                        r="7"
+                    />
+
                     <path d="m20 20-4-4" />
                 </svg>
             );
@@ -234,6 +654,9 @@ const styles = `
     --green-100: #dcfce7;
     --green-50: #f0fdf4;
 
+    --blue-700: #175cd3;
+    --blue-50: #eff8ff;
+
     --red: #b42318;
     --red-bg: #fef3f2;
 
@@ -251,15 +674,18 @@ const styles = `
     --page: #f3f6f4;
 
     display: grid !important;
+
     grid-template-columns:
         minmax(0, 1fr)
-        minmax(360px, 420px) !important;
+        minmax(380px, 440px) !important;
 
     gap: 16px !important;
 
     width: 100% !important;
     min-width: 0 !important;
-    min-height: calc(100dvh - 120px) !important;
+
+    min-height:
+        calc(100dvh - 120px) !important;
 
     color: var(--text) !important;
 
@@ -271,7 +697,7 @@ const styles = `
         Arial,
         sans-serif !important;
 
-    font-size: 14px !important;
+    font-size: 15px !important;
     line-height: 1.5 !important;
 
     background: transparent !important;
@@ -299,11 +725,17 @@ const styles = `
 #agro-pos select:focus-visible {
     outline: none !important;
 
-    border-color: var(--green-700) !important;
+    border-color:
+        var(--green-700) !important;
 
     box-shadow:
         0 0 0 4px
-        rgba(21, 128, 61, 0.14) !important;
+        rgba(
+            21,
+            128,
+            61,
+            0.14
+        ) !important;
 }
 
 #agro-pos .pos-products,
@@ -312,7 +744,8 @@ const styles = `
 
     overflow: hidden !important;
 
-    background: var(--surface) !important;
+    background:
+        var(--surface) !important;
 
     border:
         1px solid
@@ -322,7 +755,12 @@ const styles = `
 
     box-shadow:
         0 1px 3px
-        rgba(16, 24, 40, 0.08) !important;
+        rgba(
+            16,
+            24,
+            40,
+            0.08
+        ) !important;
 }
 
 #agro-pos .pos-products {
@@ -330,19 +768,25 @@ const styles = `
 
     min-height: 680px !important;
 
-    flex-direction: column !important;
+    flex-direction:
+        column !important;
 }
 
 #agro-pos .pos-header {
     display: flex !important;
 
-    min-height: 88px !important;
+    min-height: 96px !important;
 
-    align-items: center !important;
-    justify-content: space-between !important;
+    align-items:
+        center !important;
+
+    justify-content:
+        space-between !important;
+
     gap: 18px !important;
 
-    padding: 17px 20px !important;
+    padding:
+        18px 20px !important;
 
     background:
         linear-gradient(
@@ -361,34 +805,45 @@ const styles = `
 
     margin-bottom: 3px !important;
 
-    color: var(--green-700) !important;
+    color:
+        var(--green-700) !important;
 
     font-size: 11px !important;
-    font-weight: 750 !important;
-    letter-spacing: 0.06em !important;
 
-    text-transform: uppercase !important;
+    font-weight: 800 !important;
+
+    letter-spacing:
+        0.06em !important;
+
+    text-transform:
+        uppercase !important;
 }
 
 #agro-pos .page-title {
-    font-size: 23px !important;
-    font-weight: 730 !important;
+    font-size: 26px !important;
+
+    font-weight: 800 !important;
+
     line-height: 1.2 !important;
-    letter-spacing: -0.02em !important;
+
+    letter-spacing:
+        -0.02em !important;
 }
 
 #agro-pos .subtitle {
     margin-top: 4px !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
-    font-size: 13px !important;
+    font-size: 14px !important;
 }
 
 #agro-pos .customer-note {
-    min-width: 215px !important;
+    min-width: 225px !important;
 
-    padding: 10px 12px !important;
+    padding:
+        11px 13px !important;
 
     background: #ffffff !important;
 
@@ -402,45 +857,61 @@ const styles = `
 #agro-pos .customer-note span {
     display: block !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
     font-size: 10px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.05em !important;
 
-    text-transform: uppercase !important;
+    font-weight: 800 !important;
+
+    letter-spacing:
+        0.05em !important;
+
+    text-transform:
+        uppercase !important;
 }
 
 #agro-pos .customer-note strong {
     display: block !important;
 
-    color: var(--green-900) !important;
+    color:
+        var(--green-900) !important;
 
-    font-size: 13px !important;
-    font-weight: 700 !important;
+    font-size: 14px !important;
+
+    font-weight: 800 !important;
 }
 
 #agro-pos .customer-note small {
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
-    font-size: 11px !important;
+    font-size: 12px !important;
 }
 
 #agro-pos .alert {
     display: flex !important;
 
     align-items: center !important;
+
     gap: 9px !important;
 
-    margin: 12px 14px 0 !important;
-    padding: 10px 12px !important;
+    margin:
+        12px
+        14px
+        0 !important;
+
+    padding:
+        11px 12px !important;
 
     color: var(--red) !important;
 
     font-size: 13px !important;
-    font-weight: 600 !important;
 
-    background: var(--red-bg) !important;
+    font-weight: 700 !important;
+
+    background:
+        var(--red-bg) !important;
 
     border:
         1px solid
@@ -452,28 +923,35 @@ const styles = `
 #agro-pos .alert svg {
     width: 18px !important;
     height: 18px !important;
-    flex: 0 0 18px !important;
+
+    flex:
+        0 0 18px !important;
 }
 
 #agro-pos .alert span {
     min-width: 0 !important;
+
     flex: 1 !important;
 }
 
 #agro-pos .retry {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    min-height: 32px !important;
+    min-height: 34px !important;
 
     align-items: center !important;
+
     gap: 5px !important;
 
-    padding: 5px 8px !important;
+    padding:
+        5px 9px !important;
 
     color: var(--red) !important;
 
     font-size: 12px !important;
-    font-weight: 650 !important;
+
+    font-weight: 700 !important;
 
     background: #ffffff !important;
 
@@ -496,7 +974,7 @@ const styles = `
 
     grid-template-columns:
         minmax(0, 1fr)
-        minmax(190px, 230px) !important;
+        minmax(200px, 240px) !important;
 
     gap: 10px !important;
 
@@ -516,10 +994,12 @@ const styles = `
 }
 
 #agro-pos .field-label {
-    color: var(--text-2) !important;
+    color:
+        var(--text-2) !important;
 
-    font-size: 11px !important;
-    font-weight: 650 !important;
+    font-size: 12px !important;
+
+    font-weight: 700 !important;
 }
 
 #agro-pos .control-wrap {
@@ -537,11 +1017,14 @@ const styles = `
     width: 18px !important;
     height: 18px !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
-    transform: translateY(-50%) !important;
+    transform:
+        translateY(-50%) !important;
 
-    pointer-events: none !important;
+    pointer-events:
+        none !important;
 }
 
 #agro-pos .search-input,
@@ -550,13 +1033,16 @@ const styles = `
     display: block !important;
 
     width: 100% !important;
-    height: 44px !important;
-    min-height: 44px !important;
 
-    color: var(--text) !important;
+    height: 46px !important;
+    min-height: 46px !important;
 
-    font-size: 14px !important;
-    font-weight: 500 !important;
+    color:
+        var(--text) !important;
+
+    font-size: 15px !important;
+
+    font-weight: 600 !important;
 
     outline: none !important;
 
@@ -570,9 +1056,11 @@ const styles = `
 }
 
 #agro-pos .search-input {
-    padding: 0 42px !important;
+    padding:
+        0 42px !important;
 
-    background: #f8faf9 !important;
+    background:
+        #f8faf9 !important;
 }
 
 #agro-pos .search-input::placeholder {
@@ -582,7 +1070,9 @@ const styles = `
 }
 
 #agro-pos .category-select {
-    padding: 0 34px 0 38px !important;
+    padding:
+        0 34px
+        0 38px !important;
 
     appearance: none !important;
 
@@ -599,14 +1089,15 @@ const styles = `
         ) !important;
 
     background-position:
-        calc(100% - 16px) 18px,
-        calc(100% - 11px) 18px !important;
+        calc(100% - 16px) 19px,
+        calc(100% - 11px) 19px !important;
 
     background-size:
         5px 5px,
         5px 5px !important;
 
-    background-repeat: no-repeat !important;
+    background-repeat:
+        no-repeat !important;
 
     cursor: pointer !important;
 }
@@ -619,29 +1110,35 @@ const styles = `
 
     display: grid !important;
 
-    width: 32px !important;
-    height: 32px !important;
+    width: 34px !important;
+    height: 34px !important;
 
     place-items: center !important;
 
     padding: 0 !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
-    background: transparent !important;
+    background:
+        transparent !important;
 
     border: 0 !important;
+
     border-radius: 7px !important;
 
-    transform: translateY(-50%) !important;
+    transform:
+        translateY(-50%) !important;
 
     cursor: pointer !important;
 }
 
 #agro-pos .clear-search:hover {
-    color: var(--text) !important;
+    color:
+        var(--text) !important;
 
-    background: #eaf0ec !important;
+    background:
+        #eaf0ec !important;
 }
 
 #agro-pos .clear-search svg {
@@ -655,7 +1152,10 @@ const styles = `
     grid-template-columns:
         repeat(
             auto-fill,
-            minmax(210px, 1fr)
+            minmax(
+                220px,
+                1fr
+            )
         ) !important;
 
     align-content: start !important;
@@ -663,25 +1163,33 @@ const styles = `
     gap: 12px !important;
 
     min-height: 330px !important;
+
     flex: 1 !important;
 
     padding: 14px !important;
 
-    background: #f5f8f6 !important;
+    background:
+        #f5f8f6 !important;
 }
 
 #agro-pos .product-card {
+    position: relative !important;
+
     display: flex !important;
 
     min-width: 0 !important;
-    min-height: 158px !important;
 
-    flex-direction: column !important;
+    min-height: 180px !important;
+
+    flex-direction:
+        column !important;
+
     gap: 10px !important;
 
-    padding: 13px !important;
+    padding: 14px !important;
 
-    color: var(--text) !important;
+    color:
+        var(--text) !important;
 
     text-align: left !important;
 
@@ -695,7 +1203,12 @@ const styles = `
 
     box-shadow:
         0 2px 7px
-        rgba(16, 24, 40, 0.045) !important;
+        rgba(
+            16,
+            24,
+            40,
+            0.045
+        ) !important;
 
     cursor: pointer !important;
 
@@ -706,13 +1219,61 @@ const styles = `
 }
 
 #agro-pos .product-card:hover {
-    border-color: var(--green-700) !important;
+    border-color:
+        var(--green-700) !important;
 
     box-shadow:
         0 8px 18px
-        rgba(21, 128, 61, 0.12) !important;
+        rgba(
+            21,
+            128,
+            61,
+            0.12
+        ) !important;
 
-    transform: translateY(-2px) !important;
+    transform:
+        translateY(-2px) !important;
+}
+
+#agro-pos .dual-product-badge {
+    position: absolute !important;
+
+    top: 9px !important;
+    right: 9px !important;
+
+    display:
+        inline-flex !important;
+
+    min-height: 25px !important;
+
+    align-items: center !important;
+
+    gap: 4px !important;
+
+    padding:
+        3px 7px !important;
+
+    color:
+        var(--blue-700) !important;
+
+    font-size: 10px !important;
+
+    font-weight: 800 !important;
+
+    background:
+        var(--blue-50) !important;
+
+    border:
+        1px solid
+        #b9d8f5 !important;
+
+    border-radius:
+        999px !important;
+}
+
+#agro-pos .dual-product-badge svg {
+    width: 13px !important;
+    height: 13px !important;
 }
 
 #agro-pos .product-top {
@@ -720,23 +1281,34 @@ const styles = `
 
     min-width: 0 !important;
 
-    align-items: flex-start !important;
+    align-items:
+        flex-start !important;
+
     gap: 10px !important;
+
+    padding-right: 0 !important;
+}
+
+#agro-pos
+.product-card:has(.dual-product-badge)
+.product-top {
+    padding-right: 62px !important;
 }
 
 #agro-pos .product-initial {
     display: grid !important;
 
-    width: 40px !important;
-    height: 40px !important;
-    min-width: 40px !important;
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
 
     place-items: center !important;
 
     color: #ffffff !important;
 
-    font-size: 15px !important;
-    font-weight: 750 !important;
+    font-size: 16px !important;
+
+    font-weight: 800 !important;
 
     background:
         linear-gradient(
@@ -752,50 +1324,70 @@ const styles = `
     display: flex !important;
 
     min-width: 0 !important;
+
     flex: 1 !important;
 
-    flex-direction: column !important;
+    flex-direction:
+        column !important;
 }
 
 #agro-pos .category-badge {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    width: fit-content !important;
+    width:
+        fit-content !important;
+
     max-width: 100% !important;
 
     margin-bottom: 4px !important;
-    padding: 3px 7px !important;
+
+    padding:
+        3px 7px !important;
 
     overflow: hidden !important;
 
-    color: var(--green-900) !important;
+    color:
+        var(--green-900) !important;
 
     font-size: 10px !important;
-    font-weight: 700 !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    font-weight: 800 !important;
 
-    background: var(--green-50) !important;
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
+
+    background:
+        var(--green-50) !important;
 
     border:
         1px solid
         var(--green-100) !important;
 
-    border-radius: 999px !important;
+    border-radius:
+        999px !important;
 }
 
 #agro-pos .product-name {
-    display: -webkit-box !important;
+    display:
+        -webkit-box !important;
 
     overflow: hidden !important;
 
-    font-size: 15px !important;
-    font-weight: 680 !important;
+    font-size: 16px !important;
+
+    font-weight: 750 !important;
+
     line-height: 1.35 !important;
 
-    -webkit-box-orient: vertical !important;
-    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient:
+        vertical !important;
+
+    -webkit-line-clamp:
+        2 !important;
 }
 
 #agro-pos .product-code {
@@ -805,20 +1397,30 @@ const styles = `
 
     overflow: hidden !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
     font-size: 11px !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
 }
 
 #agro-pos .product-meta {
     display: grid !important;
 
     grid-template-columns:
-        minmax(0, 1.3fr)
-        minmax(0, 0.8fr) !important;
+        minmax(
+            0,
+            1.35fr
+        )
+        minmax(
+            0,
+            1fr
+        ) !important;
 
     gap: 8px !important;
 
@@ -829,15 +1431,22 @@ const styles = `
     display: flex !important;
 
     min-width: 0 !important;
-    min-height: 50px !important;
 
-    flex-direction: column !important;
-    justify-content: center !important;
+    min-height: 54px !important;
+
+    flex-direction:
+        column !important;
+
+    justify-content:
+        center !important;
+
     gap: 2px !important;
 
-    padding: 7px 8px !important;
+    padding:
+        7px 8px !important;
 
-    background: #f8faf9 !important;
+    background:
+        #f8faf9 !important;
 
     border:
         1px solid
@@ -847,27 +1456,41 @@ const styles = `
 }
 
 #agro-pos .meta-box span {
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
     font-size: 9px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.03em !important;
 
-    text-transform: uppercase !important;
+    font-weight: 800 !important;
+
+    letter-spacing:
+        0.03em !important;
+
+    text-transform:
+        uppercase !important;
 }
 
 #agro-pos .meta-box strong {
     overflow: hidden !important;
 
-    font-size: 12px !important;
-    font-weight: 700 !important;
+    color:
+        var(--text-2) !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    font-size: 12px !important;
+
+    font-weight: 750 !important;
+
+    text-overflow:
+        ellipsis !important;
 }
 
 #agro-pos .price strong {
-    color: var(--green-800) !important;
+    color:
+        var(--green-800) !important;
+
+    white-space: normal !important;
+
+    line-height: 1.35 !important;
 }
 
 #agro-pos .state {
@@ -875,11 +1498,17 @@ const styles = `
 
     min-height: 300px !important;
 
-    grid-column: 1 / -1 !important;
+    grid-column:
+        1 / -1 !important;
 
     align-items: center !important;
-    justify-content: center !important;
-    flex-direction: column !important;
+
+    justify-content:
+        center !important;
+
+    flex-direction:
+        column !important;
+
     gap: 8px !important;
 
     padding: 28px !important;
@@ -898,14 +1527,16 @@ const styles = `
 #agro-pos .state-icon {
     display: grid !important;
 
-    width: 46px !important;
-    height: 46px !important;
+    width: 48px !important;
+    height: 48px !important;
 
     place-items: center !important;
 
-    color: var(--green-700) !important;
+    color:
+        var(--green-700) !important;
 
-    background: var(--green-50) !important;
+    background:
+        var(--green-50) !important;
 
     border:
         1px solid
@@ -921,13 +1552,15 @@ const styles = `
 
 #agro-pos .state strong {
     font-size: 16px !important;
-    font-weight: 700 !important;
+
+    font-weight: 800 !important;
 }
 
 #agro-pos .state span {
     max-width: 400px !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
     font-size: 13px !important;
 }
@@ -940,7 +1573,8 @@ const styles = `
         4px solid
         var(--green-100) !important;
 
-    border-top-color: var(--green-700) !important;
+    border-top-color:
+        var(--green-700) !important;
 
     border-radius: 50% !important;
 
@@ -953,20 +1587,27 @@ const styles = `
 
 @keyframes pos-spin {
     to {
-        transform: rotate(360deg);
+        transform:
+            rotate(
+                360deg
+            );
     }
 }
 
 #agro-pos .pagination {
     display: flex !important;
 
-    min-height: 58px !important;
+    min-height: 60px !important;
 
     align-items: center !important;
-    justify-content: space-between !important;
+
+    justify-content:
+        space-between !important;
+
     gap: 12px !important;
 
-    padding: 10px 14px !important;
+    padding:
+        10px 14px !important;
 
     border-top:
         1px solid
@@ -974,13 +1615,15 @@ const styles = `
 }
 
 #agro-pos .pagination-label {
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
     font-size: 12px !important;
 }
 
 #agro-pos .pagination-label strong {
-    color: var(--text) !important;
+    color:
+        var(--text) !important;
 }
 
 #agro-pos .page-actions {
@@ -990,21 +1633,27 @@ const styles = `
 }
 
 #agro-pos .page-button {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    min-height: 36px !important;
+    min-height: 38px !important;
 
     align-items: center !important;
+
     gap: 5px !important;
 
-    padding: 7px 9px !important;
+    padding:
+        7px 10px !important;
 
-    color: var(--green-900) !important;
+    color:
+        var(--green-900) !important;
 
     font-size: 12px !important;
-    font-weight: 650 !important;
 
-    background: var(--green-50) !important;
+    font-weight: 700 !important;
+
+    background:
+        var(--green-50) !important;
 
     border:
         1px solid
@@ -1015,22 +1664,28 @@ const styles = `
     cursor: pointer !important;
 }
 
-#agro-pos .page-button:hover:not(:disabled) {
+#agro-pos
+.page-button:hover:not(:disabled) {
     color: #ffffff !important;
 
-    background: var(--green-800) !important;
+    background:
+        var(--green-800) !important;
 
-    border-color: var(--green-800) !important;
+    border-color:
+        var(--green-800) !important;
 }
 
 #agro-pos .page-button:disabled {
     color: #98a2b3 !important;
 
-    background: #f2f4f7 !important;
+    background:
+        #f2f4f7 !important;
 
-    border-color: #e4e7ec !important;
+    border-color:
+        #e4e7ec !important;
 
-    cursor: not-allowed !important;
+    cursor:
+        not-allowed !important;
 }
 
 #agro-pos .page-button svg {
@@ -1045,21 +1700,29 @@ const styles = `
 
     display: flex !important;
 
-    max-height: calc(100dvh - 112px) !important;
+    max-height:
+        calc(
+            100dvh - 112px
+        ) !important;
 
-    flex-direction: column !important;
+    flex-direction:
+        column !important;
 }
 
 #agro-pos .cart-header {
     display: flex !important;
 
-    min-height: 76px !important;
+    min-height: 80px !important;
 
     align-items: center !important;
-    justify-content: space-between !important;
+
+    justify-content:
+        space-between !important;
+
     gap: 12px !important;
 
-    padding: 14px 16px !important;
+    padding:
+        14px 16px !important;
 
     color: #ffffff !important;
 
@@ -1076,45 +1739,57 @@ const styles = `
 }
 
 #agro-pos .cart-title {
-    font-size: 20px !important;
-    font-weight: 730 !important;
+    font-size: 21px !important;
+
+    font-weight: 800 !important;
 }
 
 #agro-pos .cart-count {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
     min-height: 34px !important;
 
     align-items: center !important;
 
-    padding: 6px 10px !important;
+    padding:
+        6px 10px !important;
 
-    color: var(--green-900) !important;
+    color:
+        var(--green-900) !important;
 
     font-size: 12px !important;
-    font-weight: 700 !important;
 
-    white-space: nowrap !important;
+    font-weight: 800 !important;
 
-    background: var(--green-100) !important;
+    white-space:
+        nowrap !important;
 
-    border-radius: 999px !important;
+    background:
+        var(--green-100) !important;
+
+    border-radius:
+        999px !important;
 }
 
 #agro-pos .cart-items {
     display: flex !important;
 
     min-height: 220px !important;
+
     flex: 1 !important;
 
-    flex-direction: column !important;
+    flex-direction:
+        column !important;
+
     gap: 10px !important;
 
     padding: 12px !important;
 
     overflow-y: auto !important;
 
-    background: #f5f8f6 !important;
+    background:
+        #f5f8f6 !important;
 
     scrollbar-width: thin !important;
 
@@ -1127,11 +1802,17 @@ const styles = `
     display: flex !important;
 
     min-height: 230px !important;
+
     flex: 1 !important;
 
     align-items: center !important;
-    justify-content: center !important;
-    flex-direction: column !important;
+
+    justify-content:
+        center !important;
+
+    flex-direction:
+        column !important;
+
     gap: 7px !important;
 
     padding: 24px !important;
@@ -1150,14 +1831,15 @@ const styles = `
 #agro-pos .empty-icon {
     display: grid !important;
 
-    width: 48px !important;
-    height: 48px !important;
+    width: 50px !important;
+    height: 50px !important;
 
     place-items: center !important;
 
     color: #ffffff !important;
 
-    background: var(--green-800) !important;
+    background:
+        var(--green-800) !important;
 
     border-radius: 12px !important;
 }
@@ -1169,14 +1851,17 @@ const styles = `
 
 #agro-pos .empty-cart strong {
     font-size: 16px !important;
+
+    font-weight: 800 !important;
 }
 
 #agro-pos .empty-cart span {
-    max-width: 260px !important;
+    max-width: 280px !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
-    font-size: 12px !important;
+    font-size: 13px !important;
 }
 
 #agro-pos .cart-item {
@@ -1192,14 +1877,23 @@ const styles = `
 
     box-shadow:
         0 1px 4px
-        rgba(16, 24, 40, 0.04) !important;
+        rgba(
+            16,
+            24,
+            40,
+            0.04
+        ) !important;
 }
 
 #agro-pos .cart-item-header {
     display: flex !important;
 
-    align-items: flex-start !important;
-    justify-content: space-between !important;
+    align-items:
+        flex-start !important;
+
+    justify-content:
+        space-between !important;
+
     gap: 10px !important;
 
     padding-bottom: 9px !important;
@@ -1213,38 +1907,116 @@ const styles = `
     display: flex !important;
 
     min-width: 0 !important;
+
     flex: 1 !important;
 
-    flex-direction: column !important;
+    flex-direction:
+        column !important;
 }
 
 #agro-pos .cart-item-name {
     overflow: hidden !important;
 
-    font-size: 14px !important;
-    font-weight: 680 !important;
+    font-size: 15px !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    font-weight: 800 !important;
+
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
 }
 
 #agro-pos .batch {
     overflow: hidden !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
     font-size: 11px !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
+}
+
+#agro-pos .sale-unit-row {
+    display: flex !important;
+
+    align-items: center !important;
+
+    flex-wrap: wrap !important;
+
+    gap: 5px !important;
+
+    margin-top: 6px !important;
+}
+
+#agro-pos .sale-unit-badge {
+    display:
+        inline-flex !important;
+
+    min-height: 27px !important;
+
+    align-items: center !important;
+
+    gap: 4px !important;
+
+    padding:
+        3px 7px !important;
+
+    color:
+        var(--green-900) !important;
+
+    font-size: 11px !important;
+
+    font-weight: 800 !important;
+
+    background:
+        var(--green-50) !important;
+
+    border:
+        1px solid
+        #b8dfc3 !important;
+
+    border-radius:
+        999px !important;
+}
+
+#agro-pos .sale-unit-badge.loose {
+    color:
+        var(--blue-700) !important;
+
+    background:
+        var(--blue-50) !important;
+
+    border-color:
+        #b9d8f5 !important;
+}
+
+#agro-pos .sale-unit-badge svg {
+    width: 13px !important;
+    height: 13px !important;
+}
+
+#agro-pos .stock-usage {
+    color:
+        var(--muted) !important;
+
+    font-size: 10px !important;
+
+    font-weight: 650 !important;
 }
 
 #agro-pos .remove {
     display: grid !important;
 
-    width: 34px !important;
-    height: 34px !important;
-    min-width: 34px !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
 
     place-items: center !important;
 
@@ -1252,7 +2024,8 @@ const styles = `
 
     color: var(--red) !important;
 
-    background: var(--red-bg) !important;
+    background:
+        var(--red-bg) !important;
 
     border:
         1px solid
@@ -1266,9 +2039,11 @@ const styles = `
 #agro-pos .remove:hover {
     color: #ffffff !important;
 
-    background: #d92d20 !important;
+    background:
+        #d92d20 !important;
 
-    border-color: #d92d20 !important;
+    border-color:
+        #d92d20 !important;
 }
 
 #agro-pos .remove svg {
@@ -1282,16 +2057,23 @@ const styles = `
     grid-template-columns:
         repeat(
             3,
-            minmax(0, 1fr)
+            minmax(
+                0,
+                1fr
+            )
         ) !important;
 
     gap: 7px !important;
 
-    margin: 9px 0 !important;
+    margin:
+        9px 0 !important;
 }
 
-#agro-pos .cart-meta .meta-box strong {
-    color: var(--text-2) !important;
+#agro-pos
+.cart-meta
+.meta-box strong {
+    color:
+        var(--text-2) !important;
 
     font-size: 11px !important;
 }
@@ -1300,28 +2082,37 @@ const styles = `
     display: grid !important;
 
     grid-template-columns:
-        38px
-        minmax(72px, 90px)
-        38px
-        minmax(0, 1fr) !important;
+        40px
+        minmax(
+            78px,
+            96px
+        )
+        40px
+        minmax(
+            0,
+            1fr
+        ) !important;
 
     align-items: center !important;
+
     gap: 6px !important;
 }
 
 #agro-pos .quantity-button {
     display: grid !important;
 
-    width: 38px !important;
-    height: 38px !important;
+    width: 40px !important;
+    height: 40px !important;
 
     place-items: center !important;
 
     padding: 0 !important;
 
-    color: var(--green-900) !important;
+    color:
+        var(--green-900) !important;
 
-    background: var(--green-50) !important;
+    background:
+        var(--green-50) !important;
 
     border:
         1px solid
@@ -1332,22 +2123,28 @@ const styles = `
     cursor: pointer !important;
 }
 
-#agro-pos .quantity-button:hover:not(:disabled) {
+#agro-pos
+.quantity-button:hover:not(:disabled) {
     color: #ffffff !important;
 
-    background: var(--green-800) !important;
+    background:
+        var(--green-800) !important;
 
-    border-color: var(--green-800) !important;
+    border-color:
+        var(--green-800) !important;
 }
 
 #agro-pos .quantity-button:disabled {
     color: #98a2b3 !important;
 
-    background: #f2f4f7 !important;
+    background:
+        #f2f4f7 !important;
 
-    border-color: #e4e7ec !important;
+    border-color:
+        #e4e7ec !important;
 
-    cursor: not-allowed !important;
+    cursor:
+        not-allowed !important;
 }
 
 #agro-pos .quantity-button svg {
@@ -1356,13 +2153,15 @@ const styles = `
 }
 
 #agro-pos .number-input {
-    height: 38px !important;
-    min-height: 38px !important;
+    height: 40px !important;
+    min-height: 40px !important;
 
-    padding: 0 7px !important;
+    padding:
+        0 7px !important;
 
-    font-size: 13px !important;
-    font-weight: 650 !important;
+    font-size: 14px !important;
+
+    font-weight: 750 !important;
 
     text-align: center !important;
 }
@@ -1372,48 +2171,65 @@ const styles = `
 
     overflow: hidden !important;
 
-    color: var(--green-900) !important;
+    color:
+        var(--green-900) !important;
 
-    font-size: 14px !important;
-    font-weight: 750 !important;
+    font-size: 15px !important;
+
+    font-weight: 850 !important;
 
     text-align: right !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
 }
 
 #agro-pos .discount-row {
     display: grid !important;
 
     grid-template-columns:
-        minmax(0, 1fr)
-        120px !important;
+        minmax(
+            0,
+            1fr
+        )
+        125px !important;
 
     align-items: center !important;
+
     gap: 8px !important;
 
     margin-top: 9px !important;
 }
 
 #agro-pos .discount-row span {
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
     font-size: 11px !important;
-    font-weight: 600 !important;
+
+    font-weight: 650 !important;
 }
 
-#agro-pos .discount-row .number-input {
+#agro-pos
+.discount-row
+.number-input {
     text-align: right !important;
 }
 
 #agro-pos .cart-summary {
     display: flex !important;
 
-    flex-direction: column !important;
+    flex-direction:
+        column !important;
+
     gap: 8px !important;
 
-    padding: 13px 14px 14px !important;
+    padding:
+        13px 14px
+        14px !important;
 
     border-top:
         1px solid
@@ -1424,10 +2240,14 @@ const styles = `
     display: grid !important;
 
     grid-template-columns:
-        minmax(0, 1fr)
-        130px !important;
+        minmax(
+            0,
+            1fr
+        )
+        135px !important;
 
     align-items: center !important;
+
     gap: 10px !important;
 
     padding-bottom: 9px !important;
@@ -1438,13 +2258,17 @@ const styles = `
 }
 
 #agro-pos .sale-discount span {
-    color: var(--text-2) !important;
+    color:
+        var(--text-2) !important;
 
     font-size: 12px !important;
-    font-weight: 650 !important;
+
+    font-weight: 700 !important;
 }
 
-#agro-pos .sale-discount .number-input {
+#agro-pos
+.sale-discount
+.number-input {
     text-align: right !important;
 }
 
@@ -1452,16 +2276,21 @@ const styles = `
     display: flex !important;
 
     align-items: center !important;
-    justify-content: space-between !important;
+
+    justify-content:
+        space-between !important;
+
     gap: 12px !important;
 
-    color: var(--muted) !important;
+    color:
+        var(--muted) !important;
 
     font-size: 12px !important;
 }
 
 #agro-pos .summary-row strong {
-    color: var(--text-2) !important;
+    color:
+        var(--text-2) !important;
 
     font-size: 13px !important;
 }
@@ -1469,13 +2298,17 @@ const styles = `
 #agro-pos .grand-total {
     display: flex !important;
 
-    min-height: 62px !important;
+    min-height: 66px !important;
 
     align-items: center !important;
-    justify-content: space-between !important;
+
+    justify-content:
+        space-between !important;
+
     gap: 12px !important;
 
-    padding: 10px 12px !important;
+    padding:
+        10px 12px !important;
 
     color: #ffffff !important;
 
@@ -1493,30 +2326,38 @@ const styles = `
     color: #d8f7e1 !important;
 
     font-size: 12px !important;
-    font-weight: 650 !important;
+
+    font-weight: 700 !important;
 }
 
 #agro-pos .grand-total strong {
-    font-size: 20px !important;
-    font-weight: 780 !important;
+    font-size: 21px !important;
+
+    font-weight: 850 !important;
 }
 
 #agro-pos .payment-button,
 #agro-pos .clear-button,
 #agro-pos .confirm-button,
 #agro-pos .cancel-button {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    min-height: 44px !important;
+    min-height: 46px !important;
 
     align-items: center !important;
-    justify-content: center !important;
+
+    justify-content:
+        center !important;
+
     gap: 7px !important;
 
-    padding: 9px 12px !important;
+    padding:
+        9px 12px !important;
 
     font-size: 13px !important;
-    font-weight: 700 !important;
+
+    font-weight: 800 !important;
 
     border-radius: 9px !important;
 
@@ -1526,7 +2367,8 @@ const styles = `
 #agro-pos .payment-button {
     color: #ffffff !important;
 
-    background: var(--green-700) !important;
+    background:
+        var(--green-700) !important;
 
     border:
         1px solid
@@ -1534,40 +2376,53 @@ const styles = `
 
     box-shadow:
         0 5px 13px
-        rgba(21, 128, 61, 0.18) !important;
+        rgba(
+            21,
+            128,
+            61,
+            0.18
+        ) !important;
 }
 
-#agro-pos .payment-button:hover:not(:disabled) {
-    background: var(--green-800) !important;
+#agro-pos
+.payment-button:hover:not(:disabled) {
+    background:
+        var(--green-800) !important;
 
-    border-color: var(--green-800) !important;
+    border-color:
+        var(--green-800) !important;
 }
 
 #agro-pos .clear-button {
-    min-height: 38px !important;
+    min-height: 40px !important;
 
     color: var(--red) !important;
 
-    background: var(--red-bg) !important;
+    background:
+        var(--red-bg) !important;
 
     border:
         1px solid
         #f1b8b3 !important;
 }
 
-#agro-pos .clear-button:hover:not(:disabled) {
+#agro-pos
+.clear-button:hover:not(:disabled) {
     color: #ffffff !important;
 
-    background: #d92d20 !important;
+    background:
+        #d92d20 !important;
 
-    border-color: #d92d20 !important;
+    border-color:
+        #d92d20 !important;
 }
 
 #agro-pos .payment-button:disabled,
 #agro-pos .clear-button:disabled {
     opacity: 0.55 !important;
 
-    cursor: not-allowed !important;
+    cursor:
+        not-allowed !important;
 }
 
 #agro-pos .payment-button svg,
@@ -1580,18 +2435,25 @@ const styles = `
     display: grid !important;
 
     grid-template-columns:
-        minmax(0, 1fr)
+        minmax(
+            0,
+            1fr
+        )
         auto
         auto !important;
 
     align-items: center !important;
+
     gap: 7px !important;
 
-    padding: 9px 10px !important;
+    padding:
+        9px 10px !important;
 
-    color: var(--amber) !important;
+    color:
+        var(--amber) !important;
 
-    background: var(--amber-bg) !important;
+    background:
+        var(--amber-bg) !important;
 
     border:
         1px solid
@@ -1602,14 +2464,16 @@ const styles = `
 
 #agro-pos .clear-confirm span {
     font-size: 11px !important;
-    font-weight: 600 !important;
+
+    font-weight: 650 !important;
 }
 
 #agro-pos .confirm-button,
 #agro-pos .cancel-button {
-    min-height: 32px !important;
+    min-height: 34px !important;
 
-    padding: 5px 8px !important;
+    padding:
+        5px 8px !important;
 
     font-size: 11px !important;
 }
@@ -1617,7 +2481,8 @@ const styles = `
 #agro-pos .confirm-button {
     color: #ffffff !important;
 
-    background: #d92d20 !important;
+    background:
+        #d92d20 !important;
 
     border:
         1px solid
@@ -1625,7 +2490,8 @@ const styles = `
 }
 
 #agro-pos .cancel-button {
-    color: var(--text-2) !important;
+    color:
+        var(--text-2) !important;
 
     background: #ffffff !important;
 
@@ -1634,42 +2500,59 @@ const styles = `
         var(--border-dark) !important;
 }
 
-@media (max-width: 1500px) {
+@media (
+    max-width: 1500px
+) {
     #agro-pos {
         grid-template-columns:
-            minmax(0, 1fr)
-            minmax(340px, 390px) !important;
+            minmax(
+                0,
+                1fr
+            )
+            minmax(
+                350px,
+                410px
+            ) !important;
     }
 
     #agro-pos .product-grid {
         grid-template-columns:
             repeat(
                 auto-fill,
-                minmax(195px, 1fr)
+                minmax(
+                    200px,
+                    1fr
+                )
             ) !important;
     }
 }
 
-@media (max-width: 1180px) {
+@media (
+    max-width: 1180px
+) {
     #agro-pos {
         display: flex !important;
 
-        flex-direction: column !important;
+        flex-direction:
+            column !important;
     }
 
     #agro-pos .pos-cart {
         position: static !important;
 
         width: 100% !important;
+
         max-height: none !important;
     }
 
     #agro-pos .cart-items {
-        max-height: 520px !important;
+        max-height: 560px !important;
     }
 }
 
-@media (max-width: 720px) {
+@media (
+    max-width: 720px
+) {
     #agro-pos {
         gap: 12px !important;
     }
@@ -1680,32 +2563,41 @@ const styles = `
     }
 
     #agro-pos .pos-header {
-        align-items: stretch !important;
-        flex-direction: column !important;
+        align-items:
+            stretch !important;
+
+        flex-direction:
+            column !important;
 
         padding: 15px !important;
     }
 
     #agro-pos .customer-note {
         width: 100% !important;
+
         min-width: 0 !important;
     }
 
     #agro-pos .filters {
-        grid-template-columns: 1fr !important;
+        grid-template-columns:
+            1fr !important;
 
         padding: 12px !important;
     }
 
     #agro-pos .product-grid {
-        grid-template-columns: 1fr !important;
+        grid-template-columns:
+            1fr !important;
 
         padding: 12px !important;
     }
 
     #agro-pos .pagination {
-        align-items: stretch !important;
-        flex-direction: column !important;
+        align-items:
+            stretch !important;
+
+        flex-direction:
+            column !important;
     }
 
     #agro-pos .page-actions {
@@ -1714,35 +2606,49 @@ const styles = `
         grid-template-columns:
             repeat(
                 2,
-                minmax(0, 1fr)
+                minmax(
+                    0,
+                    1fr
+                )
             ) !important;
     }
 
     #agro-pos .page-button {
-        justify-content: center !important;
+        justify-content:
+            center !important;
     }
 
     #agro-pos .cart-meta {
         grid-template-columns:
             repeat(
                 2,
-                minmax(0, 1fr)
+                minmax(
+                    0,
+                    1fr
+                )
             ) !important;
     }
 
-    #agro-pos .cart-meta .meta-box:last-child {
-        grid-column: 1 / -1 !important;
+    #agro-pos
+    .cart-meta
+    .meta-box:last-child {
+        grid-column:
+            1 / -1 !important;
     }
 
     #agro-pos .quantity-row {
         grid-template-columns:
-            38px
-            minmax(70px, 90px)
-            38px !important;
+            40px
+            minmax(
+                74px,
+                96px
+            )
+            40px !important;
     }
 
     #agro-pos .line-total {
-        grid-column: 1 / -1 !important;
+        grid-column:
+            1 / -1 !important;
 
         padding-top: 4px !important;
     }
@@ -1751,190 +2657,352 @@ const styles = `
         grid-template-columns:
             repeat(
                 2,
-                minmax(0, 1fr)
+                minmax(
+                    0,
+                    1fr
+                )
             ) !important;
     }
 
-    #agro-pos .clear-confirm span {
-        grid-column: 1 / -1 !important;
+    #agro-pos
+    .clear-confirm
+    span {
+        grid-column:
+            1 / -1 !important;
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (
+    prefers-reduced-motion:
+        reduce
+) {
     #agro-pos *,
     #agro-pos *::before,
     #agro-pos *::after {
         transition: none !important;
 
-        scroll-behavior: auto !important;
+        scroll-behavior:
+            auto !important;
     }
 
     #agro-pos .spinner {
-        animation-duration: 1.2s !important;
+        animation-duration:
+            1.2s !important;
     }
 }
 `;
 
 export default function PosPage() {
-    const { token } = useAuth();
-
-    const searchInputRef = useRef<HTMLInputElement | null>(null);
-
-    const [products, setProducts] = useState<PosProduct[]>([]);
-    const [categories, setCategories] = useState<PosCategory[]>([]);
-    const [cart, setCart] = useState<PosCartItem[]>([]);
-    const [selectedProduct, setSelectedProduct] = useState<PosProduct | null>(null);
-
-    const [pagination, setPagination] =
-        useState<PosPaginationMeta>(initialPagination);
-
-    const [page, setPage] = useState(1);
-    const [searchInput, setSearchInput] = useState('');
-    const [appliedSearch, setAppliedSearch] = useState('');
-    const [categoryFilter, setCategoryFilter] = useState('');
-    const [saleDiscount, setSaleDiscount] = useState('0');
-
-    const [isLoading, setIsLoading] = useState(true);
-    const [pageError, setPageError] = useState('');
-    const [cartError, setCartError] = useState('');
-
-    const [isPaymentOpen, setIsPaymentOpen] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [paymentError, setPaymentError] = useState('');
-
-    const [receipt, setReceipt] = useState<SaleReceipt | null>(null);
-
-    const [isClearCartConfirming, setIsClearCartConfirming] =
-        useState(false);
-
-    const loadCategories = useCallback(async (): Promise<void> => {
-        if (!token) {
-            return;
-        }
-
-        try {
-            const response = await getPosCategories(token);
-            setCategories(response.data);
-        } catch (error) {
-            setPageError(
-                getErrorMessage(
-                    error,
-                    'Unable to load POS categories.',
-                ),
-            );
-        }
-    }, [token]);
-
-    const loadProducts = useCallback(async (): Promise<void> => {
-        if (!token) {
-            return;
-        }
-
-        setIsLoading(true);
-        setPageError('');
-
-        try {
-            const response = await getPosProducts(token, {
-                page,
-                perPage: PRODUCT_PAGE_SIZE,
-                search: appliedSearch,
-                categoryId: categoryFilter,
-            });
-
-            setProducts(response.data);
-            setPagination(response.meta);
-        } catch (error) {
-            setPageError(
-                getErrorMessage(
-                    error,
-                    'Unable to load POS products.',
-                ),
-            );
-        } finally {
-            setIsLoading(false);
-        }
-    }, [
+    const {
         token,
+    } = useAuth();
+
+    const searchInputRef =
+        useRef<HTMLInputElement | null>(
+            null,
+        );
+
+    const [
+        products,
+        setProducts,
+    ] = useState<
+        PosProduct[]
+    >([]);
+
+    const [
+        categories,
+        setCategories,
+    ] = useState<
+        PosCategory[]
+    >([]);
+
+    const [
+        cart,
+        setCart,
+    ] = useState<
+        PosCartItem[]
+    >([]);
+
+    const [
+        selectedProduct,
+        setSelectedProduct,
+    ] = useState<
+        PosProduct | null
+    >(null);
+
+    const [
+        pagination,
+        setPagination,
+    ] = useState<
+        PosPaginationMeta
+    >(
+        initialPagination,
+    );
+
+    const [
         page,
+        setPage,
+    ] = useState(1);
+
+    const [
+        searchInput,
+        setSearchInput,
+    ] = useState('');
+
+    const [
         appliedSearch,
+        setAppliedSearch,
+    ] = useState('');
+
+    const [
         categoryFilter,
-    ]);
+        setCategoryFilter,
+    ] = useState('');
+
+    const [
+        saleDiscount,
+        setSaleDiscount,
+    ] = useState('0');
+
+    const [
+        isLoading,
+        setIsLoading,
+    ] = useState(true);
+
+    const [
+        pageError,
+        setPageError,
+    ] = useState('');
+
+    const [
+        cartError,
+        setCartError,
+    ] = useState('');
+
+    const [
+        isPaymentOpen,
+        setIsPaymentOpen,
+    ] = useState(false);
+
+    const [
+        isSubmitting,
+        setIsSubmitting,
+    ] = useState(false);
+
+    const [
+        paymentError,
+        setPaymentError,
+    ] = useState('');
+
+    const [
+        receipt,
+        setReceipt,
+    ] = useState<
+        SaleReceipt | null
+    >(null);
+
+    const [
+        isClearCartConfirming,
+        setIsClearCartConfirming,
+    ] = useState(false);
+
+    const loadCategories =
+        useCallback(
+            async (): Promise<void> => {
+                if (!token) {
+                    return;
+                }
+
+                try {
+                    const response =
+                        await getPosCategories(
+                            token,
+                        );
+
+                    setCategories(
+                        response.data,
+                    );
+                } catch (error) {
+                    setPageError(
+                        getErrorMessage(
+                            error,
+                            'Unable to load POS categories.',
+                        ),
+                    );
+                }
+            },
+            [token],
+        );
+
+    const loadProducts =
+        useCallback(
+            async (): Promise<void> => {
+                if (!token) {
+                    return;
+                }
+
+                setIsLoading(
+                    true,
+                );
+
+                setPageError('');
+
+                try {
+                    const response =
+                        await getPosProducts(
+                            token,
+                            {
+                                page,
+
+                                perPage:
+                                    PRODUCT_PAGE_SIZE,
+
+                                search:
+                                    appliedSearch,
+
+                                categoryId:
+                                    categoryFilter,
+                            },
+                        );
+
+                    setProducts(
+                        response.data,
+                    );
+
+                    setPagination(
+                        response.meta,
+                    );
+                } catch (error) {
+                    setPageError(
+                        getErrorMessage(
+                            error,
+                            'Unable to load POS products.',
+                        ),
+                    );
+                } finally {
+                    setIsLoading(
+                        false,
+                    );
+                }
+            },
+            [
+                token,
+                page,
+                appliedSearch,
+                categoryFilter,
+            ],
+        );
 
     useEffect(() => {
         void loadCategories();
-    }, [loadCategories]);
+    }, [
+        loadCategories,
+    ]);
 
     useEffect(() => {
         void loadProducts();
-    }, [loadProducts]);
+    }, [
+        loadProducts,
+    ]);
 
     useEffect(() => {
-        const timeout = window.setTimeout(() => {
-            setPage(1);
-            setAppliedSearch(searchInput.trim());
-        }, 300);
+        const timeout =
+            window.setTimeout(
+                () => {
+                    setPage(1);
+
+                    setAppliedSearch(
+                        searchInput.trim(),
+                    );
+                },
+                300,
+            );
 
         return () => {
-            window.clearTimeout(timeout);
+            window.clearTimeout(
+                timeout,
+            );
         };
-    }, [searchInput]);
+    }, [
+        searchInput,
+    ]);
 
     useEffect(() => {
-        if (cart.length === 0) {
-            setIsClearCartConfirming(false);
+        if (
+            cart.length === 0
+        ) {
+            setIsClearCartConfirming(
+                false,
+            );
         }
-    }, [cart.length]);
+    }, [
+        cart.length,
+    ]);
 
-    const subtotal = useMemo(
-        () => (
-            cart.reduce(
-                (total, item) => (
-                    total
-                    + item.quantity * item.selling_price
-                    - item.discount
+    const subtotal =
+        useMemo(
+            () =>
+                cart.reduce(
+                    (
+                        total,
+                        item,
+                    ) =>
+                        total
+                        + (
+                            item.quantity
+                            * item.selling_price
+                        )
+                        - item.discount,
+                    0,
                 ),
-                0,
-            )
-        ),
-        [cart],
-    );
+            [cart],
+        );
 
-    const cartQuantity = useMemo(
-        () => (
-            cart.reduce(
-                (total, item) => total + item.quantity,
-                0,
-            )
-        ),
-        [cart],
-    );
-
-    const saleDiscountValue = Number(saleDiscount || 0);
+    const saleDiscountValue =
+        Number(
+            saleDiscount || 0,
+        );
 
     const safeSaleDiscount =
-        Number.isFinite(saleDiscountValue)
+        Number.isFinite(
+            saleDiscountValue,
+        )
             ? saleDiscountValue
             : 0;
 
-    const grandTotal = Math.max(
-        0,
-        subtotal - safeSaleDiscount,
-    );
+    const grandTotal =
+        Math.max(
+            0,
+            subtotal
+            - safeSaleDiscount,
+        );
 
-    const refocusSearch = (): void => {
-        window.setTimeout(() => {
-            searchInputRef.current?.focus();
-        }, 80);
-    };
+    const refocusSearch =
+        (): void => {
+            window.setTimeout(
+                () => {
+                    searchInputRef
+                        .current
+                        ?.focus();
+                },
+                80,
+            );
+        };
 
     const addBatchToCart = (
         product: PosProduct,
         batch: PosStockBatch,
         quantity: number,
+        saleOption: PosSaleOption,
     ): void => {
         setCartError('');
 
-        if (!Number.isFinite(quantity) || quantity <= 0) {
+        if (
+            !Number.isFinite(
+                quantity,
+            )
+            || quantity <= 0
+        ) {
             setCartError(
                 'Quantity must be greater than zero.',
             );
@@ -1942,79 +3010,273 @@ export default function PosPage() {
             return;
         }
 
-        const existingItem = cart.find(
-            (item) => item.stock_batch_id === batch.id,
-        );
+        if (
+            !saleOption
+                .allow_decimal_quantity
+            && !isWholeNumber(
+                quantity,
+            )
+        ) {
+            setCartError(
+                `${saleOption.unit
+                } quantity must be a whole number.`,
+            );
 
-        const newQuantity = Number(
-            (
-                (existingItem?.quantity ?? 0)
-                + quantity
-            ).toFixed(3),
-        );
+            return;
+        }
 
-        if (newQuantity > batch.available_quantity) {
+        const maximumSaleQuantity =
+            Number(
+                saleOption
+                    .available_quantity
+                ?? 0,
+            );
+
+        const availableStockQuantity =
+            Number(
+                saleOption
+                    .available_stock_quantity
+                ?? batch
+                    .available_quantity
+                ?? 0,
+            );
+
+        const conversionFactor =
+            Number(
+                saleOption
+                    .stock_quantity_per_unit
+                ?? saleOption
+                    .conversion_factor
+                ?? 1,
+            );
+
+        const existingItem =
+            cart.find(
+                (
+                    item,
+                ) =>
+                    isSameCartItem(
+                        item,
+                        batch.id,
+                        saleOption.unit,
+                    ),
+            );
+
+        const newQuantity =
+            normaliseQuantity(
+                (
+                    existingItem
+                        ?.quantity
+                    ?? 0
+                )
+                + quantity,
+            );
+
+        if (
+            newQuantity
+            > maximumSaleQuantity
+            + 0.0001
+        ) {
             setCartError(
                 `Only ${formatQuantity(
-                    batch.available_quantity,
-                )} ${product.unit} are available at ${currencyFormatter.format(
-                    batch.selling_price,
-                )}.`,
+                    maximumSaleQuantity,
+                )
+                } ${saleOption.unit
+                } are available.`,
+            );
+
+            return;
+        }
+
+        const cartItemKey =
+            getCartItemKey(
+                batch.id,
+                saleOption.unit,
+            );
+
+        const otherStockUsed =
+            getBatchStockUsedByCart(
+                cart,
+                batch.id,
+                cartItemKey,
+            );
+
+        const newLineStockQuantity =
+            calculateStockQuantity(
+                newQuantity,
+                conversionFactor,
+            );
+
+        const totalRequiredStock =
+            normaliseQuantity(
+                otherStockUsed
+                + newLineStockQuantity,
+            );
+
+        if (
+            totalRequiredStock
+            > availableStockQuantity
+            + 0.0001
+        ) {
+            setCartError(
+                `${product.name
+                } only has ${formatQuantity(
+                    availableStockQuantity,
+                )
+                } ${saleOption.stock_unit
+                } available. Your Bag and loose ${saleOption.stock_unit
+                } selections together require ${formatQuantity(
+                    totalRequiredStock,
+                )
+                } ${saleOption.stock_unit
+                }.`,
             );
 
             return;
         }
 
         if (existingItem) {
-            setCart((current) => (
-                current.map((item) => (
-                    item.stock_batch_id === batch.id
-                        ? {
-                            ...item,
-                            quantity: newQuantity,
-                        }
-                        : item
-                ))
-            ));
+            setCart(
+                (
+                    current,
+                ) =>
+                    current.map(
+                        (
+                            item,
+                        ) =>
+                            isSameCartItem(
+                                item,
+                                batch.id,
+                                saleOption.unit,
+                            )
+                                ? {
+                                    ...item,
+
+                                    quantity:
+                                        newQuantity,
+
+                                    stock_quantity:
+                                        newLineStockQuantity,
+                                }
+                                : item,
+                    ),
+            );
         } else {
-            setCart((current) => [
-                ...current,
-                {
-                    stock_batch_id: batch.id,
-                    product_id: product.id,
-                    product_name: product.name,
-                    unit: product.unit,
-                    batch_code: batch.batch_code,
-                    batch_number: batch.batch_number,
-                    expiry_date: batch.expiry_date,
-                    available_quantity:
-                        batch.available_quantity,
-                    selling_price: batch.selling_price,
-                    quantity,
-                    discount: 0,
-                },
-            ]);
+            setCart(
+                (
+                    current,
+                ) => [
+                        ...current,
+
+                        {
+                            stock_batch_id:
+                                batch.id,
+
+                            product_id:
+                                product.id,
+
+                            product_name:
+                                product.name,
+
+                            primary_unit:
+                                batch.primary_unit
+                                || product.primary_unit
+                                || product.unit,
+
+                            sale_unit:
+                                saleOption.unit,
+
+                            stock_unit:
+                                saleOption.stock_unit
+                                || batch.stock_unit
+                                || product.stock_unit
+                                || product.unit,
+
+                            is_dual_unit:
+                                Boolean(
+                                    batch
+                                        .is_dual_unit,
+                                ),
+
+                            conversion_factor:
+                                conversionFactor,
+
+                            stock_quantity:
+                                calculateStockQuantity(
+                                    quantity,
+                                    conversionFactor,
+                                ),
+
+                            unit:
+                                saleOption.unit,
+
+                            batch_code:
+                                batch.batch_code,
+
+                            batch_number:
+                                batch.batch_number,
+
+                            expiry_date:
+                                batch.expiry_date,
+
+                            available_quantity:
+                                maximumSaleQuantity,
+
+                            available_stock_quantity:
+                                availableStockQuantity,
+
+                            selling_price:
+                                Number(
+                                    saleOption
+                                        .selling_price,
+                                ),
+
+                            quantity:
+                                normaliseQuantity(
+                                    quantity,
+                                ),
+
+                            discount:
+                                0,
+                        },
+                    ],
+            );
         }
 
-        setSelectedProduct(null);
+        setSelectedProduct(
+            null,
+        );
+
         refocusSearch();
     };
 
     const updateCartQuantity = (
         batchId: number,
+        saleUnit: string,
         quantity: number,
     ): void => {
-        const item = cart.find(
-            (cartItem) => (
-                cartItem.stock_batch_id === batchId
-            ),
-        );
+        const item =
+            cart.find(
+                (
+                    cartItem,
+                ) =>
+                    isSameCartItem(
+                        cartItem,
+                        batchId,
+                        saleUnit,
+                    ),
+            );
 
         if (!item) {
             return;
         }
 
-        if (!Number.isFinite(quantity) || quantity <= 0) {
+        if (
+            !Number.isFinite(
+                quantity,
+            )
+            || quantity <= 0
+        ) {
             setCartError(
                 'Quantity must be greater than zero.',
             );
@@ -2022,11 +3284,80 @@ export default function PosPage() {
             return;
         }
 
-        if (quantity > item.available_quantity) {
+        if (
+            isFullPrimaryUnit(
+                item,
+            )
+            && !isWholeNumber(
+                quantity,
+            )
+        ) {
+            setCartError(
+                `${item.sale_unit
+                } quantity must be a whole number. Use Loose Kg for partial quantities.`,
+            );
+
+            return;
+        }
+
+        if (
+            quantity
+            > item.available_quantity
+            + 0.0001
+        ) {
             setCartError(
                 `Only ${formatQuantity(
-                    item.available_quantity,
-                )} ${item.unit} are available at this price.`,
+                    item
+                        .available_quantity,
+                )
+                } ${item.sale_unit
+                } are available.`,
+            );
+
+            return;
+        }
+
+        const itemKey =
+            getCartItemKey(
+                batchId,
+                saleUnit,
+            );
+
+        const otherStockUsed =
+            getBatchStockUsedByCart(
+                cart,
+                batchId,
+                itemKey,
+            );
+
+        const newStockQuantity =
+            calculateStockQuantity(
+                quantity,
+                item
+                    .conversion_factor,
+            );
+
+        const totalRequiredStock =
+            normaliseQuantity(
+                otherStockUsed
+                + newStockQuantity,
+            );
+
+        if (
+            totalRequiredStock
+            > item
+                .available_stock_quantity
+            + 0.0001
+        ) {
+            setCartError(
+                `Only ${formatQuantity(
+                    item
+                        .available_stock_quantity,
+                )
+                } ${item.stock_unit
+                } remain in this batch. The combined ${item.primary_unit
+                } and ${item.sale_unit
+                } cart quantities exceed the available stock.`,
             );
 
             return;
@@ -2034,38 +3365,66 @@ export default function PosPage() {
 
         setCartError('');
 
-        setCart((current) => (
-            current.map((cartItem) => (
-                cartItem.stock_batch_id === batchId
-                    ? {
-                        ...cartItem,
-                        quantity: Number(
-                            quantity.toFixed(3),
-                        ),
-                    }
-                    : cartItem
-            ))
-        ));
+        setCart(
+            (
+                current,
+            ) =>
+                current.map(
+                    (
+                        cartItem,
+                    ) =>
+                        isSameCartItem(
+                            cartItem,
+                            batchId,
+                            saleUnit,
+                        )
+                            ? {
+                                ...cartItem,
+
+                                quantity:
+                                    normaliseQuantity(
+                                        quantity,
+                                    ),
+
+                                stock_quantity:
+                                    newStockQuantity,
+                            }
+                            : cartItem,
+                ),
+        );
     };
 
     const updateItemDiscount = (
         batchId: number,
+        saleUnit: string,
         discount: number,
     ): void => {
-        const item = cart.find(
-            (cartItem) => (
-                cartItem.stock_batch_id === batchId
-            ),
-        );
+        const item =
+            cart.find(
+                (
+                    cartItem,
+                ) =>
+                    isSameCartItem(
+                        cartItem,
+                        batchId,
+                        saleUnit,
+                    ),
+            );
 
         if (!item) {
             return;
         }
 
         const maximumDiscount =
-            item.quantity * item.selling_price;
+            item.quantity
+            * item.selling_price;
 
-        if (!Number.isFinite(discount) || discount < 0) {
+        if (
+            !Number.isFinite(
+                discount,
+            )
+            || discount < 0
+        ) {
             setCartError(
                 'Item discount cannot be negative.',
             );
@@ -2073,11 +3432,17 @@ export default function PosPage() {
             return;
         }
 
-        if (discount > maximumDiscount) {
+        if (
+            discount
+            > maximumDiscount
+        ) {
             setCartError(
-                `The maximum discount for ${item.product_name} is ${currencyFormatter.format(
+                `The maximum discount for ${item.product_name
+                } (${item.sale_unit
+                }) is ${currencyFormatter.format(
                     maximumDiscount,
-                )}.`,
+                )
+                }.`,
             );
 
             return;
@@ -2085,149 +3450,358 @@ export default function PosPage() {
 
         setCartError('');
 
-        setCart((current) => (
-            current.map((cartItem) => (
-                cartItem.stock_batch_id === batchId
-                    ? {
-                        ...cartItem,
-                        discount: Number(
-                            discount.toFixed(2),
-                        ),
-                    }
-                    : cartItem
-            ))
-        ));
+        setCart(
+            (
+                current,
+            ) =>
+                current.map(
+                    (
+                        cartItem,
+                    ) =>
+                        isSameCartItem(
+                            cartItem,
+                            batchId,
+                            saleUnit,
+                        )
+                            ? {
+                                ...cartItem,
+
+                                discount:
+                                    Number(
+                                        discount
+                                            .toFixed(
+                                                2,
+                                            ),
+                                    ),
+                            }
+                            : cartItem,
+                ),
+        );
     };
 
     const removeCartItem = (
         batchId: number,
+        saleUnit: string,
     ): void => {
-        setCart((current) => (
-            current.filter(
-                (item) => item.stock_batch_id !== batchId,
-            )
-        ));
-
-        setCartError('');
-    };
-
-    const clearCart = (): void => {
-        setCart([]);
-        setSaleDiscount('0');
-        setCartError('');
-        setPaymentError('');
-        setIsClearCartConfirming(false);
-    };
-
-    const clearSearch = (): void => {
-        setSearchInput('');
-        setAppliedSearch('');
-        setPage(1);
-
-        searchInputRef.current?.focus();
-    };
-
-    const openPayment = (): void => {
-        if (cart.length === 0) {
-            setCartError(
-                'Add at least one product to the cart.',
-            );
-
-            return;
-        }
-
-        if (
-            !Number.isFinite(saleDiscountValue)
-            || saleDiscountValue < 0
-        ) {
-            setCartError(
-                'Enter a valid sale discount.',
-            );
-
-            return;
-        }
-
-        if (saleDiscountValue > subtotal) {
-            setCartError(
-                'The sale discount cannot exceed the cart subtotal.',
-            );
-
-            return;
-        }
-
-        const invalidItem = cart.find(
-            (item) => (
-                item.quantity <= 0
-                || item.quantity > item.available_quantity
-                || item.discount < 0
-                || item.discount
-                    > item.quantity * item.selling_price
-            ),
+        setCart(
+            (
+                current,
+            ) =>
+                current.filter(
+                    (
+                        item,
+                    ) =>
+                        !isSameCartItem(
+                            item,
+                            batchId,
+                            saleUnit,
+                        ),
+                ),
         );
 
-        if (invalidItem) {
-            setCartError(
-                `Check the quantity and discount for ${invalidItem.product_name}.`,
-            );
-
-            return;
-        }
-
         setCartError('');
-        setPaymentError('');
-        setIsPaymentOpen(true);
     };
 
-    const submitSale = async (
-        values: CompleteSaleValues,
-    ): Promise<void> => {
-        if (
-            !token
-            || cart.length === 0
-            || isSubmitting
-        ) {
-            return;
-        }
+    const clearCart =
+        (): void => {
+            setCart([]);
 
-        setIsSubmitting(true);
-        setPaymentError('');
-
-        try {
-            const response = await completePosSale(
-                token,
-                cart,
-                {
-                    ...values,
-                    discount: saleDiscountValue,
-                },
+            setSaleDiscount(
+                '0',
             );
 
-            setReceipt(response.data);
+            setCartError('');
 
-            clearCart();
-            setIsPaymentOpen(false);
+            setPaymentError('');
 
-            await Promise.all([
-                loadProducts(),
-                loadCategories(),
-            ]);
-
-            refocusSearch();
-        } catch (error) {
-            setPaymentError(
-                getErrorMessage(
-                    error,
-                    'Unable to complete the sale.',
-                ),
+            setIsClearCartConfirming(
+                false,
             );
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+        };
+
+    const clearSearch =
+        (): void => {
+            setSearchInput('');
+
+            setAppliedSearch('');
+
+            setPage(1);
+
+            searchInputRef
+                .current
+                ?.focus();
+        };
+
+    const validateCombinedStock =
+        (): string | null => {
+            const batchIds =
+                Array.from(
+                    new Set(
+                        cart.map(
+                            (
+                                item,
+                            ) =>
+                                item
+                                    .stock_batch_id,
+                        ),
+                    ),
+                );
+
+            for (
+                const batchId
+                of batchIds
+            ) {
+                const batchItems =
+                    cart.filter(
+                        (
+                            item,
+                        ) =>
+                            item
+                                .stock_batch_id
+                            === batchId,
+                    );
+
+                if (
+                    batchItems.length
+                    === 0
+                ) {
+                    continue;
+                }
+
+                const availableStock =
+                    Number(
+                        batchItems[0]
+                            .available_stock_quantity
+                        ?? 0,
+                    );
+
+                const requiredStock =
+                    normaliseQuantity(
+                        batchItems.reduce(
+                            (
+                                total,
+                                item,
+                            ) =>
+                                total
+                                + Number(
+                                    item
+                                        .stock_quantity
+                                    ?? 0,
+                                ),
+                            0,
+                        ),
+                    );
+
+                if (
+                    requiredStock
+                    > availableStock
+                    + 0.0001
+                ) {
+                    return `${batchItems[0]
+                            .product_name
+                        } requires ${formatQuantity(
+                            requiredStock,
+                        )
+                        } ${batchItems[0]
+                            .stock_unit
+                        }, but only ${formatQuantity(
+                            availableStock,
+                        )
+                        } ${batchItems[0]
+                            .stock_unit
+                        } are available.`;
+                }
+            }
+
+            return null;
+        };
+
+    const openPayment =
+        (): void => {
+            if (
+                cart.length === 0
+            ) {
+                setCartError(
+                    'Add at least one product to the cart.',
+                );
+
+                return;
+            }
+
+            if (
+                !Number.isFinite(
+                    saleDiscountValue,
+                )
+                || saleDiscountValue
+                < 0
+            ) {
+                setCartError(
+                    'Enter a valid sale discount.',
+                );
+
+                return;
+            }
+
+            if (
+                saleDiscountValue
+                > subtotal
+            ) {
+                setCartError(
+                    'The sale discount cannot exceed the cart subtotal.',
+                );
+
+                return;
+            }
+
+            const invalidItem =
+                cart.find(
+                    (
+                        item,
+                    ) => {
+                        if (
+                            item.quantity
+                            <= 0
+                        ) {
+                            return true;
+                        }
+
+                        if (
+                            item.quantity
+                            > item
+                                .available_quantity
+                            + 0.0001
+                        ) {
+                            return true;
+                        }
+
+                        if (
+                            isFullPrimaryUnit(
+                                item,
+                            )
+                            && !isWholeNumber(
+                                item.quantity,
+                            )
+                        ) {
+                            return true;
+                        }
+
+                        if (
+                            item.discount
+                            < 0
+                        ) {
+                            return true;
+                        }
+
+                        return (
+                            item.discount
+                            > (
+                                item.quantity
+                                * item
+                                    .selling_price
+                            )
+                        );
+                    },
+                );
+
+            if (invalidItem) {
+                setCartError(
+                    `Check the quantity and discount for ${invalidItem
+                        .product_name
+                    } (${invalidItem
+                        .sale_unit
+                    }).`,
+                );
+
+                return;
+            }
+
+            const stockError =
+                validateCombinedStock();
+
+            if (stockError) {
+                setCartError(
+                    stockError,
+                );
+
+                return;
+            }
+
+            setCartError('');
+
+            setPaymentError('');
+
+            setIsPaymentOpen(
+                true,
+            );
+        };
+
+    const submitSale =
+        async (
+            values:
+                CompleteSaleValues,
+        ): Promise<void> => {
+            if (
+                !token
+                || cart.length === 0
+                || isSubmitting
+            ) {
+                return;
+            }
+
+            setIsSubmitting(
+                true,
+            );
+
+            setPaymentError('');
+
+            try {
+                const response =
+                    await completePosSale(
+                        token,
+                        cart,
+                        {
+                            ...values,
+
+                            discount:
+                                saleDiscountValue,
+                        },
+                    );
+
+                setReceipt(
+                    response.data,
+                );
+
+                clearCart();
+
+                setIsPaymentOpen(
+                    false,
+                );
+
+                await Promise.all([
+                    loadProducts(),
+                    loadCategories(),
+                ]);
+
+                refocusSearch();
+            } catch (error) {
+                setPaymentError(
+                    getErrorMessage(
+                        error,
+                        'Unable to complete the sale.',
+                    ),
+                );
+            } finally {
+                setIsSubmitting(
+                    false,
+                );
+            }
+        };
 
     return (
         <div id="agro-pos">
-            <style>{styles}</style>
+            <style>
+                {styles}
+            </style>
 
             <section className="pos-products">
                 <header className="pos-header">
@@ -2241,8 +3815,12 @@ export default function PosPage() {
                         </h1>
 
                         <p className="subtitle">
-                            Search or scan a product, then choose
-                            an available stock batch.
+                            Search a product, select
+                            its batch and choose the
+                            selling unit. Bag products
+                            can be sold as a full Bag
+                            or as loose Kg where
+                            enabled.
                         </p>
                     </div>
 
@@ -2256,7 +3834,8 @@ export default function PosPage() {
                         </strong>
 
                         <small>
-                            Walk-in or registered customer
+                            Walk-in or registered
+                            customer
                         </small>
                     </div>
                 </header>
@@ -2302,17 +3881,27 @@ export default function PosPage() {
                             />
 
                             <input
-                                ref={searchInputRef}
+                                ref={
+                                    searchInputRef
+                                }
                                 type="search"
                                 className="search-input"
-                                value={searchInput}
+                                value={
+                                    searchInput
+                                }
                                 autoFocus
                                 autoComplete="off"
-                                spellCheck={false}
-                                placeholder="Search product, SKU or scan barcode"
-                                onChange={(event) => {
+                                spellCheck={
+                                    false
+                                }
+                                placeholder="Search product, barcode or category"
+                                onChange={(
+                                    event,
+                                ) => {
                                     setSearchInput(
-                                        event.target.value,
+                                        event
+                                            .target
+                                            .value,
                                     );
                                 }}
                             />
@@ -2322,7 +3911,9 @@ export default function PosPage() {
                                     type="button"
                                     className="clear-search"
                                     aria-label="Clear product search"
-                                    onClick={clearSearch}
+                                    onClick={
+                                        clearSearch
+                                    }
                                 >
                                     <Icon name="close" />
                                 </button>
@@ -2343,12 +3934,18 @@ export default function PosPage() {
 
                             <select
                                 className="category-select"
-                                value={categoryFilter}
-                                onChange={(event) => {
+                                value={
+                                    categoryFilter
+                                }
+                                onChange={(
+                                    event,
+                                ) => {
                                     setPage(1);
 
                                     setCategoryFilter(
-                                        event.target.value,
+                                        event
+                                            .target
+                                            .value,
                                     );
                                 }}
                             >
@@ -2356,14 +3953,25 @@ export default function PosPage() {
                                     All Categories
                                 </option>
 
-                                {categories.map((category) => (
-                                    <option
-                                        key={category.id}
-                                        value={category.id}
-                                    >
-                                        {category.name}
-                                    </option>
-                                ))}
+                                {categories.map(
+                                    (
+                                        category,
+                                    ) => (
+                                        <option
+                                            key={
+                                                category.id
+                                            }
+                                            value={
+                                                category.id
+                                            }
+                                        >
+                                            {
+                                                category
+                                                    .name
+                                            }
+                                        </option>
+                                    ),
+                                )}
                             </select>
                         </span>
                     </label>
@@ -2378,178 +3986,231 @@ export default function PosPage() {
                             <div className="spinner" />
 
                             <strong>
-                                Loading products
+                                Loading Products
                             </strong>
 
                             <span>
-                                Checking the latest available stock
-                                and selling prices.
+                                Checking available
+                                stock batches and
+                                selling options.
                             </span>
                         </div>
-                    ) : products.length === 0 ? (
+                    ) : products.length
+                        === 0 ? (
                         <div className="state">
                             <span className="state-icon">
                                 <Icon name="box" />
                             </span>
 
                             <strong>
-                                No available products
+                                No Available Products
                             </strong>
 
                             <span>
-                                Try another search or category, or
-                                receive stock before creating the sale.
+                                Try another search or
+                                category, or receive
+                                stock before creating
+                                the sale.
                             </span>
                         </div>
                     ) : (
-                        products.map((product) => (
-                            <button
-                                type="button"
-                                className="product-card"
-                                key={product.id}
-                                onClick={() => {
-                                    setSelectedProduct(product);
-                                }}
-                            >
-                                <div className="product-top">
-                                    <div className="product-initial">
-                                        {product.name
-                                            .trim()
-                                            .charAt(0)
-                                            .toUpperCase() || 'P'}
+                        products.map(
+                            (
+                                product,
+                            ) => (
+                                <button
+                                    type="button"
+                                    className="product-card"
+                                    key={
+                                        product.id
+                                    }
+                                    onClick={() => {
+                                        setSelectedProduct(
+                                            product,
+                                        );
+                                    }}
+                                >
+                                    {product
+                                        .is_dual_unit && (
+                                            <span className="dual-product-badge">
+                                                <Icon name="bag" />
+
+                                                Bag + Kg
+                                            </span>
+                                        )}
+
+                                    <div className="product-top">
+                                        <div className="product-initial">
+                                            {product
+                                                .name
+                                                .trim()
+                                                .charAt(
+                                                    0,
+                                                )
+                                                .toUpperCase()
+                                                || 'P'}
+                                        </div>
+
+                                        <div className="product-copy">
+                                            <span
+                                                className="category-badge"
+                                                title={
+                                                    product
+                                                        .category
+                                                        .name
+                                                }
+                                            >
+                                                {
+                                                    product
+                                                        .category
+                                                        .name
+                                                }
+                                            </span>
+
+                                            <strong
+                                                className="product-name"
+                                                title={
+                                                    product
+                                                        .name
+                                                }
+                                            >
+                                                {
+                                                    product
+                                                        .name
+                                                }
+                                            </strong>
+
+                                            <small className="product-code">
+                                                {product
+                                                    .sku
+                                                    || product
+                                                        .barcode
+                                                    || 'No product code'}
+                                            </small>
+                                        </div>
                                     </div>
 
-                                    <div className="product-copy">
-                                        <span
-                                            className="category-badge"
-                                            title={product.category.name}
-                                        >
-                                            {product.category.name}
-                                        </span>
+                                    <div className="product-meta">
+                                        <div className="meta-box price">
+                                            <span>
+                                                Selling Price
+                                            </span>
 
-                                        <strong
-                                            className="product-name"
-                                            title={product.name}
-                                        >
-                                            {product.name}
-                                        </strong>
+                                            <strong>
+                                                {getProductPriceLabel(
+                                                    product,
+                                                )}
+                                            </strong>
+                                        </div>
 
-                                        <small className="product-code">
-                                            {product.sku
-                                                || product.barcode
-                                                || 'No product code'}
-                                        </small>
+                                        <div className="meta-box">
+                                            <span>
+                                                Available
+                                            </span>
+
+                                            <strong>
+                                                {getProductAvailableLabel(
+                                                    product,
+                                                )}
+                                            </strong>
+                                        </div>
                                     </div>
-                                </div>
-
-                                <div className="product-meta">
-                                    <div className="meta-box price">
-                                        <span>
-                                            Selling Price
-                                        </span>
-
-                                        <strong
-                                            title={formatPriceRange(
-                                                product,
-                                            )}
-                                        >
-                                            {formatPriceRange(
-                                                product,
-                                            )}
-                                        </strong>
-                                    </div>
-
-                                    <div className="meta-box">
-                                        <span>
-                                            Available
-                                        </span>
-
-                                        <strong>
-                                            {formatQuantity(
-                                                product
-                                                    .total_available_quantity,
-                                            )}{' '}
-                                            {product.unit}
-                                        </strong>
-                                    </div>
-                                </div>
-                            </button>
-                        ))
+                                </button>
+                            ),
+                        )
                     )}
                 </div>
 
-                {pagination.total > 0 && (
-                    <footer className="pagination">
-                        <span className="pagination-label">
-                            Showing{' '}
+                {pagination.total
+                    > 0 && (
+                        <footer className="pagination">
+                            <span className="pagination-label">
+                                Showing
+                                {' '}
 
-                            <strong>
-                                {formatQuantity(
-                                    pagination.from,
-                                )}
-                            </strong>
+                                <strong>
+                                    {formatQuantity(
+                                        pagination.from,
+                                    )}
+                                </strong>
 
-                            {' '}to{' '}
+                                {' '}
+                                to
+                                {' '}
 
-                            <strong>
-                                {formatQuantity(
-                                    pagination.to,
-                                )}
-                            </strong>
+                                <strong>
+                                    {formatQuantity(
+                                        pagination.to,
+                                    )}
+                                </strong>
 
-                            {' '}of{' '}
+                                {' '}
+                                of
+                                {' '}
 
-                            <strong>
-                                {formatQuantity(
-                                    pagination.total,
-                                )}
-                            </strong>
+                                <strong>
+                                    {formatQuantity(
+                                        pagination.total,
+                                    )}
+                                </strong>
 
-                            {' '}products
-                        </span>
+                                {' '}
+                                products
+                            </span>
 
-                        <div className="page-actions">
-                            <button
-                                type="button"
-                                className="page-button"
-                                disabled={page <= 1}
-                                onClick={() => {
-                                    setPage((current) => (
-                                        Math.max(
-                                            1,
-                                            current - 1,
-                                        )
-                                    ));
-                                }}
-                            >
-                                <Icon name="chevron-left" />
+                            <div className="page-actions">
+                                <button
+                                    type="button"
+                                    className="page-button"
+                                    disabled={
+                                        page <= 1
+                                    }
+                                    onClick={() => {
+                                        setPage(
+                                            (
+                                                current,
+                                            ) =>
+                                                Math.max(
+                                                    1,
+                                                    current - 1,
+                                                ),
+                                        );
+                                    }}
+                                >
+                                    <Icon name="chevron-left" />
 
-                                Previous
-                            </button>
+                                    Previous
+                                </button>
 
-                            <button
-                                type="button"
-                                className="page-button"
-                                disabled={
-                                    page
-                                    >= pagination.last_page
-                                }
-                                onClick={() => {
-                                    setPage((current) => (
-                                        Math.min(
-                                            pagination.last_page,
-                                            current + 1,
-                                        )
-                                    ));
-                                }}
-                            >
-                                Next
+                                <button
+                                    type="button"
+                                    className="page-button"
+                                    disabled={
+                                        page
+                                        >= pagination
+                                            .last_page
+                                    }
+                                    onClick={() => {
+                                        setPage(
+                                            (
+                                                current,
+                                            ) =>
+                                                Math.min(
+                                                    pagination
+                                                        .last_page,
 
-                                <Icon name="chevron-right" />
-                            </button>
-                        </div>
-                    </footer>
-                )}
+                                                    current + 1,
+                                                ),
+                                        );
+                                    }}
+                                >
+                                    Next
+
+                                    <Icon name="chevron-right" />
+                                </button>
+                            </div>
+                        </footer>
+                    )}
             </section>
 
             <aside
@@ -2568,15 +4229,12 @@ export default function PosPage() {
                     </div>
 
                     <span className="cart-count">
-                        {cart.length}{' '}
+                        {cart.length}
+                        {' '}
 
                         {cart.length === 1
                             ? 'line'
                             : 'lines'}
-
-                        {' · '}
-
-                        {formatQuantity(cartQuantity)} qty
                     </span>
                 </header>
 
@@ -2601,227 +4259,431 @@ export default function PosPage() {
                             </div>
 
                             <strong>
-                                Cart is empty
+                                Cart is Empty
                             </strong>
 
                             <span>
-                                Select a product and stock batch to
-                                start this sale.
+                                Select a product,
+                                stock batch and selling
+                                unit to start this sale.
                             </span>
                         </div>
                     ) : (
-                        cart.map((item) => {
-                            const lineTotal =
-                                item.quantity
-                                * item.selling_price
-                                - item.discount;
+                        cart.map(
+                            (
+                                item,
+                            ) => {
+                                const lineTotal =
+                                    (
+                                        item.quantity
+                                        * item
+                                            .selling_price
+                                    )
+                                    - item.discount;
 
-                            return (
-                                <article
-                                    className="cart-item"
-                                    key={item.stock_batch_id}
-                                >
-                                    <header className="cart-item-header">
-                                        <div className="cart-item-copy">
-                                            <strong
-                                                className="cart-item-name"
-                                                title={item.product_name}
+                                const itemKey =
+                                    getCartItemKey(
+                                        item
+                                            .stock_batch_id,
+                                        item
+                                            .sale_unit,
+                                    );
+
+                                const fullPrimary =
+                                    isFullPrimaryUnit(
+                                        item,
+                                    );
+
+                                const minimumQuantity =
+                                    getCartMinimumQuantity(
+                                        item,
+                                    );
+
+                                const step =
+                                    getCartQuantityStep(
+                                        item,
+                                    );
+
+                                return (
+                                    <article
+                                        className="cart-item"
+                                        key={
+                                            itemKey
+                                        }
+                                    >
+                                        <header className="cart-item-header">
+                                            <div className="cart-item-copy">
+                                                <strong
+                                                    className="cart-item-name"
+                                                    title={
+                                                        item
+                                                            .product_name
+                                                    }
+                                                >
+                                                    {
+                                                        item
+                                                            .product_name
+                                                    }
+                                                </strong>
+
+                                                <span className="batch">
+                                                    Batch:
+                                                    {' '}
+
+                                                    {item
+                                                        .batch_number
+                                                        || item
+                                                            .batch_code}
+                                                </span>
+
+                                                <div className="sale-unit-row">
+                                                    <span
+                                                        className={
+                                                            normaliseUnit(
+                                                                item
+                                                                    .sale_unit,
+                                                            )
+                                                                === 'kg'
+                                                                && item
+                                                                    .is_dual_unit
+                                                                ? 'sale-unit-badge loose'
+                                                                : 'sale-unit-badge'
+                                                        }
+                                                    >
+                                                        <Icon
+                                                            name={
+                                                                normaliseUnit(
+                                                                    item
+                                                                        .sale_unit,
+                                                                )
+                                                                    === 'kg'
+                                                                    && item
+                                                                        .is_dual_unit
+                                                                    ? 'kg'
+                                                                    : fullPrimary
+                                                                        ? 'bag'
+                                                                        : 'box'
+                                                            }
+                                                        />
+
+                                                        Selling as
+                                                        {' '}
+
+                                                        {
+                                                            item
+                                                                .sale_unit
+                                                        }
+                                                    </span>
+
+                                                    {item
+                                                        .is_dual_unit && (
+                                                            <span className="stock-usage">
+                                                                {formatQuantity(
+                                                                    item
+                                                                        .quantity,
+                                                                )}
+                                                                {' '}
+
+                                                                {
+                                                                    item
+                                                                        .sale_unit
+                                                                }
+
+                                                                {' uses '}
+
+                                                                {formatQuantity(
+                                                                    item
+                                                                        .stock_quantity,
+                                                                )}
+                                                                {' '}
+
+                                                                {
+                                                                    item
+                                                                        .stock_unit
+                                                                }
+                                                            </span>
+                                                        )}
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                className="remove"
+                                                aria-label={`Remove ${item.product_name
+                                                    } ${item.sale_unit
+                                                    }`}
+                                                onClick={() => {
+                                                    removeCartItem(
+                                                        item
+                                                            .stock_batch_id,
+
+                                                        item
+                                                            .sale_unit,
+                                                    );
+                                                }}
                                             >
-                                                {item.product_name}
-                                            </strong>
+                                                <Icon name="trash" />
+                                            </button>
+                                        </header>
 
-                                            <span className="batch">
-                                                Batch:{' '}
+                                        <div className="cart-meta">
+                                            <div className="meta-box">
+                                                <span>
+                                                    Unit Price
+                                                </span>
 
-                                                {item.batch_number
-                                                    || item.batch_code}
-                                            </span>
-                                        </div>
+                                                <strong>
+                                                    {currencyFormatter.format(
+                                                        item
+                                                            .selling_price,
+                                                    )}
+                                                    {' / '}
 
-                                        <button
-                                            type="button"
-                                            className="remove"
-                                            aria-label={`Remove ${item.product_name}`}
-                                            onClick={() => {
-                                                removeCartItem(
-                                                    item.stock_batch_id,
-                                                );
-                                            }}
-                                        >
-                                            <Icon name="trash" />
-                                        </button>
-                                    </header>
+                                                    {
+                                                        item
+                                                            .sale_unit
+                                                    }
+                                                </strong>
+                                            </div>
 
-                                    <div className="cart-meta">
-                                        <div className="meta-box">
-                                            <span>
-                                                Unit Price
-                                            </span>
+                                            <div className="meta-box">
+                                                <span>
+                                                    Available
+                                                </span>
 
-                                            <strong>
-                                                {currencyFormatter.format(
-                                                    item.selling_price,
-                                                )}
-                                            </strong>
-                                        </div>
-
-                                        <div className="meta-box">
-                                            <span>
-                                                Available
-                                            </span>
-
-                                            <strong>
-                                                {formatQuantity(
-                                                    item.available_quantity,
-                                                )}{' '}
-
-                                                {item.unit}
-                                            </strong>
-                                        </div>
-
-                                        <div className="meta-box">
-                                            <span>
-                                                Expiry
-                                            </span>
-
-                                            <strong>
-                                                {formatExpiryDate(
-                                                    item.expiry_date,
-                                                )}
-                                            </strong>
-                                        </div>
-                                    </div>
-
-                                    <div className="quantity-row">
-                                        <button
-                                            type="button"
-                                            className="quantity-button"
-                                            aria-label={`Decrease ${item.product_name} quantity`}
-                                            disabled={
-                                                item.quantity <= 0.001
-                                            }
-                                            onClick={() => {
-                                                updateCartQuantity(
-                                                    item.stock_batch_id,
-                                                    Math.max(
-                                                        0.001,
-                                                        Number(
-                                                            (
-                                                                item.quantity
-                                                                - 1
-                                                            ).toFixed(3),
-                                                        ),
-                                                    ),
-                                                );
-                                            }}
-                                        >
-                                            <Icon name="minus" />
-                                        </button>
-
-                                        <input
-                                            type="number"
-                                            className="number-input"
-                                            aria-label={`${item.product_name} quantity`}
-                                            min="0.001"
-                                            max={
-                                                item.available_quantity
-                                            }
-                                            step="0.001"
-                                            value={item.quantity}
-                                            onChange={(event) => {
-                                                updateCartQuantity(
-                                                    item.stock_batch_id,
-                                                    Number(
-                                                        event.target.value,
-                                                    ),
-                                                );
-                                            }}
-                                        />
-
-                                        <button
-                                            type="button"
-                                            className="quantity-button"
-                                            aria-label={`Increase ${item.product_name} quantity`}
-                                            disabled={
-                                                item.quantity
-                                                >= item.available_quantity
-                                            }
-                                            onClick={() => {
-                                                updateCartQuantity(
-                                                    item.stock_batch_id,
-                                                    Math.min(
+                                                <strong>
+                                                    {formatQuantity(
                                                         item
                                                             .available_quantity,
-                                                        Number(
-                                                            (
-                                                                item.quantity
-                                                                + 1
-                                                            ).toFixed(3),
+                                                    )}
+                                                    {' '}
+
+                                                    {
+                                                        item
+                                                            .sale_unit
+                                                    }
+                                                </strong>
+                                            </div>
+
+                                            <div className="meta-box">
+                                                <span>
+                                                    Expiry
+                                                </span>
+
+                                                <strong>
+                                                    {formatExpiryDate(
+                                                        item
+                                                            .expiry_date,
+                                                    )}
+                                                </strong>
+                                            </div>
+                                        </div>
+
+                                        <div className="quantity-row">
+                                            <button
+                                                type="button"
+                                                className="quantity-button"
+                                                aria-label={`Decrease ${item.product_name
+                                                    } ${item.sale_unit
+                                                    } quantity`}
+                                                disabled={
+                                                    item.quantity
+                                                    <= minimumQuantity
+                                                    + 0.0001
+                                                }
+                                                onClick={() => {
+                                                    updateCartQuantity(
+                                                        item
+                                                            .stock_batch_id,
+
+                                                        item
+                                                            .sale_unit,
+
+                                                        Math.max(
+                                                            minimumQuantity,
+
+                                                            normaliseQuantity(
+                                                                item
+                                                                    .quantity
+                                                                - (
+                                                                    fullPrimary
+                                                                        ? 1
+                                                                        : 1
+                                                                ),
+                                                            ),
                                                         ),
+                                                    );
+                                                }}
+                                            >
+                                                <Icon name="minus" />
+                                            </button>
+
+                                            <input
+                                                type="number"
+                                                className="number-input"
+                                                aria-label={`${item.product_name
+                                                    } ${item.sale_unit
+                                                    } quantity`}
+                                                min={
+                                                    minimumQuantity
+                                                }
+                                                max={
+                                                    item
+                                                        .available_quantity
+                                                }
+                                                step={
+                                                    step
+                                                }
+                                                inputMode={
+                                                    fullPrimary
+                                                        ? 'numeric'
+                                                        : 'decimal'
+                                                }
+                                                value={
+                                                    item
+                                                        .quantity
+                                                }
+                                                onChange={(
+                                                    event,
+                                                ) => {
+                                                    updateCartQuantity(
+                                                        item
+                                                            .stock_batch_id,
+
+                                                        item
+                                                            .sale_unit,
+
+                                                        Number(
+                                                            event
+                                                                .target
+                                                                .value,
+                                                        ),
+                                                    );
+                                                }}
+                                            />
+
+                                            <button
+                                                type="button"
+                                                className="quantity-button"
+                                                aria-label={`Increase ${item.product_name
+                                                    } ${item.sale_unit
+                                                    } quantity`}
+                                                disabled={
+                                                    item.quantity
+                                                    >= item
+                                                        .available_quantity
+                                                    - 0.0001
+                                                }
+                                                onClick={() => {
+                                                    updateCartQuantity(
+                                                        item
+                                                            .stock_batch_id,
+
+                                                        item
+                                                            .sale_unit,
+
+                                                        Math.min(
+                                                            item
+                                                                .available_quantity,
+
+                                                            normaliseQuantity(
+                                                                item
+                                                                    .quantity
+                                                                + 1,
+                                                            ),
+                                                        ),
+                                                    );
+                                                }}
+                                            >
+                                                <Icon name="plus" />
+                                            </button>
+
+                                            <strong className="line-total">
+                                                {currencyFormatter.format(
+                                                    Math.max(
+                                                        0,
+                                                        lineTotal,
                                                     ),
-                                                );
-                                            }}
-                                        >
-                                            <Icon name="plus" />
-                                        </button>
+                                                )}
+                                            </strong>
+                                        </div>
 
-                                        <strong className="line-total">
-                                            {currencyFormatter.format(
-                                                lineTotal,
-                                            )}
-                                        </strong>
-                                    </div>
+                                        <label className="discount-row">
+                                            <span>
+                                                Item Discount
+                                                (LKR)
+                                            </span>
 
-                                    <label className="discount-row">
-                                        <span>
-                                            Item Discount (LKR)
-                                        </span>
+                                            <input
+                                                type="number"
+                                                className="number-input"
+                                                min="0"
+                                                max={
+                                                    item.quantity
+                                                    * item
+                                                        .selling_price
+                                                }
+                                                step="0.01"
+                                                value={
+                                                    item
+                                                        .discount
+                                                }
+                                                onChange={(
+                                                    event,
+                                                ) => {
+                                                    updateItemDiscount(
+                                                        item
+                                                            .stock_batch_id,
 
-                                        <input
-                                            type="number"
-                                            className="number-input"
-                                            min="0"
-                                            max={
-                                                item.quantity
-                                                * item.selling_price
-                                            }
-                                            step="0.01"
-                                            value={item.discount}
-                                            onChange={(event) => {
-                                                updateItemDiscount(
-                                                    item.stock_batch_id,
-                                                    Number(
-                                                        event.target.value,
-                                                    ),
-                                                );
-                                            }}
-                                        />
-                                    </label>
-                                </article>
-                            );
-                        })
+                                                        item
+                                                            .sale_unit,
+
+                                                        Number(
+                                                            event
+                                                                .target
+                                                                .value,
+                                                        ),
+                                                    );
+                                                }}
+                                            />
+                                        </label>
+                                    </article>
+                                );
+                            },
+                        )
                     )}
                 </div>
 
                 <div className="cart-summary">
                     <label className="sale-discount">
                         <span>
-                            Sale Discount (LKR)
+                            Sale Discount
+                            (LKR)
                         </span>
 
                         <input
                             type="number"
                             className="number-input"
                             min="0"
-                            max={subtotal}
+                            max={
+                                subtotal
+                            }
                             step="0.01"
-                            value={saleDiscount}
-                            onChange={(event) => {
+                            value={
+                                saleDiscount
+                            }
+                            onChange={(
+                                event,
+                            ) => {
                                 setSaleDiscount(
-                                    event.target.value,
+                                    event
+                                        .target
+                                        .value,
                                 );
 
-                                setCartError('');
+                                setCartError(
+                                    '',
+                                );
                             }}
                         />
                     </label>
@@ -2844,7 +4706,8 @@ export default function PosPage() {
                         </span>
 
                         <strong>
-                            -{' '}
+                            -
+                            {' '}
 
                             {currencyFormatter.format(
                                 safeSaleDiscount,
@@ -2868,10 +4731,13 @@ export default function PosPage() {
                         type="button"
                         className="payment-button"
                         disabled={
-                            cart.length === 0
+                            cart.length
+                            === 0
                             || isSubmitting
                         }
-                        onClick={openPayment}
+                        onClick={
+                            openPayment
+                        }
                     >
                         <Icon name="receipt" />
 
@@ -2884,13 +4750,17 @@ export default function PosPage() {
                         isClearCartConfirming ? (
                             <div className="clear-confirm">
                                 <span>
-                                    Remove every item from this cart?
+                                    Remove every
+                                    item from this
+                                    cart?
                                 </span>
 
                                 <button
                                     type="button"
                                     className="cancel-button"
-                                    disabled={isSubmitting}
+                                    disabled={
+                                        isSubmitting
+                                    }
                                     onClick={() => {
                                         setIsClearCartConfirming(
                                             false,
@@ -2903,8 +4773,12 @@ export default function PosPage() {
                                 <button
                                     type="button"
                                     className="confirm-button"
-                                    disabled={isSubmitting}
-                                    onClick={clearCart}
+                                    disabled={
+                                        isSubmitting
+                                    }
+                                    onClick={
+                                        clearCart
+                                    }
                                 >
                                     Clear
                                 </button>
@@ -2913,7 +4787,9 @@ export default function PosPage() {
                             <button
                                 type="button"
                                 className="clear-button"
-                                disabled={isSubmitting}
+                                disabled={
+                                    isSubmitting
+                                }
                                 onClick={() => {
                                     setIsClearCartConfirming(
                                         true,
@@ -2930,35 +4806,68 @@ export default function PosPage() {
             </aside>
 
             <BatchSelectionModal
-                product={selectedProduct}
+                product={
+                    selectedProduct
+                }
                 onClose={() => {
-                    setSelectedProduct(null);
+                    setSelectedProduct(
+                        null,
+                    );
+
                     refocusSearch();
                 }}
-                onAdd={addBatchToCart}
+                onAdd={
+                    addBatchToCart
+                }
             />
 
             <PaymentModal
-                isOpen={isPaymentOpen}
-                grandTotal={grandTotal}
-                discount={safeSaleDiscount}
-                isSubmitting={isSubmitting}
-                errorMessage={paymentError}
+                isOpen={
+                    isPaymentOpen
+                }
+                grandTotal={
+                    grandTotal
+                }
+                discount={
+                    safeSaleDiscount
+                }
+                isSubmitting={
+                    isSubmitting
+                }
+                errorMessage={
+                    paymentError
+                }
                 onClose={() => {
-                    if (!isSubmitting) {
-                        setIsPaymentOpen(false);
-                        setPaymentError('');
+                    if (
+                        !isSubmitting
+                    ) {
+                        setIsPaymentOpen(
+                            false,
+                        );
+
+                        setPaymentError(
+                            '',
+                        );
                     }
                 }}
-                onSubmit={(values) => {
-                    void submitSale(values);
+                onSubmit={(
+                    values,
+                ) => {
+                    void submitSale(
+                        values,
+                    );
                 }}
             />
 
             <SaleReceiptModal
-                receipt={receipt}
+                receipt={
+                    receipt
+                }
                 onClose={() => {
-                    setReceipt(null);
+                    setReceipt(
+                        null,
+                    );
+
                     refocusSearch();
                 }}
             />

@@ -32,6 +32,22 @@ function createQuery(parameters: PurchaseListParameters): string {
   return query.toString();
 }
 
+function booleanValue(value: string): boolean {
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+function nullableNumber(value: string): number | null {
+  const trimmed = value.trim();
+
+  if (trimmed === "") {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function createPurchasePayload(values: PurchaseFormValues) {
   return {
     supplier_id: Number(values.supplier_id),
@@ -48,32 +64,52 @@ function createPurchasePayload(values: PurchaseFormValues) {
 
     receive_now: values.receive_now,
 
-    items: values.items.map((item) => ({
-      product_id: Number(item.product_id),
+    items: values.items.map((item) => {
+      const isDualUnit = booleanValue(item.is_dual_unit);
 
-      quantity: Number(item.quantity),
+      const conversionFactor = isDualUnit
+        ? nullableNumber(item.conversion_factor)
+        : 1;
 
-      unit_cost: Number(item.unit_cost),
+      const secondarySellingPrice = isDualUnit
+        ? nullableNumber(item.secondary_selling_price)
+        : null;
 
-      selling_price: Number(item.selling_price),
+      return {
+        product_id: Number(item.product_id),
 
-      discount: Number(item.discount || 0),
+        quantity: Number(item.quantity),
 
-      batch_number: item.batch_number.trim() || null,
+        unit_cost: Number(item.unit_cost),
 
-      manufactured_date: item.manufactured_date || null,
+        selling_price: Number(item.selling_price),
 
-      expiry_date: item.expiry_date || null,
+        is_dual_unit: isDualUnit,
 
-      notes: item.notes.trim() || null,
-    })),
+        secondary_unit: isDualUnit ? item.secondary_unit.trim() || "Kg" : null,
+
+        conversion_factor: conversionFactor,
+
+        secondary_selling_price: secondarySellingPrice,
+
+        discount: Number(item.discount || 0),
+
+        batch_number: item.batch_number.trim() || null,
+
+        manufactured_date: item.manufactured_date || null,
+
+        expiry_date: item.expiry_date || null,
+
+        notes: item.notes.trim() || null,
+      };
+    }),
   };
 }
 
 export async function getPurchaseProducts(
   token: string
 ): Promise<ProductOptionsResponse> {
-  return apiRequest<ProductOptionsResponse>("/products/options", {
+  return apiRequest("/products/options", {
     method: "GET",
     token,
   });
@@ -83,20 +119,17 @@ export async function getPurchases(
   token: string,
   parameters: PurchaseListParameters
 ): Promise<PurchaseListResponse> {
-  return apiRequest<PurchaseListResponse>(
-    `/purchases?${createQuery(parameters)}`,
-    {
-      method: "GET",
-      token,
-    }
-  );
+  return apiRequest(`/purchases?${createQuery(parameters)}`, {
+    method: "GET",
+    token,
+  });
 }
 
 export async function getPurchase(
   token: string,
   purchaseId: number
 ): Promise<PurchaseResponse> {
-  return apiRequest<PurchaseResponse>(`/purchases/${purchaseId}`, {
+  return apiRequest(`/purchases/${purchaseId}`, {
     method: "GET",
     token,
   });
@@ -106,7 +139,7 @@ export async function createPurchase(
   token: string,
   values: PurchaseFormValues
 ): Promise<PurchaseResponse> {
-  return apiRequest<PurchaseResponse>("/purchases", {
+  return apiRequest("/purchases", {
     method: "POST",
     token,
 
@@ -119,7 +152,7 @@ export async function updatePurchase(
   purchaseId: number,
   values: PurchaseFormValues
 ): Promise<PurchaseResponse> {
-  return apiRequest<PurchaseResponse>(`/purchases/${purchaseId}`, {
+  return apiRequest(`/purchases/${purchaseId}`, {
     method: "PUT",
     token,
 
@@ -132,7 +165,7 @@ export async function receivePurchase(
   purchaseId: number,
   items: ReceivePurchaseItemValues[]
 ): Promise<PurchaseResponse> {
-  return apiRequest<PurchaseResponse>(`/purchases/${purchaseId}/receive`, {
+  return apiRequest(`/purchases/${purchaseId}/receive`, {
     method: "POST",
     token,
 
@@ -158,7 +191,7 @@ export async function deletePurchase(
   token: string,
   purchaseId: number
 ): Promise<DeletePurchaseResponse> {
-  return apiRequest<DeletePurchaseResponse>(`/purchases/${purchaseId}`, {
+  return apiRequest(`/purchases/${purchaseId}`, {
     method: "DELETE",
     token,
   });

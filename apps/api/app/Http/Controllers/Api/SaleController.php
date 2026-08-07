@@ -25,7 +25,7 @@ class SaleController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
                 'message' =>
                 'Unauthenticated.',
@@ -92,10 +92,12 @@ class SaleController extends Controller
         );
 
         $paymentMethod =
-            $validated['payment_method'] ?? null;
+            $validated['payment_method']
+            ?? null;
 
         $paymentStatus =
-            $validated['payment_status'] ?? null;
+            $validated['payment_status']
+            ?? null;
 
         $dateFrom =
             $validated['date_from']
@@ -234,26 +236,27 @@ class SaleController extends Controller
                 ),
             );
 
-        $summaryRecord = (clone $query)
+        $summaryRecord =
+            (clone $query)
             ->selectRaw(
                 '
-                    COUNT(*) AS total_sales,
-                    COALESCE(SUM(grand_total), 0)
-                        AS total_revenue,
-                    COALESCE(SUM(due_amount), 0)
-                        AS outstanding_due,
-                    COALESCE(
-                        SUM(
-                            item_discount_total
-                            + discount
-                        ),
-                        0
-                    ) AS total_discount,
-                    COALESCE(SUM(gross_profit), 0)
-                        AS gross_profit,
-                    COALESCE(SUM(net_profit), 0)
-                        AS net_profit
-                ',
+                        COUNT(*) AS total_sales,
+                        COALESCE(SUM(grand_total), 0)
+                            AS total_revenue,
+                        COALESCE(SUM(due_amount), 0)
+                            AS outstanding_due,
+                        COALESCE(
+                            SUM(
+                                item_discount_total
+                                + discount
+                            ),
+                            0
+                        ) AS total_discount,
+                        COALESCE(SUM(gross_profit), 0)
+                            AS gross_profit,
+                        COALESCE(SUM(net_profit), 0)
+                            AS net_profit
+                    ',
             )
             ->first();
 
@@ -394,7 +397,7 @@ class SaleController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
                 'message' =>
                 'Unauthenticated.',
@@ -412,7 +415,7 @@ class SaleController extends Controller
                 $customer = null;
 
                 if (
-                    ! empty($validated['customer_id'])
+                    !empty($validated['customer_id'])
                 ) {
                     $customer =
                         Customer::query()
@@ -422,7 +425,9 @@ class SaleController extends Controller
                         ->lockForUpdate()
                         ->firstOrFail();
 
-                    if (! $customer->is_active) {
+                    if (
+                        !$customer->is_active
+                    ) {
                         throw ValidationException::withMessages([
                             'customer_id' => [
                                 'The selected customer is inactive.',
@@ -444,8 +449,11 @@ class SaleController extends Controller
                     ->map(
                         fn(
                             mixed $id,
-                        ): int => (int) $id,
+                        ): int =>
+                        (int) $id,
                     )
+                    ->unique()
+                    ->sort()
                     ->values();
 
                 $batches =
@@ -455,7 +463,7 @@ class SaleController extends Controller
                     ])
                     ->whereIn(
                         'id',
-                        $batchIds,
+                        $batchIds->all(),
                     )
                     ->orderBy('id')
                     ->lockForUpdate()
@@ -474,24 +482,30 @@ class SaleController extends Controller
                 }
 
                 $computedItems = [];
+
+                $requiredStockByBatch = [];
+
                 $subtotal = 0.0;
+
                 $itemDiscountTotal = 0.0;
+
                 $grossProfit = 0.0;
 
                 foreach (
                     $requestedItems
                     as $index => $requestedItem
                 ) {
-                    $batchId = (int) (
-                        $requestedItem['stock_batch_id']
-                    );
+                    $batchId =
+                        (int) $requestedItem['stock_batch_id'];
 
                     $batch =
                         $batches->get(
                             $batchId,
                         );
 
-                    if (! $batch) {
+                    if (
+                        !$batch instanceof StockBatch
+                    ) {
                         throw ValidationException::withMessages([
                             "items.{$index}.stock_batch_id" => [
                                 'The selected stock batch is unavailable.',
@@ -499,14 +513,15 @@ class SaleController extends Controller
                         ]);
                     }
 
-                    if (
-                        $batch->expiry_date
-                        && $batch
-                        ->expiry_date
-                        ->isBefore(
-                            today(),
-                        )
-                    ) {
+                    if (!$batch->product) {
+                        throw ValidationException::withMessages([
+                            "items.{$index}.stock_batch_id" => [
+                                'The selected product could not be loaded.',
+                            ],
+                        ]);
+                    }
+
+                    if ($batch->isExpired()) {
                         throw ValidationException::withMessages([
                             "items.{$index}.stock_batch_id" => [
                                 "{$batch->product->name} cannot be sold because the selected batch has expired.",
@@ -519,45 +534,176 @@ class SaleController extends Controller
                         3,
                     );
 
-                    $availableQuantity =
-                        round(
-                            (float) $batch
-                                ->available_quantity,
-                            3,
+                    if ($quantity <= 0) {
+                        throw ValidationException::withMessages([
+                            "items.{$index}.quantity" => [
+                                'Quantity must be greater than zero.',
+                            ],
+                        ]);
+                    }
+
+                    $requestedSaleUnit =
+                        trim(
+                            (string) (
+                                $requestedItem['sale_unit']
+                                ?? ''
+                            ),
                         );
 
                     if (
-                        $quantity
-                        > $availableQuantity
+                        $requestedSaleUnit === ''
+                    ) {
+                        $requestedSaleUnit =
+                            $batch
+                            ->primaryUnitValue();
+                    }
+
+                    if (
+                        $batch->usesDualUnit()
+                    ) {
+                        if (
+                            !$batch->isPrimarySaleUnit(
+                                $requestedSaleUnit,
+                            )
+                            && !$batch->isSecondarySaleUnit(
+                                $requestedSaleUnit,
+                            )
+                        ) {
+                            throw ValidationException::withMessages([
+                                "items.{$index}.sale_unit" => [
+                                    "Select either {$batch->primaryUnitValue()} or {$batch->secondaryUnitValue()} for {$batch->product->name}.",
+                                ],
+                            ]);
+                        }
+
+                        if (
+                            $batch->isPrimarySaleUnit(
+                                $requestedSaleUnit,
+                            )
+                            && !$this->isWholeNumber(
+                                $quantity,
+                            )
+                        ) {
+                            throw ValidationException::withMessages([
+                                "items.{$index}.quantity" => [
+                                    "Full {$batch->primaryUnitValue()} quantity must be a whole number.",
+                                ],
+                            ]);
+                        }
+
+                        $saleUnit =
+                            $batch->isPrimarySaleUnit(
+                                $requestedSaleUnit,
+                            )
+                            ? $batch
+                            ->primaryUnitValue()
+                            : (
+                                $batch
+                                ->secondaryUnitValue()
+                                ?? 'Kg'
+                            );
+                    } else {
+                        $saleUnit =
+                            $batch
+                            ->primaryUnitValue();
+                    }
+
+                    $stockQuantity =
+                        $batch
+                        ->stockQuantityForSale(
+                            $quantity,
+                            $saleUnit,
+                        );
+
+                    if (
+                        $stockQuantity <= 0
                     ) {
                         throw ValidationException::withMessages([
                             "items.{$index}.quantity" => [
-                                "Only {$availableQuantity} {$batch->product->unit} are available.",
+                                'The calculated stock quantity is invalid.',
                             ],
                         ]);
                     }
 
                     $sellingPrice =
-                        round(
-                            (float) $batch
-                                ->selling_price,
-                            2,
+                        $batch
+                        ->sellingPriceForUnit(
+                            $saleUnit,
                         );
 
-                    $purchaseCost =
-                        round(
-                            (float) $batch
-                                ->purchase_cost,
-                            2,
-                        );
+                    if (
+                        $sellingPrice === null
+                        || $sellingPrice < 0
+                    ) {
+                        throw ValidationException::withMessages([
+                            "items.{$index}.sale_unit" => [
+                                "A selling price is not configured for {$saleUnit}.",
+                            ],
+                        ]);
+                    }
+
+                    if (
+                        $batch->usesDualUnit()
+                        && $batch->isSecondarySaleUnit(
+                            $saleUnit,
+                        )
+                    ) {
+                        $purchaseCost =
+                            round(
+                                $batch
+                                    ->baseUnitCostValue(),
+                                2,
+                            );
+
+                        $conversionFactor =
+                            1.0;
+                    } elseif (
+                        $batch->usesDualUnit()
+                    ) {
+                        $purchaseCost =
+                            round(
+                                (float) (
+                                    $batch
+                                    ->purchase_cost
+                                    ?? 0
+                                ),
+                                2,
+                            );
+
+                        $conversionFactor =
+                            $batch
+                            ->conversionFactorValue();
+                    } else {
+                        $purchaseCost =
+                            round(
+                                (float) (
+                                    $batch
+                                    ->purchase_cost
+                                    ?? 0
+                                ),
+                                2,
+                            );
+
+                        $conversionFactor =
+                            1.0;
+                    }
 
                     $itemDiscount =
                         round(
                             (float) (
-                                $requestedItem['discount'] ?? 0
+                                $requestedItem['discount']
+                                ?? 0
                             ),
                             2,
                         );
+
+                    if ($itemDiscount < 0) {
+                        throw ValidationException::withMessages([
+                            "items.{$index}.discount" => [
+                                'The item discount cannot be negative.',
+                            ],
+                        ]);
+                    }
 
                     $lineSubtotal =
                         round(
@@ -598,28 +744,121 @@ class SaleController extends Controller
                             2,
                         );
 
-                    $subtotal +=
-                        $lineSubtotal;
+                    $subtotal =
+                        round(
+                            $subtotal
+                                + $lineSubtotal,
+                            2,
+                        );
 
-                    $itemDiscountTotal +=
-                        $itemDiscount;
+                    $itemDiscountTotal =
+                        round(
+                            $itemDiscountTotal
+                                + $itemDiscount,
+                            2,
+                        );
 
-                    $grossProfit +=
-                        $lineGrossProfit;
+                    $grossProfit =
+                        round(
+                            $grossProfit
+                                + $lineGrossProfit,
+                            2,
+                        );
+
+                    $requiredStockByBatch[$batchId] =
+                        round(
+                            (
+                                $requiredStockByBatch[$batchId]
+                                ?? 0
+                            )
+                                + $stockQuantity,
+                            3,
+                        );
 
                     $computedItems[] = [
-                        'batch' => $batch,
-                        'quantity' => $quantity,
-                        'purchase_cost' => $purchaseCost,
-                        'selling_price' => $sellingPrice,
-                        'discount' => $itemDiscount,
-                        'line_total' => $lineTotal,
-                        'gross_profit' => $lineGrossProfit,
+                        'batch' =>
+                        $batch,
+
+                        'quantity' =>
+                        $quantity,
+
+                        'sale_unit' =>
+                        $saleUnit,
+
+                        'conversion_factor' =>
+                        $conversionFactor,
+
+                        'stock_quantity' =>
+                        $stockQuantity,
+
+                        'purchase_cost' =>
+                        $purchaseCost,
+
+                        'selling_price' =>
+                        round(
+                            $sellingPrice,
+                            2,
+                        ),
+
+                        'discount' =>
+                        $itemDiscount,
+
+                        'line_total' =>
+                        $lineTotal,
+
+                        'gross_profit' =>
+                        $lineGrossProfit,
                     ];
                 }
 
+                foreach (
+                    $requiredStockByBatch
+                    as $batchId => $requiredStock
+                ) {
+                    $batch =
+                        $batches->get(
+                            (int) $batchId,
+                        );
+
+                    if (
+                        !$batch instanceof StockBatch
+                    ) {
+                        throw ValidationException::withMessages([
+                            'items' => [
+                                'A selected stock batch is no longer available.',
+                            ],
+                        ]);
+                    }
+
+                    $availableQuantity =
+                        round(
+                            (float) $batch
+                                ->available_quantity,
+                            3,
+                        );
+
+                    if (
+                        $requiredStock
+                        > $availableQuantity
+                        + 0.0001
+                    ) {
+                        $stockUnit =
+                            $batch
+                            ->stockUnitValue();
+
+                        throw ValidationException::withMessages([
+                            'items' => [
+                                "{$batch->product->name} only has {$this->formatQuantity($availableQuantity)} {$stockUnit} available, but this sale requires {$this->formatQuantity($requiredStock)} {$stockUnit}.",
+                            ],
+                        ]);
+                    }
+                }
+
                 $subtotal =
-                    round($subtotal, 2);
+                    round(
+                        $subtotal,
+                        2,
+                    );
 
                 $itemDiscountTotal =
                     round(
@@ -629,9 +868,20 @@ class SaleController extends Controller
 
                 $saleDiscount =
                     round(
-                        (float) $validated['discount'],
+                        (float) (
+                            $validated['discount']
+                            ?? 0
+                        ),
                         2,
                     );
+
+                if ($saleDiscount < 0) {
+                    throw ValidationException::withMessages([
+                        'discount' => [
+                            'The sale discount cannot be negative.',
+                        ],
+                    ]);
+                }
 
                 $maximumDiscount =
                     round(
@@ -663,17 +913,24 @@ class SaleController extends Controller
                     $validated['settlement_type'];
 
                 $paymentMethod =
-                    $validated['payment_method'] ?? null;
+                    $validated['payment_method']
+                    ?? null;
 
                 $amountReceived =
                     round(
-                        (float) $validated['amount_received'],
+                        (float) (
+                            $validated['amount_received']
+                            ?? 0
+                        ),
                         2,
                     );
 
                 $paidAmount = 0.0;
+
                 $dueAmount = 0.0;
+
                 $changeAmount = 0.0;
+
                 $paymentStatus =
                     Sale::PAYMENT_STATUS_PAID;
 
@@ -681,7 +938,7 @@ class SaleController extends Controller
                     $settlementType
                     === Sale::SETTLEMENT_FULL
                 ) {
-                    if (! $paymentMethod) {
+                    if (!$paymentMethod) {
                         throw ValidationException::withMessages([
                             'payment_method' => [
                                 'Please select a payment method.',
@@ -729,7 +986,7 @@ class SaleController extends Controller
                     $settlementType
                     === Sale::SETTLEMENT_PARTIAL
                 ) {
-                    if (! $customer) {
+                    if (!$customer) {
                         throw ValidationException::withMessages([
                             'customer_id' => [
                                 'A customer is required for a partial payment sale.',
@@ -738,7 +995,7 @@ class SaleController extends Controller
                     }
 
                     if (
-                        ! $paymentMethod
+                        !$paymentMethod
                         || $amountReceived <= 0
                         || $amountReceived
                         >= $grandTotal
@@ -763,7 +1020,7 @@ class SaleController extends Controller
                     $paymentStatus =
                         Sale::PAYMENT_STATUS_PARTIAL;
                 } else {
-                    if (! $customer) {
+                    if (!$customer) {
                         throw ValidationException::withMessages([
                             'customer_id' => [
                                 'A customer is required for a due sale.',
@@ -771,7 +1028,9 @@ class SaleController extends Controller
                         ]);
                     }
 
-                    if ($amountReceived > 0) {
+                    if (
+                        $amountReceived > 0
+                    ) {
                         throw ValidationException::withMessages([
                             'amount_received' => [
                                 'Use partial payment when an initial amount is received.',
@@ -779,7 +1038,8 @@ class SaleController extends Controller
                         ]);
                     }
 
-                    $paidAmount = 0;
+                    $paidAmount = 0.0;
+
                     $dueAmount =
                         $grandTotal;
 
@@ -853,7 +1113,10 @@ class SaleController extends Controller
 
                         'due_date' =>
                         $dueAmount > 0
-                            ? $validated['due_date']
+                            ? (
+                                $validated['due_date']
+                                ?? null
+                            )
                             : null,
 
                         'change_amount' =>
@@ -875,7 +1138,8 @@ class SaleController extends Controller
                         $settlementType,
 
                         'notes' =>
-                        $validated['notes'] ?? null,
+                        $validated['notes']
+                            ?? null,
 
                         'created_by' =>
                         $user->id,
@@ -898,9 +1162,15 @@ class SaleController extends Controller
                     $computedItems
                     as $computedItem
                 ) {
-                    /** @var StockBatch $batch */
                     $batch =
                         $computedItem['batch'];
+
+                    if (
+                        !$batch
+                            instanceof StockBatch
+                    ) {
+                        continue;
+                    }
 
                     $quantityBefore =
                         round(
@@ -909,11 +1179,33 @@ class SaleController extends Controller
                             3,
                         );
 
+                    $stockQuantity =
+                        round(
+                            (float) $computedItem['stock_quantity'],
+                            3,
+                        );
+
                     $quantityAfter =
                         round(
                             $quantityBefore
-                                - $computedItem['quantity'],
+                                - $stockQuantity,
                             3,
+                        );
+
+                    if (
+                        $quantityAfter < -0.0001
+                    ) {
+                        throw ValidationException::withMessages([
+                            'items' => [
+                                "{$batch->product->name} no longer has enough stock.",
+                            ],
+                        ]);
+                    }
+
+                    $quantityAfter =
+                        max(
+                            0,
+                            $quantityAfter,
                         );
 
                     SaleItem::query()
@@ -930,6 +1222,18 @@ class SaleController extends Controller
 
                             'quantity' =>
                             $computedItem['quantity'],
+
+                            'returned_quantity' =>
+                            0,
+
+                            'sale_unit' =>
+                            $computedItem['sale_unit'],
+
+                            'conversion_factor' =>
+                            $computedItem['conversion_factor'],
+
+                            'stock_quantity' =>
+                            $stockQuantity,
 
                             'purchase_cost' =>
                             $computedItem['purchase_cost'],
@@ -952,6 +1256,11 @@ class SaleController extends Controller
                         $quantityAfter,
                     ]);
 
+                    $batch->setAttribute(
+                        'available_quantity',
+                        $quantityAfter,
+                    );
+
                     StockMovement::query()
                         ->create([
                             'product_id' =>
@@ -968,7 +1277,7 @@ class SaleController extends Controller
                             $quantityBefore,
 
                             'quantity_change' =>
-                            -$computedItem['quantity'],
+                            -$stockQuantity,
 
                             'quantity_after' =>
                             $quantityAfter,
@@ -984,14 +1293,27 @@ class SaleController extends Controller
                                 ->sale_number,
 
                             'notes' =>
-                            'Stock sold through POS.',
+                            sprintf(
+                                'POS sale: %s %s. Stock reduced by %s %s.',
+                                $this->formatQuantity(
+                                    (float) $computedItem['quantity'],
+                                ),
+                                $computedItem['sale_unit'],
+                                $this->formatQuantity(
+                                    $stockQuantity,
+                                ),
+                                $batch
+                                    ->stockUnitValue(),
+                            ),
 
                             'created_by' =>
                             $user->id,
                         ]);
                 }
 
-                if ($paidAmount > 0) {
+                if (
+                    $paidAmount > 0
+                ) {
                     SalePayment::query()
                         ->create([
                             'sale_id' =>
@@ -1007,10 +1329,12 @@ class SaleController extends Controller
                             $paidAmount,
 
                             'reference_number' =>
-                            $validated['reference_number'] ?? null,
+                            $validated['reference_number']
+                                ?? null,
 
                             'notes' =>
-                            $validated['notes'] ?? null,
+                            $validated['notes']
+                                ?? null,
 
                             'created_by' =>
                             $user->id,
@@ -1042,7 +1366,7 @@ class SaleController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
                 'message' =>
                 'Unauthenticated.',
@@ -1050,7 +1374,6 @@ class SaleController extends Controller
         }
 
         return response()->json([
-            
             'data' =>
             $this->saleData(
                 $this->loadSale(
@@ -1079,17 +1402,15 @@ class SaleController extends Controller
 
             'items' =>
             fn($query) =>
-            $query->orderBy('id'),
+            $query
+                ->orderBy('id'),
 
             'items.product:id,name,unit,sku,barcode',
 
-            'items.stockBatch:id,batch_code,batch_number,expiry_date',
+            'items.stockBatch:id,product_id,purchase_item_id,batch_code,batch_number,purchase_cost,selling_price,is_dual_unit,stock_unit,secondary_unit,conversion_factor,secondary_selling_price,base_unit_cost,received_quantity,available_quantity,manufactured_date,expiry_date,received_at',
         ]);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private function saleSummaryData(
         Sale $sale,
         bool $includeProfit,
@@ -1102,7 +1423,8 @@ class SaleController extends Controller
             $sale->id,
 
             'sale_number' =>
-            $sale->sale_number,
+            $sale
+                ->sale_number,
 
             'sale_date' =>
             $sale
@@ -1136,7 +1458,9 @@ class SaleController extends Controller
             'due_date' =>
             $sale
                 ->due_date
-                ?->format('Y-m-d'),
+                ?->format(
+                    'Y-m-d',
+                ),
 
             'change_amount' =>
             (float) $sale
@@ -1155,10 +1479,12 @@ class SaleController extends Controller
                 : null,
 
             'payment_status' =>
-            $sale->payment_status,
+            $sale
+                ->payment_status,
 
             'settlement_type' =>
-            $sale->settlement_type,
+            $sale
+                ->settlement_type,
 
             'payment_method' =>
             $firstPayment
@@ -1207,23 +1533,30 @@ class SaleController extends Controller
                 $sale->total_quantity
                 ?? $sale
                 ->items()
-                ->sum('quantity')
+                ->sum(
+                    'quantity',
+                )
             ),
 
-            'created_by' => [
-                'id' =>
-                $sale->createdBy->id,
+            'created_by' =>
+            $sale->createdBy
+                ? [
+                    'id' =>
+                    $sale
+                        ->createdBy
+                        ->id,
 
-                'name' =>
-                $sale
-                    ->createdBy
-                    ->name,
+                    'name' =>
+                    $sale
+                        ->createdBy
+                        ->name,
 
-                'username' =>
-                $sale
-                    ->createdBy
-                    ->username,
-            ],
+                    'username' =>
+                    $sale
+                        ->createdBy
+                        ->username,
+                ]
+                : null,
 
             'created_at' =>
             $sale
@@ -1237,9 +1570,6 @@ class SaleController extends Controller
         ];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private function saleData(
         Sale $sale,
         bool $includeProfit,
@@ -1251,7 +1581,8 @@ class SaleController extends Controller
             ),
 
             'items' =>
-            $sale->items
+            $sale
+                ->items
                 ->map(
                     fn(
                         SaleItem $item,
@@ -1270,6 +1601,37 @@ class SaleController extends Controller
                         'quantity' =>
                         (float) $item
                             ->quantity,
+
+                        'returned_quantity' =>
+                        (float) (
+                            $item
+                            ->returned_quantity
+                            ?? 0
+                        ),
+
+                        'remaining_returnable_quantity' =>
+                        $item
+                            ->remainingReturnableQuantity(),
+
+                        'sale_unit' =>
+                        $item
+                            ->saleUnitValue(),
+
+                        'conversion_factor' =>
+                        $item
+                            ->conversionFactorValue(),
+
+                        'stock_quantity' =>
+                        $item
+                            ->stockQuantityValue(),
+
+                        'returned_stock_quantity' =>
+                        $item
+                            ->returnedStockQuantity(),
+
+                        'remaining_returnable_stock_quantity' =>
+                        $item
+                            ->remainingReturnableStockQuantity(),
 
                         'purchase_cost' =>
                         $includeProfit
@@ -1295,63 +1657,113 @@ class SaleController extends Controller
                                 ->gross_profit
                             : null,
 
-                        'product' => [
-                            'id' =>
-                            $item
-                                ->product
-                                ->id,
+                        'product' =>
+                        $item->product
+                            ? [
+                                'id' =>
+                                $item
+                                    ->product
+                                    ->id,
 
-                            'name' =>
-                            $item
-                                ->product
-                                ->name,
+                                'name' =>
+                                $item
+                                    ->product
+                                    ->name,
 
-                            'unit' =>
-                            $item
-                                ->product
-                                ->unit,
+                                'unit' =>
+                                $item
+                                    ->product
+                                    ->unit,
 
-                            'sku' =>
-                            $item
-                                ->product
-                                ->sku,
+                                'sku' =>
+                                $item
+                                    ->product
+                                    ->sku,
 
-                            'barcode' =>
-                            $item
-                                ->product
-                                ->barcode,
-                        ],
+                                'barcode' =>
+                                $item
+                                    ->product
+                                    ->barcode,
+                            ]
+                            : null,
 
-                        'batch' => [
-                            'id' =>
-                            $item
-                                ->stockBatch
-                                ->id,
+                        'batch' =>
+                        $item->stockBatch
+                            ? [
+                                'id' =>
+                                $item
+                                    ->stockBatch
+                                    ->id,
 
-                            'batch_code' =>
-                            $item
-                                ->stockBatch
-                                ->batch_code,
+                                'batch_code' =>
+                                $item
+                                    ->stockBatch
+                                    ->batch_code,
 
-                            'batch_number' =>
-                            $item
-                                ->stockBatch
-                                ->batch_number,
+                                'batch_number' =>
+                                $item
+                                    ->stockBatch
+                                    ->batch_number,
 
-                            'expiry_date' =>
-                            $item
-                                ->stockBatch
-                                ->expiry_date
-                                ?->format(
-                                    'Y-m-d',
+                                'is_dual_unit' =>
+                                (bool) $item
+                                    ->stockBatch
+                                    ->is_dual_unit,
+
+                                'stock_unit' =>
+                                $item
+                                    ->stockBatch
+                                    ->stock_unit,
+
+                                'secondary_unit' =>
+                                $item
+                                    ->stockBatch
+                                    ->secondary_unit,
+
+                                'conversion_factor' =>
+                                (float) (
+                                    $item
+                                    ->stockBatch
+                                    ->conversion_factor
+                                    ?? 1
                                 ),
-                        ],
+
+                                'primary_selling_price' =>
+                                (float) $item
+                                    ->stockBatch
+                                    ->selling_price,
+
+                                'secondary_selling_price' =>
+                                $item
+                                    ->stockBatch
+                                    ->secondary_selling_price
+                                    !== null
+                                    ? (float) $item
+                                        ->stockBatch
+                                        ->secondary_selling_price
+                                    : null,
+
+                                'available_quantity' =>
+                                (float) $item
+                                    ->stockBatch
+                                    ->available_quantity,
+
+                                'expiry_date' =>
+                                $item
+                                    ->stockBatch
+                                    ->expiry_date
+                                    ?->format(
+                                        'Y-m-d',
+                                    ),
+                            ]
+                            : null,
                     ],
                 )
                 ->values(),
 
             'payments' =>
-            $sale->payments
+            $sale
+                ->payments
                 ->map(
                     fn(
                         SalePayment $payment,
@@ -1376,7 +1788,8 @@ class SaleController extends Controller
                             ->reference_number,
 
                         'notes' =>
-                        $payment->notes,
+                        $payment
+                            ->notes,
 
                         'created_by' =>
                         $payment
@@ -1402,5 +1815,31 @@ class SaleController extends Controller
                 )
                 ->values(),
         ];
+    }
+
+    private function isWholeNumber(
+        float $value,
+    ): bool {
+        return abs(
+            $value
+                - round($value),
+        ) < 0.0001;
+    }
+
+    private function formatQuantity(
+        float $quantity,
+    ): string {
+        return rtrim(
+            rtrim(
+                number_format(
+                    $quantity,
+                    3,
+                    '.',
+                    '',
+                ),
+                '0',
+            ),
+            '.',
+        );
     }
 }

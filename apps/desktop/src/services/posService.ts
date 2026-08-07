@@ -31,7 +31,7 @@ function createProductQuery(parameters: PosProductListParameters): string {
 export async function getPosCategories(
   token: string
 ): Promise<PosCategoryResponse> {
-  return apiRequest<PosCategoryResponse>("/pos/categories", {
+  return apiRequest("/pos/categories", {
     method: "GET",
     token,
   });
@@ -41,20 +41,17 @@ export async function getPosProducts(
   token: string,
   parameters: PosProductListParameters
 ): Promise<PosProductListResponse> {
-  return apiRequest<PosProductListResponse>(
-    `/pos/products?${createProductQuery(parameters)}`,
-    {
-      method: "GET",
-      token,
-    }
-  );
+  return apiRequest(`/pos/products?${createProductQuery(parameters)}`, {
+    method: "GET",
+    token,
+  });
 }
 
 export async function getPosProduct(
   token: string,
   productId: number
 ): Promise<PosProductResponse> {
-  return apiRequest<PosProductResponse>(`/pos/products/${productId}`, {
+  return apiRequest(`/pos/products/${productId}`, {
     method: "GET",
     token,
   });
@@ -65,45 +62,21 @@ export async function completePosSale(
   cartItems: PosCartItem[],
   values: CompleteSaleValues
 ): Promise<CompleteSaleResponse> {
-  return apiRequest<CompleteSaleResponse>("/sales", {
+  return apiRequest("/sales", {
     method: "POST",
     token,
 
     body: JSON.stringify({
-      /*
-       * Null means this is a
-       * walk-in customer sale.
-       */
       customer_id: values.customer_id,
 
-      /*
-       * full:
-       * Entire amount is paid.
-       *
-       * partial:
-       * Customer pays part of
-       * the total and the rest
-       * becomes due.
-       *
-       * due:
-       * Entire total becomes due.
-       */
       settlement_type: values.settlement_type,
 
-      discount: values.discount,
+      discount: Number(values.discount || 0),
 
-      /*
-       * Due sales do not have an
-       * initial payment method.
-       */
       payment_method: values.payment_method,
 
-      amount_received: values.amount_received,
+      amount_received: Number(values.amount_received || 0),
 
-      /*
-       * Only partial and due
-       * settlements need a due date.
-       */
       due_date: values.due_date.trim() || null,
 
       reference_number: values.reference_number.trim() || null,
@@ -113,9 +86,11 @@ export async function completePosSale(
       items: cartItems.map((item) => ({
         stock_batch_id: item.stock_batch_id,
 
-        quantity: item.quantity,
+        quantity: Number(item.quantity),
 
-        discount: item.discount,
+        sale_unit: item.sale_unit.trim(),
+
+        discount: Number(item.discount || 0),
       })),
     }),
   });

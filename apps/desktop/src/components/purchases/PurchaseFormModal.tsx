@@ -50,7 +50,11 @@ interface PurchaseFormModalProps {
     ) => void;
 
     onAddItem: () => void;
-    onRemoveItem: (index: number) => void;
+
+    onRemoveItem: (
+        index: number,
+    ) => void;
+
     onClose: () => void;
 
     onSubmit: (
@@ -58,9 +62,31 @@ interface PurchaseFormModalProps {
     ) => void;
 }
 
+/**
+ * These fields are part of the new dual-unit
+ * purchase workflow.
+ *
+ * The cast helper below allows this modal to compile
+ * before types/purchase.ts is updated in the next step.
+ */
+type DualUnitItemField =
+    | 'is_dual_unit'
+    | 'conversion_factor'
+    | 'secondary_unit'
+    | 'secondary_selling_price';
+
+type ExtendedPurchaseItem =
+    PurchaseItemFormValues
+    & Partial<
+        Record<
+            DualUnitItemField,
+            string
+        >
+    >;
+
 const currencyFormatter =
     new Intl.NumberFormat(
-        'en-GB',
+        'en-LK',
         {
             style: 'currency',
             currency: 'LKR',
@@ -69,20 +95,32 @@ const currencyFormatter =
         },
     );
 
+const quantityFormatter =
+    new Intl.NumberFormat(
+        'en-GB',
+        {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 3,
+        },
+    );
+
 type IconName =
     | 'alert'
+    | 'bag'
     | 'batch'
     | 'calendar'
     | 'check'
     | 'close'
     | 'info'
     | 'invoice'
+    | 'kg'
     | 'money'
     | 'note'
     | 'package'
     | 'plus'
     | 'receipt'
     | 'save'
+    | 'scale'
     | 'supplier'
     | 'trash'
     | 'truck';
@@ -97,8 +135,10 @@ function Icon({
         fill: 'none',
         stroke: 'currentColor',
         strokeWidth: 2,
-        strokeLinecap: 'round' as const,
-        strokeLinejoin: 'round' as const,
+        strokeLinecap:
+            'round' as const,
+        strokeLinejoin:
+            'round' as const,
         'aria-hidden': true,
         focusable: false,
     };
@@ -109,6 +149,15 @@ function Icon({
                 <svg {...props}>
                     <path d="M10.3 3.4 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.4a2 2 0 0 0-3.4 0Z" />
                     <path d="M12 9v4M12 17h.01" />
+                </svg>
+            );
+
+        case 'bag':
+            return (
+                <svg {...props}>
+                    <path d="M8 7c0-3 1.5-5 4-5s4 2 4 5" />
+                    <path d="M6 7h12l2 14H4Z" />
+                    <path d="M9 12h6" />
                 </svg>
             );
 
@@ -167,6 +216,15 @@ function Icon({
                 <svg {...props}>
                     <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
                     <path d="M9 8h6M9 12h6M9 16h4" />
+                </svg>
+            );
+
+        case 'kg':
+            return (
+                <svg {...props}>
+                    <path d="M5 4v16M5 12l7-8M5 12l7 8" />
+                    <path d="M20 9a4 4 0 1 0 0 6" />
+                    <path d="M20 9v11" />
                 </svg>
             );
 
@@ -230,6 +288,14 @@ function Icon({
                 </svg>
             );
 
+        case 'scale':
+            return (
+                <svg {...props}>
+                    <path d="M12 3v18M5 7h14M7 7l-4 7h8ZM17 7l-4 7h8Z" />
+                    <path d="M8 21h8" />
+                </svg>
+            );
+
         case 'supplier':
             return (
                 <svg {...props}>
@@ -256,13 +322,80 @@ function Icon({
 }
 
 function numberValue(
-    value: string | number,
+    value:
+        | string
+        | number
+        | null
+        | undefined,
 ): number {
-    const parsed = Number(value);
+    const parsed =
+        Number(
+            value ?? 0,
+        );
 
-    return Number.isFinite(parsed)
+    return Number.isFinite(
+        parsed,
+    )
         ? parsed
         : 0;
+}
+
+function formatQuantity(
+    value: number,
+): string {
+    return quantityFormatter.format(
+        Number.isFinite(value)
+            ? value
+            : 0,
+    );
+}
+
+function getExtendedItemValue(
+    item: PurchaseItemFormValues,
+    field: DualUnitItemField,
+    fallback = '',
+): string {
+    const extendedItem =
+        item as ExtendedPurchaseItem;
+
+    const value =
+        extendedItem[field];
+
+    if (
+        value === undefined
+        || value === null
+    ) {
+        return fallback;
+    }
+
+    return String(value);
+}
+
+function isEnabledFlag(
+    value: string,
+): boolean {
+    return (
+        value === '1'
+        || value === 'true'
+        || value === 'yes'
+    );
+}
+
+function isBagUnit(
+    unit:
+        | string
+        | null
+        | undefined,
+): boolean {
+    const normalised =
+        String(unit ?? '')
+            .trim()
+            .toLowerCase();
+
+    return (
+        normalised === 'bag'
+        || normalised === 'bags'
+    );
 }
 
 const purchaseFormStyles = `
@@ -280,17 +413,26 @@ const purchaseFormStyles = `
     --pfm-green-700: #15803d;
     --pfm-green-100: #dcfce7;
     --pfm-green-50: #f0fdf4;
-    --pfm-blue: #175cd3;
+
+    --pfm-blue-800: #175cd3;
+    --pfm-blue-100: #d1e9ff;
     --pfm-blue-50: #eff8ff;
-    --pfm-amber: #b54708;
+
+    --pfm-amber-800: #b54708;
+    --pfm-amber-100: #fedf89;
     --pfm-amber-50: #fffaeb;
-    --pfm-red: #b42318;
+
+    --pfm-red-800: #b42318;
+    --pfm-red-100: #fecdca;
     --pfm-red-50: #fef3f2;
+
     --pfm-text: #101828;
     --pfm-text-2: #344054;
     --pfm-muted: #667085;
     --pfm-border: #d0d9d2;
     --pfm-border-strong: #aebdb2;
+    --pfm-surface: #ffffff;
+    --pfm-page: #f4f7f5;
 
     position: fixed !important;
     inset: 0 !important;
@@ -315,13 +457,11 @@ const purchaseFormStyles = `
         Arial,
         sans-serif !important;
 
-    font-size: 14px !important;
+    font-size: 15px !important;
     line-height: 1.5 !important;
 
     isolation: isolate !important;
-
-    -webkit-font-smoothing:
-        antialiased !important;
+    -webkit-font-smoothing: antialiased !important;
 }
 
 #purchase-form-modal button,
@@ -329,12 +469,13 @@ const purchaseFormStyles = `
 #purchase-form-modal select,
 #purchase-form-modal textarea {
     font: inherit !important;
-    text-transform: none !important;
     letter-spacing: normal !important;
+    text-transform: none !important;
 }
 
 #purchase-form-modal h2,
 #purchase-form-modal h3,
+#purchase-form-modal h4,
 #purchase-form-modal p {
     margin: 0 !important;
 }
@@ -344,37 +485,22 @@ const purchaseFormStyles = `
     inset: 0 !important;
 
     display: flex !important;
-
     align-items: center !important;
     justify-content: center !important;
 
-    padding: 12px !important;
+    padding: 14px !important;
 
     overflow: auto !important;
 
-    background:
-        rgba(
-            3,
-            18,
-            10,
-            0.76
-        ) !important;
-
-    backdrop-filter:
-        blur(4px) !important;
+    background: rgba(3, 18, 10, 0.76) !important;
+    backdrop-filter: blur(4px) !important;
 }
 
 #purchase-form-modal .pfm-dialog {
     display: flex !important;
 
-    width:
-        min(
-            1180px,
-            100%
-        ) !important;
-
-    max-height:
-        calc(100dvh - 24px) !important;
+    width: min(1280px, 100%) !important;
+    max-height: calc(100dvh - 28px) !important;
 
     min-width: 0 !important;
     min-height: 0 !important;
@@ -385,33 +511,25 @@ const purchaseFormStyles = `
 
     background: #ffffff !important;
 
-    border:
-        1px solid
-        var(--pfm-border) !important;
-
-    border-radius: 16px !important;
+    border: 1px solid var(--pfm-border) !important;
+    border-radius: 18px !important;
 
     box-shadow:
-        0 28px 72px
-        rgba(
-            0,
-            0,
-            0,
-            0.38
-        ) !important;
+        0 30px 90px
+        rgba(0, 0, 0, 0.4) !important;
 }
 
 #purchase-form-modal .pfm-header {
     display: flex !important;
 
-    min-height: 78px !important;
+    min-height: 84px !important;
     flex: 0 0 auto !important;
 
     align-items: center !important;
     justify-content: space-between !important;
-    gap: 16px !important;
+    gap: 18px !important;
 
-    padding: 13px 16px !important;
+    padding: 14px 18px !important;
 
     color: #ffffff !important;
 
@@ -425,38 +543,29 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-header-main {
     display: flex !important;
-
     min-width: 0 !important;
-    flex: 1 !important;
-
     align-items: center !important;
-    gap: 11px !important;
+    gap: 12px !important;
 }
 
 #purchase-form-modal .pfm-header-icon {
     display: grid !important;
 
-    width: 40px !important;
-    height: 40px !important;
-    min-width: 40px !important;
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
 
     place-items: center !important;
 
-    color:
-        var(--pfm-green-900) !important;
-
+    color: var(--pfm-green-900) !important;
     background: #ffffff !important;
 
-    border-radius: 10px !important;
+    border-radius: 12px !important;
 }
 
 #purchase-form-modal .pfm-header-icon svg {
-    width: 20px !important;
-    height: 20px !important;
-}
-
-#purchase-form-modal .pfm-header-copy {
-    min-width: 0 !important;
+    width: 23px !important;
+    height: 23px !important;
 }
 
 #purchase-form-modal .pfm-kicker {
@@ -466,33 +575,27 @@ const purchaseFormStyles = `
 
     color: #bbf7d0 !important;
 
-    font-size: 10px !important;
-    font-weight: 750 !important;
-    letter-spacing: 0.055em !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.06em !important;
 
     text-transform: uppercase !important;
 }
 
 #purchase-form-modal .pfm-title {
-    overflow: hidden !important;
-
     color: #ffffff !important;
 
-    font-size: 20px !important;
-    font-weight: 740 !important;
-    line-height: 1.25 !important;
-    letter-spacing: -0.02em !important;
-
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    font-size: 23px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
 }
 
 #purchase-form-modal .pfm-close {
     display: grid !important;
 
-    width: 40px !important;
-    height: 40px !important;
-    min-width: 40px !important;
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
 
     place-items: center !important;
 
@@ -505,7 +608,7 @@ const purchaseFormStyles = `
             255,
             255,
             255,
-            0.12
+            0.13
         ) !important;
 
     border:
@@ -514,33 +617,27 @@ const purchaseFormStyles = `
             255,
             255,
             255,
-            0.34
+            0.35
         ) !important;
 
-    border-radius: 9px !important;
+    border-radius: 11px !important;
 
     cursor: pointer !important;
 }
 
-#purchase-form-modal
-.pfm-close:hover:not(:disabled) {
+#purchase-form-modal .pfm-close:hover:not(:disabled) {
     background:
         rgba(
             255,
             255,
             255,
-            0.22
+            0.24
         ) !important;
 }
 
-#purchase-form-modal .pfm-close:disabled {
-    opacity: 0.55 !important;
-    cursor: not-allowed !important;
-}
-
 #purchase-form-modal .pfm-close svg {
-    width: 18px !important;
-    height: 18px !important;
+    width: 20px !important;
+    height: 20px !important;
 }
 
 #purchase-form-modal .pfm-form {
@@ -561,75 +658,69 @@ const purchaseFormStyles = `
     flex: 1 !important;
 
     flex-direction: column !important;
-    gap: 13px !important;
+    gap: 15px !important;
 
-    padding: 14px !important;
+    padding: 16px !important;
 
     overflow-x: hidden !important;
     overflow-y: auto !important;
 
-    background: #f5f8f6 !important;
+    background: var(--pfm-page) !important;
 
     scrollbar-width: thin !important;
-
-    scrollbar-color:
-        #9cad9f
-        #eaf0eb !important;
-}
-
-#purchase-form-modal
-.pfm-body::-webkit-scrollbar {
-    width: 9px !important;
-}
-
-#purchase-form-modal
-.pfm-body::-webkit-scrollbar-track {
-    background: #eaf0eb !important;
-}
-
-#purchase-form-modal
-.pfm-body::-webkit-scrollbar-thumb {
-    background: #9cad9f !important;
-
-    border:
-        2px solid
-        #eaf0eb !important;
-
-    border-radius: 999px !important;
+    scrollbar-color: #9cad9f #eaf0eb !important;
 }
 
 #purchase-form-modal .pfm-intro {
-    color: var(--pfm-muted) !important;
-    font-size: 12px !important;
+    display: flex !important;
+
+    align-items: flex-start !important;
+    gap: 8px !important;
+
+    padding: 12px 14px !important;
+
+    color: #245134 !important;
+
+    font-size: 13px !important;
+    font-weight: 600 !important;
+
+    background: var(--pfm-green-50) !important;
+
+    border: 1px solid #b8dfc3 !important;
+    border-radius: 11px !important;
+}
+
+#purchase-form-modal .pfm-intro svg {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+
+    margin-top: 1px !important;
 }
 
 #purchase-form-modal .pfm-alert {
     display: flex !important;
 
     align-items: flex-start !important;
-    gap: 8px !important;
+    gap: 9px !important;
 
-    padding: 9px 11px !important;
+    padding: 11px 13px !important;
 
-    color: var(--pfm-red) !important;
+    color: var(--pfm-red-800) !important;
 
-    font-size: 12px !important;
-    font-weight: 600 !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
 
-    background:
-        var(--pfm-red-50) !important;
+    background: var(--pfm-red-50) !important;
 
-    border:
-        1px solid
-        #f3b5af !important;
-
-    border-radius: 9px !important;
+    border: 1px solid var(--pfm-red-100) !important;
+    border-radius: 10px !important;
 }
 
 #purchase-form-modal .pfm-alert svg {
-    width: 17px !important;
-    height: 17px !important;
-    min-width: 17px !important;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
 
     margin-top: 1px !important;
 }
@@ -640,17 +731,14 @@ const purchaseFormStyles = `
     min-width: 0 !important;
 
     flex-direction: column !important;
-    gap: 11px !important;
+    gap: 13px !important;
 
-    padding: 13px !important;
+    padding: 15px !important;
 
     background: #ffffff !important;
 
-    border:
-        1px solid
-        var(--pfm-border) !important;
-
-    border-radius: 11px !important;
+    border: 1px solid var(--pfm-border) !important;
+    border-radius: 13px !important;
 }
 
 #purchase-form-modal .pfm-section-header {
@@ -658,13 +746,11 @@ const purchaseFormStyles = `
 
     align-items: flex-start !important;
     justify-content: space-between !important;
-    gap: 12px !important;
+    gap: 14px !important;
 
-    padding-bottom: 9px !important;
+    padding-bottom: 11px !important;
 
-    border-bottom:
-        1px solid
-        #e7ece8 !important;
+    border-bottom: 1px solid #e7ece8 !important;
 }
 
 #purchase-form-modal .pfm-section-heading {
@@ -673,94 +759,56 @@ const purchaseFormStyles = `
     min-width: 0 !important;
 
     align-items: flex-start !important;
-    gap: 8px !important;
+    gap: 10px !important;
 }
 
 #purchase-form-modal .pfm-section-icon {
     display: grid !important;
 
-    width: 30px !important;
-    height: 30px !important;
-    min-width: 30px !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
 
     place-items: center !important;
 
-    color:
-        var(--pfm-green-900) !important;
+    color: var(--pfm-green-900) !important;
+    background: var(--pfm-green-50) !important;
 
-    background:
-        var(--pfm-green-50) !important;
-
-    border:
-        1px solid
-        #b8dfc3 !important;
-
-    border-radius: 8px !important;
+    border: 1px solid #b8dfc3 !important;
+    border-radius: 9px !important;
 }
 
 #purchase-form-modal .pfm-section-icon svg {
-    width: 15px !important;
-    height: 15px !important;
-}
-
-#purchase-form-modal .pfm-section-copy {
-    min-width: 0 !important;
+    width: 18px !important;
+    height: 18px !important;
 }
 
 #purchase-form-modal .pfm-section-title {
     color: var(--pfm-text-2) !important;
 
-    font-size: 13px !important;
-    font-weight: 700 !important;
+    font-size: 16px !important;
+    font-weight: 800 !important;
 }
 
 #purchase-form-modal .pfm-section-description {
-    margin-top: 1px !important;
+    margin-top: 2px !important;
 
     color: var(--pfm-muted) !important;
 
-    font-size: 10px !important;
-}
-
-#purchase-form-modal .pfm-add-item {
-    min-height: 36px !important;
-
-    padding: 5px 9px !important;
-
-    color:
-        var(--pfm-green-900) !important;
-
-    font-size: 11px !important;
-    font-weight: 700 !important;
-
-    background:
-        var(--pfm-green-50) !important;
-
-    border:
-        1px solid
-        #b8dfc3 !important;
-
-    border-radius: 8px !important;
-
-    cursor: pointer !important;
-}
-
-#purchase-form-modal .pfm-add-item svg {
-    width: 14px !important;
-    height: 14px !important;
+    font-size: 12px !important;
 }
 
 #purchase-form-modal .pfm-header-grid {
     display: grid !important;
 
     grid-template-columns:
-        minmax(220px, 1.3fr)
-        minmax(150px, 0.7fr)
-        minmax(190px, 1fr)
-        minmax(145px, 0.65fr)
-        minmax(145px, 0.65fr) !important;
+        minmax(230px, 1.25fr)
+        minmax(165px, 0.7fr)
+        minmax(210px, 1fr)
+        minmax(160px, 0.7fr)
+        minmax(160px, 0.7fr) !important;
 
-    gap: 10px !important;
+    gap: 12px !important;
 }
 
 #purchase-form-modal .pfm-notes-field {
@@ -772,14 +820,10 @@ const purchaseFormStyles = `
 
     grid-template-columns:
         minmax(0, 1fr)
-        275px !important;
+        295px !important;
 
     align-items: start !important;
-    gap: 12px !important;
-}
-
-#purchase-form-modal .pfm-items-section {
-    min-width: 0 !important;
+    gap: 14px !important;
 }
 
 #purchase-form-modal .pfm-items-list {
@@ -788,7 +832,36 @@ const purchaseFormStyles = `
     min-width: 0 !important;
 
     flex-direction: column !important;
-    gap: 9px !important;
+    gap: 12px !important;
+}
+
+#purchase-form-modal .pfm-add-item {
+    display: inline-flex !important;
+
+    min-height: 40px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+
+    padding: 7px 12px !important;
+
+    color: var(--pfm-green-900) !important;
+
+    font-size: 13px !important;
+    font-weight: 800 !important;
+
+    background: var(--pfm-green-50) !important;
+
+    border: 1px solid #b8dfc3 !important;
+    border-radius: 9px !important;
+
+    cursor: pointer !important;
+}
+
+#purchase-form-modal .pfm-add-item svg {
+    width: 16px !important;
+    height: 16px !important;
 }
 
 #purchase-form-modal .pfm-item-card {
@@ -802,11 +875,8 @@ const purchaseFormStyles = `
 
     background: #ffffff !important;
 
-    border:
-        1px solid
-        var(--pfm-border) !important;
-
-    border-radius: 10px !important;
+    border: 1px solid var(--pfm-border) !important;
+    border-radius: 12px !important;
 }
 
 #purchase-form-modal .pfm-item-header {
@@ -816,13 +886,11 @@ const purchaseFormStyles = `
     justify-content: space-between !important;
     gap: 12px !important;
 
-    padding: 9px 11px !important;
+    padding: 11px 13px !important;
 
     background: #f8faf9 !important;
 
-    border-bottom:
-        1px solid
-        #e3e9e4 !important;
+    border-bottom: 1px solid #e3e9e4 !important;
 }
 
 #purchase-form-modal .pfm-item-heading {
@@ -831,32 +899,27 @@ const purchaseFormStyles = `
     min-width: 0 !important;
 
     align-items: center !important;
-    gap: 8px !important;
+    gap: 9px !important;
 }
 
 #purchase-form-modal .pfm-item-number {
     display: inline-flex !important;
 
-    min-height: 26px !important;
+    min-height: 29px !important;
 
     align-items: center !important;
     justify-content: center !important;
 
-    padding: 3px 7px !important;
+    padding: 4px 9px !important;
 
-    color:
-        var(--pfm-green-900) !important;
+    color: var(--pfm-green-900) !important;
 
-    font-size: 10px !important;
-    font-weight: 700 !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
 
-    background:
-        var(--pfm-green-50) !important;
+    background: var(--pfm-green-50) !important;
 
-    border:
-        1px solid
-        #b8dfc3 !important;
-
+    border: 1px solid #b8dfc3 !important;
     border-radius: 999px !important;
 }
 
@@ -865,26 +928,51 @@ const purchaseFormStyles = `
 
     color: var(--pfm-text-2) !important;
 
-    font-size: 12px !important;
-    font-weight: 650 !important;
+    font-size: 14px !important;
+    font-weight: 750 !important;
 
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
+}
+
+#purchase-form-modal .pfm-unit-badge {
+    display: inline-flex !important;
+
+    min-height: 27px !important;
+
+    align-items: center !important;
+    gap: 5px !important;
+
+    padding: 3px 8px !important;
+
+    color: var(--pfm-blue-800) !important;
+
+    font-size: 10px !important;
+    font-weight: 800 !important;
+
+    background: var(--pfm-blue-50) !important;
+
+    border: 1px solid var(--pfm-blue-100) !important;
+    border-radius: 999px !important;
+}
+
+#purchase-form-modal .pfm-unit-badge svg {
+    width: 13px !important;
+    height: 13px !important;
 }
 
 #purchase-form-modal .pfm-item-header-actions {
     display: flex !important;
 
     align-items: center !important;
-    gap: 8px !important;
+    gap: 9px !important;
 }
 
 #purchase-form-modal .pfm-line-total {
-    color:
-        var(--pfm-green-900) !important;
+    color: var(--pfm-green-900) !important;
 
-    font-size: 12px !important;
-    font-weight: 750 !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
 
     white-space: nowrap !important;
 }
@@ -892,95 +980,316 @@ const purchaseFormStyles = `
 #purchase-form-modal .pfm-remove-item {
     display: inline-flex !important;
 
-    min-height: 30px !important;
+    min-height: 34px !important;
 
     align-items: center !important;
     justify-content: center !important;
     gap: 5px !important;
 
-    padding: 4px 7px !important;
+    padding: 5px 9px !important;
 
-    color: var(--pfm-red) !important;
+    color: var(--pfm-red-800) !important;
 
-    font-size: 10px !important;
-    font-weight: 700 !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
 
-    background:
-        var(--pfm-red-50) !important;
+    background: var(--pfm-red-50) !important;
 
-    border:
-        1px solid
-        #f3b5af !important;
-
-    border-radius: 7px !important;
+    border: 1px solid var(--pfm-red-100) !important;
+    border-radius: 8px !important;
 
     cursor: pointer !important;
 }
 
 #purchase-form-modal .pfm-remove-item svg {
-    width: 13px !important;
-    height: 13px !important;
-}
-
-#purchase-form-modal .pfm-remove-item:disabled {
-    opacity: 0.45 !important;
-    cursor: not-allowed !important;
+    width: 14px !important;
+    height: 14px !important;
 }
 
 #purchase-form-modal .pfm-item-body {
     display: flex !important;
 
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 13px !important;
 
-    padding: 10px !important;
+    padding: 13px !important;
 }
 
 #purchase-form-modal .pfm-item-main-grid {
     display: grid !important;
 
     grid-template-columns:
-        minmax(210px, 1.5fr)
-        minmax(90px, 0.55fr)
-        minmax(120px, 0.72fr)
-        minmax(120px, 0.72fr)
-        minmax(105px, 0.6fr) !important;
+        minmax(230px, 1.4fr)
+        minmax(110px, 0.55fr)
+        minmax(145px, 0.72fr)
+        minmax(145px, 0.72fr)
+        minmax(125px, 0.6fr) !important;
+
+    gap: 11px !important;
+}
+
+#purchase-form-modal .pfm-dual-unit-card {
+    display: flex !important;
+
+    min-width: 0 !important;
+
+    flex-direction: column !important;
+    gap: 12px !important;
+
+    padding: 14px !important;
+
+    background:
+        linear-gradient(
+            135deg,
+            #f0fdf4,
+            #eff8ff
+        ) !important;
+
+    border: 1px solid #9fd4ae !important;
+    border-radius: 12px !important;
+}
+
+#purchase-form-modal .pfm-dual-header {
+    display: flex !important;
+
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 14px !important;
+}
+
+#purchase-form-modal .pfm-dual-heading {
+    display: flex !important;
+
+    min-width: 0 !important;
+
+    align-items: flex-start !important;
+    gap: 10px !important;
+}
+
+#purchase-form-modal .pfm-dual-icon {
+    display: grid !important;
+
+    width: 39px !important;
+    height: 39px !important;
+    min-width: 39px !important;
+
+    place-items: center !important;
+
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--pfm-green-900),
+            var(--pfm-blue-800)
+        ) !important;
+
+    border-radius: 10px !important;
+}
+
+#purchase-form-modal .pfm-dual-icon svg {
+    width: 20px !important;
+    height: 20px !important;
+}
+
+#purchase-form-modal .pfm-dual-title {
+    color: var(--pfm-green-900) !important;
+
+    font-size: 15px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-form-modal .pfm-dual-description {
+    margin-top: 3px !important;
+
+    color: var(--pfm-text-2) !important;
+
+    font-size: 11px !important;
+    line-height: 1.45 !important;
+}
+
+#purchase-form-modal .pfm-switch-label {
+    display: inline-flex !important;
+
+    min-height: 42px !important;
+
+    align-items: center !important;
+    gap: 8px !important;
+
+    padding: 7px 11px !important;
+
+    color: var(--pfm-text-2) !important;
+
+    font-size: 12px !important;
+    font-weight: 800 !important;
+
+    background: #ffffff !important;
+
+    border: 1px solid #9fd4ae !important;
+    border-radius: 10px !important;
+
+    cursor: pointer !important;
+}
+
+#purchase-form-modal .pfm-switch-label input {
+    width: 20px !important;
+    height: 20px !important;
+
+    margin: 0 !important;
+
+    accent-color: var(--pfm-green-700) !important;
+}
+
+#purchase-form-modal .pfm-dual-disabled-message {
+    display: flex !important;
+
+    align-items: flex-start !important;
+    gap: 8px !important;
+
+    padding: 11px 12px !important;
+
+    color: var(--pfm-muted) !important;
+
+    font-size: 12px !important;
+
+    background: rgba(255, 255, 255, 0.72) !important;
+
+    border: 1px dashed #9fd4ae !important;
+    border-radius: 10px !important;
+}
+
+#purchase-form-modal .pfm-dual-disabled-message svg {
+    width: 17px !important;
+    height: 17px !important;
+    min-width: 17px !important;
+}
+
+#purchase-form-modal .pfm-dual-grid {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            3,
+            minmax(0, 1fr)
+        ) !important;
+
+    gap: 11px !important;
+}
+
+#purchase-form-modal .pfm-dual-note {
+    display: flex !important;
+
+    align-items: flex-start !important;
+    gap: 8px !important;
+
+    padding: 10px 12px !important;
+
+    color: var(--pfm-blue-800) !important;
+
+    font-size: 11px !important;
+    font-weight: 650 !important;
+
+    background: rgba(255, 255, 255, 0.78) !important;
+
+    border: 1px solid var(--pfm-blue-100) !important;
+    border-radius: 9px !important;
+}
+
+#purchase-form-modal .pfm-dual-note svg {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+
+    margin-top: 1px !important;
+}
+
+#purchase-form-modal .pfm-preview-grid {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            4,
+            minmax(0, 1fr)
+        ) !important;
 
     gap: 9px !important;
+}
+
+#purchase-form-modal .pfm-preview-box {
+    display: flex !important;
+
+    min-width: 0 !important;
+    min-height: 76px !important;
+
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 3px !important;
+
+    padding: 10px !important;
+
+    background: #ffffff !important;
+
+    border: 1px solid #c4ddcb !important;
+    border-radius: 9px !important;
+}
+
+#purchase-form-modal .pfm-preview-box span {
+    color: var(--pfm-muted) !important;
+
+    font-size: 9px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.04em !important;
+
+    text-transform: uppercase !important;
+}
+
+#purchase-form-modal .pfm-preview-box strong {
+    overflow: hidden !important;
+
+    color: var(--pfm-text-2) !important;
+
+    font-size: 14px !important;
+    font-weight: 850 !important;
+
+    text-overflow: ellipsis !important;
+}
+
+#purchase-form-modal .pfm-preview-box.profit strong {
+    color: var(--pfm-green-800) !important;
 }
 
 #purchase-form-modal .pfm-batch-heading {
     display: flex !important;
 
     align-items: center !important;
-    gap: 6px !important;
+    gap: 7px !important;
 
-    padding-top: 2px !important;
+    padding-top: 3px !important;
 
     color: var(--pfm-muted) !important;
 
-    font-size: 9px !important;
-    font-weight: 700 !important;
+    font-size: 10px !important;
+    font-weight: 800 !important;
     letter-spacing: 0.04em !important;
 
     text-transform: uppercase !important;
 }
 
 #purchase-form-modal .pfm-batch-heading svg {
-    width: 13px !important;
-    height: 13px !important;
+    width: 14px !important;
+    height: 14px !important;
 }
 
 #purchase-form-modal .pfm-item-batch-grid {
     display: grid !important;
 
     grid-template-columns:
-        minmax(150px, 0.8fr)
-        minmax(145px, 0.7fr)
-        minmax(145px, 0.7fr)
-        minmax(180px, 1.2fr) !important;
+        minmax(160px, 0.8fr)
+        minmax(150px, 0.7fr)
+        minmax(150px, 0.7fr)
+        minmax(200px, 1.1fr) !important;
 
-    gap: 9px !important;
+    gap: 11px !important;
 }
 
 #purchase-form-modal .pfm-summary-column {
@@ -992,59 +1301,46 @@ const purchaseFormStyles = `
     min-width: 0 !important;
 
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 12px !important;
 }
 
 #purchase-form-modal .pfm-summary-card,
 #purchase-form-modal .pfm-receive-card {
-    display: flex !important;
-
-    min-width: 0 !important;
-
-    flex-direction: column !important;
-
     overflow: hidden !important;
 
     background: #ffffff !important;
 
-    border:
-        1px solid
-        var(--pfm-border) !important;
-
-    border-radius: 10px !important;
+    border: 1px solid var(--pfm-border) !important;
+    border-radius: 12px !important;
 }
 
 #purchase-form-modal .pfm-summary-header {
     display: flex !important;
 
     align-items: center !important;
-    gap: 7px !important;
+    gap: 8px !important;
 
-    padding: 10px 11px !important;
+    padding: 12px 13px !important;
 
     color: var(--pfm-text-2) !important;
 
-    font-size: 12px !important;
-    font-weight: 700 !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
 
     background: #f8faf9 !important;
 
-    border-bottom:
-        1px solid
-        #e3e9e4 !important;
+    border-bottom: 1px solid #e3e9e4 !important;
 }
 
 #purchase-form-modal .pfm-summary-header svg {
-    width: 15px !important;
-    height: 15px !important;
+    width: 17px !important;
+    height: 17px !important;
 
-    color:
-        var(--pfm-green-700) !important;
+    color: var(--pfm-green-700) !important;
 }
 
 #purchase-form-modal .pfm-summary-lines {
     display: flex !important;
-
     flex-direction: column !important;
 }
 
@@ -1055,109 +1351,98 @@ const purchaseFormStyles = `
     justify-content: space-between !important;
     gap: 12px !important;
 
-    padding: 8px 11px !important;
+    padding: 10px 13px !important;
 
     color: var(--pfm-muted) !important;
 
-    font-size: 11px !important;
+    font-size: 12px !important;
 
-    border-bottom:
-        1px solid
-        #edf1ee !important;
+    border-bottom: 1px solid #edf1ee !important;
 }
 
 #purchase-form-modal .pfm-summary-line strong {
     color: var(--pfm-text-2) !important;
 
-    font-size: 11px !important;
-    font-weight: 700 !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
 
     text-align: right !important;
     white-space: nowrap !important;
 }
 
 #purchase-form-modal .pfm-summary-line.discount strong {
-    color: var(--pfm-red) !important;
+    color: var(--pfm-red-800) !important;
 }
 
 #purchase-form-modal .pfm-summary-line.total {
-    padding: 11px !important;
+    padding: 14px 13px !important;
 
-    color:
-        var(--pfm-green-900) !important;
+    color: var(--pfm-green-900) !important;
 
-    font-size: 12px !important;
-    font-weight: 700 !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
 
-    background:
-        var(--pfm-green-50) !important;
+    background: var(--pfm-green-50) !important;
 
     border-bottom: 0 !important;
 }
 
 #purchase-form-modal .pfm-summary-line.total strong {
-    color:
-        var(--pfm-green-900) !important;
+    color: var(--pfm-green-900) !important;
 
-    font-size: 16px !important;
-    font-weight: 800 !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
 }
 
 #purchase-form-modal .pfm-receive-option {
     display: flex !important;
 
     align-items: flex-start !important;
-    gap: 9px !important;
+    gap: 10px !important;
 
-    padding: 11px !important;
+    padding: 13px !important;
 
     cursor: pointer !important;
 }
 
 #purchase-form-modal .pfm-receive-option input {
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
 
     margin: 1px 0 0 !important;
 
-    accent-color:
-        var(--pfm-green-700) !important;
-}
-
-#purchase-form-modal .pfm-receive-copy {
-    min-width: 0 !important;
+    accent-color: var(--pfm-green-700) !important;
 }
 
 #purchase-form-modal .pfm-receive-title {
     display: flex !important;
 
     align-items: center !important;
-    gap: 5px !important;
+    gap: 6px !important;
 
     color: var(--pfm-text-2) !important;
 
-    font-size: 12px !important;
-    font-weight: 700 !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
 }
 
 #purchase-form-modal .pfm-receive-title svg {
-    width: 14px !important;
-    height: 14px !important;
+    width: 16px !important;
+    height: 16px !important;
 
-    color:
-        var(--pfm-green-700) !important;
+    color: var(--pfm-green-700) !important;
 }
 
 #purchase-form-modal .pfm-receive-description {
     display: block !important;
 
-    margin-top: 3px !important;
+    margin-top: 4px !important;
 
     color: var(--pfm-muted) !important;
 
-    font-size: 10px !important;
-    line-height: 1.4 !important;
+    font-size: 11px !important;
+    line-height: 1.5 !important;
 }
 
 #purchase-form-modal .pfm-field {
@@ -1165,7 +1450,7 @@ const purchaseFormStyles = `
 
     min-width: 0 !important;
 
-    gap: 5px !important;
+    gap: 6px !important;
 }
 
 #purchase-form-modal .pfm-field-header {
@@ -1179,24 +1464,24 @@ const purchaseFormStyles = `
 #purchase-form-modal .pfm-label {
     color: var(--pfm-text-2) !important;
 
-    font-size: 11px !important;
-    font-weight: 650 !important;
+    font-size: 12px !important;
+    font-weight: 750 !important;
 }
 
 #purchase-form-modal .pfm-required {
-    color: var(--pfm-red) !important;
+    color: var(--pfm-red-800) !important;
 }
 
 #purchase-form-modal .pfm-optional {
     display: inline-flex !important;
 
-    margin-left: 4px !important;
-    padding: 1px 4px !important;
+    margin-left: 5px !important;
+    padding: 2px 5px !important;
 
     color: var(--pfm-muted) !important;
 
     font-size: 8px !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
 
     background: #f2f4f7 !important;
 
@@ -1207,7 +1492,6 @@ const purchaseFormStyles = `
     color: var(--pfm-muted) !important;
 
     font-size: 9px !important;
-    font-weight: 500 !important;
 }
 
 #purchase-form-modal .pfm-control-wrap {
@@ -1218,49 +1502,60 @@ const purchaseFormStyles = `
     position: absolute !important;
 
     top: 50% !important;
-    left: 10px !important;
+    left: 11px !important;
 
     display: grid !important;
 
-    width: 15px !important;
-    height: 15px !important;
+    width: 16px !important;
+    height: 16px !important;
 
     place-items: center !important;
 
     color: var(--pfm-muted) !important;
 
-    transform:
-        translateY(-50%) !important;
+    transform: translateY(-50%) !important;
 
     pointer-events: none !important;
 }
 
-#purchase-form-modal
-.pfm-control-icon.top {
-    top: 11px !important;
+#purchase-form-modal .pfm-control-icon.top {
+    top: 12px !important;
     transform: none !important;
 }
 
-#purchase-form-modal
-.pfm-control-icon
-svg {
-    width: 15px !important;
-    height: 15px !important;
+#purchase-form-modal .pfm-control-icon svg {
+    width: 16px !important;
+    height: 16px !important;
 }
 
 #purchase-form-modal .pfm-currency-prefix {
     position: absolute !important;
 
     top: 50% !important;
-    left: 9px !important;
+    left: 10px !important;
 
     color: var(--pfm-muted) !important;
 
     font-size: 9px !important;
-    font-weight: 700 !important;
+    font-weight: 800 !important;
 
-    transform:
-        translateY(-50%) !important;
+    transform: translateY(-50%) !important;
+
+    pointer-events: none !important;
+}
+
+#purchase-form-modal .pfm-suffix {
+    position: absolute !important;
+
+    top: 50% !important;
+    right: 10px !important;
+
+    color: var(--pfm-muted) !important;
+
+    font-size: 10px !important;
+    font-weight: 800 !important;
+
+    transform: translateY(-50%) !important;
 
     pointer-events: none !important;
 }
@@ -1275,72 +1570,78 @@ svg {
 
     color: var(--pfm-text) !important;
 
-    font-size: 13px !important;
-    font-weight: 500 !important;
+    font-size: 14px !important;
+    font-weight: 550 !important;
 
     outline: none !important;
 
     background: #ffffff !important;
 
-    border:
-        1px solid
-        var(--pfm-border-strong) !important;
-
-    border-radius: 8px !important;
+    border: 1px solid var(--pfm-border-strong) !important;
+    border-radius: 9px !important;
 
     box-shadow: none !important;
 }
 
 #purchase-form-modal .pfm-input,
 #purchase-form-modal .pfm-select {
-    height: 40px !important;
-    min-height: 40px !important;
+    height: 44px !important;
+    min-height: 44px !important;
 }
 
 #purchase-form-modal .pfm-input {
-    padding: 0 9px !important;
+    padding: 0 11px !important;
 }
 
 #purchase-form-modal .pfm-select {
-    padding: 0 8px !important;
-
+    padding: 0 10px !important;
     cursor: pointer !important;
 }
 
 #purchase-form-modal .pfm-input.with-icon,
 #purchase-form-modal .pfm-select.with-icon {
-    padding-left: 33px !important;
+    padding-left: 36px !important;
 }
 
 #purchase-form-modal .pfm-input.with-currency {
-    padding-left: 37px !important;
+    padding-left: 41px !important;
+}
+
+#purchase-form-modal .pfm-input.with-suffix {
+    padding-right: 43px !important;
 }
 
 #purchase-form-modal .pfm-textarea {
-    min-height: 76px !important;
+    min-height: 80px !important;
 
-    padding: 8px 9px !important;
+    padding: 10px 11px !important;
 
-    line-height: 1.45 !important;
+    line-height: 1.5 !important;
 
     resize: vertical !important;
 }
 
 #purchase-form-modal .pfm-textarea.with-icon {
-    padding-left: 33px !important;
-}
-
-#purchase-form-modal .pfm-input::placeholder,
-#purchase-form-modal .pfm-textarea::placeholder {
-    color: #7a8696 !important;
-    opacity: 1 !important;
+    padding-left: 36px !important;
 }
 
 #purchase-form-modal .pfm-input.has-error,
 #purchase-form-modal .pfm-select.has-error,
 #purchase-form-modal .pfm-textarea.has-error {
-    border-color:
-        var(--pfm-red) !important;
+    border-color: var(--pfm-red-800) !important;
+}
+
+#purchase-form-modal .pfm-input:focus,
+#purchase-form-modal .pfm-select:focus,
+#purchase-form-modal .pfm-textarea:focus,
+#purchase-form-modal button:focus-visible {
+    outline: none !important;
+
+    border-color: var(--pfm-green-700) !important;
+
+    box-shadow:
+        0 0 0 4px
+        rgba(21, 128, 61, 0.14) !important;
 }
 
 #purchase-form-modal .pfm-input:disabled,
@@ -1351,58 +1652,36 @@ svg {
     cursor: not-allowed !important;
 }
 
-#purchase-form-modal .pfm-input:focus,
-#purchase-form-modal .pfm-select:focus,
-#purchase-form-modal .pfm-textarea:focus,
-#purchase-form-modal button:focus-visible {
-    outline: none !important;
-
-    border-color:
-        var(--pfm-green-700) !important;
-
-    box-shadow:
-        0 0 0 4px
-        rgba(
-            21,
-            128,
-            61,
-            0.14
-        ) !important;
-}
-
 #purchase-form-modal .pfm-field-error {
-    display: flex !important;
+    color: var(--pfm-red-800) !important;
 
-    align-items: flex-start !important;
-    gap: 4px !important;
-
-    color: var(--pfm-red) !important;
-
-    font-size: 10px !important;
-    font-weight: 550 !important;
+    font-size: 11px !important;
+    font-weight: 650 !important;
 }
 
-#purchase-form-modal
-.pfm-field-error::before {
-    content: "•" !important;
-    font-weight: 800 !important;
+#purchase-form-modal .pfm-field-error::before {
+    content: "• " !important;
+    font-weight: 900 !important;
 }
 
 #purchase-form-modal .pfm-help {
     display: flex !important;
 
     align-items: flex-start !important;
-    gap: 4px !important;
+    gap: 5px !important;
+
+    min-height: 15px !important;
 
     color: var(--pfm-muted) !important;
 
-    font-size: 9px !important;
+    font-size: 10px !important;
+    line-height: 1.4 !important;
 }
 
 #purchase-form-modal .pfm-help svg {
-    width: 12px !important;
-    height: 12px !important;
-    min-width: 12px !important;
+    width: 13px !important;
+    height: 13px !important;
+    min-width: 13px !important;
 
     margin-top: 1px !important;
 }
@@ -1410,140 +1689,106 @@ svg {
 #purchase-form-modal .pfm-actions {
     display: flex !important;
 
-    min-height: 66px !important;
+    min-height: 72px !important;
     flex: 0 0 auto !important;
 
     align-items: center !important;
     justify-content: space-between !important;
-    gap: 12px !important;
+    gap: 14px !important;
 
-    padding: 11px 15px !important;
+    padding: 12px 17px !important;
 
     background: #ffffff !important;
 
-    border-top:
-        1px solid
-        var(--pfm-border) !important;
+    border-top: 1px solid var(--pfm-border) !important;
 }
 
 #purchase-form-modal .pfm-action-note {
     display: flex !important;
 
-    min-width: 0 !important;
-
     align-items: center !important;
-    gap: 6px !important;
+    gap: 7px !important;
 
     color: var(--pfm-muted) !important;
 
-    font-size: 10px !important;
+    font-size: 11px !important;
 }
 
 #purchase-form-modal .pfm-action-note svg {
-    width: 14px !important;
-    height: 14px !important;
-    min-width: 14px !important;
+    width: 15px !important;
+    height: 15px !important;
 }
 
 #purchase-form-modal .pfm-action-buttons {
     display: flex !important;
-
-    flex: 0 0 auto !important;
-
     align-items: center !important;
-    gap: 8px !important;
+    gap: 9px !important;
 }
 
 #purchase-form-modal .pfm-button {
     display: inline-flex !important;
 
-    min-height: 42px !important;
+    min-height: 46px !important;
 
     align-items: center !important;
     justify-content: center !important;
-    gap: 6px !important;
+    gap: 7px !important;
 
-    padding: 7px 12px !important;
+    padding: 8px 15px !important;
 
-    font-size: 13px !important;
-    font-weight: 700 !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
 
-    border-radius: 9px !important;
+    border-radius: 10px !important;
 
     cursor: pointer !important;
 }
 
 #purchase-form-modal .pfm-button svg {
-    width: 16px !important;
-    height: 16px !important;
-}
-
-#purchase-form-modal .pfm-button:disabled {
-    opacity: 0.55 !important;
-    cursor: not-allowed !important;
+    width: 17px !important;
+    height: 17px !important;
 }
 
 #purchase-form-modal .pfm-cancel {
     color: var(--pfm-text-2) !important;
-
     background: #ffffff !important;
 
-    border:
-        1px solid
-        var(--pfm-border-strong) !important;
+    border: 1px solid var(--pfm-border-strong) !important;
 }
 
 #purchase-form-modal .pfm-submit {
     color: #ffffff !important;
+    background: var(--pfm-green-700) !important;
 
-    background:
-        var(--pfm-green-700) !important;
-
-    border:
-        1px solid
-        var(--pfm-green-700) !important;
+    border: 1px solid var(--pfm-green-700) !important;
 
     box-shadow:
-        0 4px 12px
-        rgba(
-            21,
-            128,
-            61,
-            0.18
-        ) !important;
+        0 5px 14px
+        rgba(21, 128, 61, 0.2) !important;
 }
 
-#purchase-form-modal
-.pfm-submit:hover:not(:disabled) {
-    background:
-        var(--pfm-green-800) !important;
+#purchase-form-modal .pfm-submit:hover:not(:disabled) {
+    background: var(--pfm-green-800) !important;
+    border-color: var(--pfm-green-800) !important;
+}
 
-    border-color:
-        var(--pfm-green-800) !important;
+#purchase-form-modal button:disabled {
+    opacity: 0.55 !important;
+    cursor: not-allowed !important;
 }
 
 #purchase-form-modal .pfm-spinner {
-    width: 15px !important;
-    height: 15px !important;
+    width: 16px !important;
+    height: 16px !important;
 
     border:
         2px solid
-        rgba(
-            255,
-            255,
-            255,
-            0.45
-        ) !important;
+        rgba(255, 255, 255, 0.45) !important;
 
     border-top-color: #ffffff !important;
-
     border-radius: 50% !important;
 
-    animation:
-        pfm-spin
-        700ms
-        linear
-        infinite !important;
+    animation: pfm-spin 700ms linear infinite !important;
 }
 
 @keyframes pfm-spin {
@@ -1552,17 +1797,13 @@ svg {
     }
 }
 
-@media (max-width: 1050px) {
+@media (max-width: 1120px) {
     #purchase-form-modal .pfm-header-grid {
         grid-template-columns:
             repeat(
                 2,
                 minmax(0, 1fr)
             ) !important;
-    }
-
-    #purchase-form-modal .pfm-notes-field {
-        grid-column: 1 / -1 !important;
     }
 
     #purchase-form-modal .pfm-workspace {
@@ -1583,23 +1824,14 @@ svg {
 
     #purchase-form-modal .pfm-item-main-grid {
         grid-template-columns:
-            minmax(220px, 1.4fr)
+            minmax(230px, 1.2fr)
             repeat(
                 2,
-                minmax(110px, 0.7fr)
+                minmax(130px, 0.7fr)
             ) !important;
     }
 
-    #purchase-form-modal
-    .pfm-item-main-grid
-    .pfm-field:nth-child(4),
-    #purchase-form-modal
-    .pfm-item-main-grid
-    .pfm-field:nth-child(5) {
-        grid-row: 2 !important;
-    }
-
-    #purchase-form-modal .pfm-item-batch-grid {
+    #purchase-form-modal .pfm-preview-grid {
         grid-template-columns:
             repeat(
                 2,
@@ -1608,7 +1840,7 @@ svg {
     }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 760px) {
     #purchase-form-modal .pfm-backdrop {
         align-items: flex-end !important;
         padding: 0 !important;
@@ -1622,28 +1854,21 @@ svg {
         border-bottom: 0 !important;
         border-left: 0 !important;
 
-        border-radius:
-            16px
-            16px
-            0
-            0 !important;
-    }
-
-    #purchase-form-modal .pfm-header {
-        min-height: 72px !important;
-        padding: 11px 13px !important;
+        border-radius: 18px 18px 0 0 !important;
     }
 
     #purchase-form-modal .pfm-title {
-        font-size: 18px !important;
+        font-size: 20px !important;
     }
 
     #purchase-form-modal .pfm-body {
-        padding: 11px !important;
+        padding: 12px !important;
     }
 
     #purchase-form-modal .pfm-header-grid,
     #purchase-form-modal .pfm-item-main-grid,
+    #purchase-form-modal .pfm-dual-grid,
+    #purchase-form-modal .pfm-preview-grid,
     #purchase-form-modal .pfm-item-batch-grid,
     #purchase-form-modal .pfm-summary-column {
         grid-template-columns: 1fr !important;
@@ -1653,32 +1878,21 @@ svg {
         grid-column: auto !important;
     }
 
-    #purchase-form-modal
-    .pfm-item-main-grid
-    .pfm-field:nth-child(4),
-    #purchase-form-modal
-    .pfm-item-main-grid
-    .pfm-field:nth-child(5) {
-        grid-row: auto !important;
-    }
-
     #purchase-form-modal .pfm-section-header,
-    #purchase-form-modal .pfm-item-header {
+    #purchase-form-modal .pfm-item-header,
+    #purchase-form-modal .pfm-dual-header,
+    #purchase-form-modal .pfm-actions {
         align-items: stretch !important;
         flex-direction: column !important;
     }
 
     #purchase-form-modal .pfm-add-item,
-    #purchase-form-modal .pfm-remove-item {
+    #purchase-form-modal .pfm-remove-item,
+    #purchase-form-modal .pfm-switch-label {
         width: 100% !important;
     }
 
     #purchase-form-modal .pfm-item-header-actions {
-        align-items: stretch !important;
-        flex-direction: column !important;
-    }
-
-    #purchase-form-modal .pfm-actions {
         align-items: stretch !important;
         flex-direction: column !important;
     }
@@ -1690,6 +1904,8 @@ svg {
 
     #purchase-form-modal .pfm-action-buttons {
         display: grid !important;
+
+        width: 100% !important;
 
         grid-template-columns:
             repeat(
@@ -1703,7 +1919,7 @@ svg {
     }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 430px) {
     #purchase-form-modal .pfm-action-buttons {
         grid-template-columns: 1fr !important;
     }
@@ -1751,7 +1967,8 @@ export default function PurchaseFormModal({
         useRef(isSubmitting);
 
     useEffect(() => {
-        onCloseRef.current = onClose;
+        onCloseRef.current =
+            onClose;
     }, [onClose]);
 
     useEffect(() => {
@@ -1877,11 +2094,142 @@ export default function PurchaseFormModal({
     ): string | undefined =>
         fieldErrors[field]?.[0];
 
+    /**
+     * Allows the new dual-unit fields to pass
+     * through the existing onItemChange callback.
+     *
+     * The parent state updater normally uses:
+     * { ...item, [field]: value }
+     */
+    const changeExtendedItemField = (
+        index: number,
+        field: DualUnitItemField,
+        value: string,
+    ): void => {
+        onItemChange(
+            index,
+            field as keyof PurchaseItemFormValues,
+            value,
+        );
+    };
+
+    const handleProductChange = (
+        index: number,
+        currentItem: PurchaseItemFormValues,
+        productId: string,
+    ): void => {
+        onItemChange(
+            index,
+            'product_id',
+            productId,
+        );
+
+        const nextProduct =
+            products.find(
+                (product) =>
+                    String(product.id)
+                    === productId,
+            );
+
+        if (
+            !isBagUnit(
+                nextProduct?.unit,
+            )
+        ) {
+            changeExtendedItemField(
+                index,
+                'is_dual_unit',
+                '0',
+            );
+
+            changeExtendedItemField(
+                index,
+                'conversion_factor',
+                '',
+            );
+
+            changeExtendedItemField(
+                index,
+                'secondary_unit',
+                '',
+            );
+
+            changeExtendedItemField(
+                index,
+                'secondary_selling_price',
+                '',
+            );
+
+            return;
+        }
+
+        if (
+            !getExtendedItemValue(
+                currentItem,
+                'secondary_unit',
+            )
+        ) {
+            changeExtendedItemField(
+                index,
+                'secondary_unit',
+                'Kg',
+            );
+        }
+    };
+
+    const handleDualUnitToggle = (
+        index: number,
+        item: PurchaseItemFormValues,
+        enabled: boolean,
+    ): void => {
+        changeExtendedItemField(
+            index,
+            'is_dual_unit',
+            enabled
+                ? '1'
+                : '0',
+        );
+
+        if (!enabled) {
+            return;
+        }
+
+        if (
+            !getExtendedItemValue(
+                item,
+                'secondary_unit',
+            )
+        ) {
+            changeExtendedItemField(
+                index,
+                'secondary_unit',
+                'Kg',
+            );
+        }
+
+        if (
+            !getExtendedItemValue(
+                item,
+                'conversion_factor',
+            )
+        ) {
+            changeExtendedItemField(
+                index,
+                'conversion_factor',
+                '50',
+            );
+        }
+    };
+
     const supplierError =
-        getFieldError('supplier_id');
+        getFieldError(
+            'supplier_id',
+        );
 
     const purchaseDateError =
-        getFieldError('purchase_date');
+        getFieldError(
+            'purchase_date',
+        );
 
     return createPortal(
         <div id="purchase-form-modal">
@@ -1915,7 +2263,7 @@ export default function PurchaseFormModal({
                                 <Icon name="receipt" />
                             </span>
 
-                            <div className="pfm-header-copy">
+                            <div>
                                 <span className="pfm-kicker">
                                     Purchase Management
                                 </span>
@@ -1952,10 +2300,16 @@ export default function PurchaseFormModal({
                                 id="purchase-form-description"
                                 className="pfm-intro"
                             >
-                                Enter supplier and product
-                                details. Save as a draft for
-                                later receiving, or receive
-                                the stock immediately.
+                                <Icon name="info" />
+
+                                <span>
+                                    Enter the supplier and purchased products.
+                                    Products using the unit
+                                    {' '}
+                                    <strong>Bag</strong>
+                                    {' '}
+                                    can also be configured for loose Kg sales.
+                                </span>
                             </p>
 
                             {errorMessage && (
@@ -1978,14 +2332,14 @@ export default function PurchaseFormModal({
                                             <Icon name="supplier" />
                                         </span>
 
-                                        <div className="pfm-section-copy">
+                                        <div>
                                             <h3 className="pfm-section-title">
                                                 Purchase Information
                                             </h3>
 
                                             <p className="pfm-section-description">
                                                 Select the supplier and enter
-                                                the document-level details.
+                                                the invoice information.
                                             </p>
                                         </div>
                                     </div>
@@ -2021,11 +2375,6 @@ export default function PurchaseFormModal({
                                                         supplierError,
                                                     )
                                                 }
-                                                aria-describedby={
-                                                    supplierError
-                                                        ? 'purchase-supplier-error'
-                                                        : undefined
-                                                }
                                                 onChange={(event) => {
                                                     onHeaderChange(
                                                         'supplier_id',
@@ -2051,10 +2400,7 @@ export default function PurchaseFormModal({
                                         </span>
 
                                         {supplierError && (
-                                            <p
-                                                id="purchase-supplier-error"
-                                                className="pfm-field-error"
-                                            >
+                                            <p className="pfm-field-error">
                                                 {supplierError}
                                             </p>
                                         )}
@@ -2081,21 +2427,9 @@ export default function PurchaseFormModal({
                                                         ? 'pfm-input with-icon has-error'
                                                         : 'pfm-input with-icon'
                                                 }
-                                                value={
-                                                    values.purchase_date
-                                                }
+                                                value={values.purchase_date}
                                                 disabled={isSubmitting}
                                                 required
-                                                aria-invalid={
-                                                    Boolean(
-                                                        purchaseDateError,
-                                                    )
-                                                }
-                                                aria-describedby={
-                                                    purchaseDateError
-                                                        ? 'purchase-date-error'
-                                                        : undefined
-                                                }
                                                 onChange={(event) => {
                                                     onHeaderChange(
                                                         'purchase_date',
@@ -2106,10 +2440,7 @@ export default function PurchaseFormModal({
                                         </span>
 
                                         {purchaseDateError && (
-                                            <p
-                                                id="purchase-date-error"
-                                                className="pfm-field-error"
-                                            >
+                                            <p className="pfm-field-error">
                                                 {purchaseDateError}
                                             </p>
                                         )}
@@ -2126,9 +2457,12 @@ export default function PurchaseFormModal({
                                             </span>
 
                                             <span className="pfm-counter">
-                                                {values
-                                                    .supplier_invoice_number
-                                                    .length}/120
+                                                {
+                                                    values
+                                                        .supplier_invoice_number
+                                                        .length
+                                                }
+                                                /120
                                             </span>
                                         </span>
 
@@ -2145,7 +2479,6 @@ export default function PurchaseFormModal({
                                                         .supplier_invoice_number
                                                 }
                                                 maxLength={120}
-                                                autoComplete="off"
                                                 disabled={isSubmitting}
                                                 placeholder="Invoice or reference number"
                                                 onChange={(event) => {
@@ -2210,9 +2543,7 @@ export default function PurchaseFormModal({
                                                 className="pfm-input with-currency"
                                                 min="0"
                                                 step="0.01"
-                                                value={
-                                                    values.additional_cost
-                                                }
+                                                value={values.additional_cost}
                                                 disabled={isSubmitting}
                                                 onChange={(event) => {
                                                     onHeaderChange(
@@ -2264,22 +2595,22 @@ export default function PurchaseFormModal({
                             </section>
 
                             <div className="pfm-workspace">
-                                <section className="pfm-section pfm-items-section">
+                                <section className="pfm-section">
                                     <header className="pfm-section-header">
                                         <div className="pfm-section-heading">
                                             <span className="pfm-section-icon">
                                                 <Icon name="package" />
                                             </span>
 
-                                            <div className="pfm-section-copy">
+                                            <div>
                                                 <h3 className="pfm-section-title">
                                                     Purchased Products
                                                 </h3>
 
                                                 <p className="pfm-section-description">
-                                                    Each product line keeps its
-                                                    own cost, selling price and
-                                                    optional batch details.
+                                                    Enter quantity, purchase
+                                                    cost, selling prices and
+                                                    stock batch details.
                                                 </p>
                                             </div>
                                         </div>
@@ -2311,18 +2642,100 @@ export default function PurchaseFormModal({
                                                             === item.product_id,
                                                     );
 
+                                                const productUnit =
+                                                    selectedProduct
+                                                        ?.unit
+                                                    ?? '';
+
+                                                const productCategory =
+                                                    selectedProduct
+                                                        ?.category
+                                                        ?.name
+                                                    ?? 'No category';
+
+                                                const isBagProduct =
+                                                    isBagUnit(
+                                                        productUnit,
+                                                    );
+
+                                                const dualUnitEnabled =
+                                                    isEnabledFlag(
+                                                        getExtendedItemValue(
+                                                            item,
+                                                            'is_dual_unit',
+                                                            '0',
+                                                        ),
+                                                    );
+
+                                                const conversionFactor =
+                                                    numberValue(
+                                                        getExtendedItemValue(
+                                                            item,
+                                                            'conversion_factor',
+                                                        ),
+                                                    );
+
+                                                const secondaryUnit =
+                                                    getExtendedItemValue(
+                                                        item,
+                                                        'secondary_unit',
+                                                        'Kg',
+                                                    )
+                                                    || 'Kg';
+
+                                                const secondarySellingPrice =
+                                                    numberValue(
+                                                        getExtendedItemValue(
+                                                            item,
+                                                            'secondary_selling_price',
+                                                        ),
+                                                    );
+
+                                                const quantity =
+                                                    numberValue(
+                                                        item.quantity,
+                                                    );
+
+                                                const unitCost =
+                                                    numberValue(
+                                                        item.unit_cost,
+                                                    );
+
+                                                const fullSellingPrice =
+                                                    numberValue(
+                                                        item.selling_price,
+                                                    );
+
                                                 const lineTotal =
                                                     (
-                                                        numberValue(
-                                                            item.quantity,
-                                                        )
-                                                        * numberValue(
-                                                            item.unit_cost,
-                                                        )
+                                                        quantity
+                                                        * unitCost
                                                     )
                                                     - numberValue(
                                                         item.discount,
                                                     );
+
+                                                const totalBaseStock =
+                                                    dualUnitEnabled
+                                                        && conversionFactor > 0
+                                                        ? quantity
+                                                        * conversionFactor
+                                                        : quantity;
+
+                                                const costPerKg =
+                                                    dualUnitEnabled
+                                                        && conversionFactor > 0
+                                                        ? unitCost
+                                                        / conversionFactor
+                                                        : 0;
+
+                                                const fullBagProfit =
+                                                    fullSellingPrice
+                                                    - unitCost;
+
+                                                const looseKgProfit =
+                                                    secondarySellingPrice
+                                                    - costPerKg;
 
                                                 const productError =
                                                     getFieldError(
@@ -2342,6 +2755,16 @@ export default function PurchaseFormModal({
                                                 const sellingPriceError =
                                                     getFieldError(
                                                         `items.${index}.selling_price`,
+                                                    );
+
+                                                const conversionError =
+                                                    getFieldError(
+                                                        `items.${index}.conversion_factor`,
+                                                    );
+
+                                                const secondarySellingPriceError =
+                                                    getFieldError(
+                                                        `items.${index}.secondary_selling_price`,
                                                     );
 
                                                 const expiryError =
@@ -2365,18 +2788,39 @@ export default function PurchaseFormModal({
                                                                 <strong
                                                                     className="pfm-item-product"
                                                                     title={
-                                                                        selectedProduct?.name
+                                                                        selectedProduct
+                                                                            ?.name
                                                                         ?? 'Product not selected'
                                                                     }
                                                                 >
-                                                                    {selectedProduct?.name
-                                                                        ?? 'Select a product'}
+                                                                    {
+                                                                        selectedProduct
+                                                                            ?.name
+                                                                        ?? 'Select a product'
+                                                                    }
                                                                 </strong>
+
+                                                                {selectedProduct && (
+                                                                    <span className="pfm-unit-badge">
+                                                                        <Icon
+                                                                            name={
+                                                                                isBagProduct
+                                                                                    ? 'bag'
+                                                                                    : 'package'
+                                                                            }
+                                                                        />
+
+                                                                        {
+                                                                            productUnit
+                                                                            || 'No unit'
+                                                                        }
+                                                                    </span>
+                                                                )}
                                                             </div>
 
                                                             <div className="pfm-item-header-actions">
                                                                 <span className="pfm-line-total">
-                                                                    Line Total:
+                                                                    Purchase Total:
                                                                     {' '}
 
                                                                     {currencyFormatter.format(
@@ -2425,20 +2869,13 @@ export default function PurchaseFormModal({
                                                                                 ? 'pfm-select has-error'
                                                                                 : 'pfm-select'
                                                                         }
-                                                                        value={
-                                                                            item.product_id
-                                                                        }
+                                                                        value={item.product_id}
                                                                         disabled={isSubmitting}
                                                                         required
-                                                                        aria-invalid={
-                                                                            Boolean(
-                                                                                productError,
-                                                                            )
-                                                                        }
                                                                         onChange={(event) => {
-                                                                            onItemChange(
+                                                                            handleProductChange(
                                                                                 index,
-                                                                                'product_id',
+                                                                                item,
                                                                                 event.target.value,
                                                                             );
                                                                         }}
@@ -2455,7 +2892,13 @@ export default function PurchaseFormModal({
                                                                                 >
                                                                                     {product.name}
                                                                                     {' — '}
-                                                                                    {product.category.name}
+                                                                                    {
+                                                                                        product
+                                                                                            .category
+                                                                                            .name
+                                                                                    }
+                                                                                    {' — '}
+                                                                                    {product.unit}
                                                                                 </option>
                                                                             ),
                                                                         )}
@@ -2465,15 +2908,23 @@ export default function PurchaseFormModal({
                                                                         <p className="pfm-field-error">
                                                                             {productError}
                                                                         </p>
+                                                                    ) : selectedProduct ? (
+                                                                        <span className="pfm-help">
+                                                                            <Icon name="info" />
+
+                                                                            Category:
+                                                                            {' '}
+                                                                            {productCategory}
+                                                                            {' · '}
+                                                                            Purchase unit:
+                                                                            {' '}
+                                                                            {productUnit}
+                                                                        </span>
                                                                     ) : (
                                                                         <span className="pfm-help">
-                                                                            {/* <Icon name="info" />
-
-                                                                            Unit:
-                                                                            {' '}
-
-                                                                            {selectedProduct?.unit
-                                                                                ?? 'Not selected'} */}
+                                                                            Select the product
+                                                                            before entering
+                                                                            quantities and prices.
                                                                         </span>
                                                                     )}
                                                                 </label>
@@ -2481,6 +2932,15 @@ export default function PurchaseFormModal({
                                                                 <label className="pfm-field">
                                                                     <span className="pfm-label">
                                                                         Quantity
+                                                                        {' '}
+
+                                                                        {productUnit && (
+                                                                            <>
+                                                                                (
+                                                                                {productUnit}
+                                                                                )
+                                                                            </>
+                                                                        )}
 
                                                                         <span className="pfm-required">
                                                                             {' '}*
@@ -2500,11 +2960,7 @@ export default function PurchaseFormModal({
                                                                         value={item.quantity}
                                                                         disabled={isSubmitting}
                                                                         required
-                                                                        aria-invalid={
-                                                                            Boolean(
-                                                                                quantityError,
-                                                                            )
-                                                                        }
+                                                                        placeholder="0"
                                                                         onChange={(event) => {
                                                                             onItemChange(
                                                                                 index,
@@ -2514,16 +2970,24 @@ export default function PurchaseFormModal({
                                                                         }}
                                                                     />
 
-                                                                    {quantityError && (
+                                                                    {quantityError ? (
                                                                         <p className="pfm-field-error">
                                                                             {quantityError}
                                                                         </p>
+                                                                    ) : (
+                                                                        <span className="pfm-help">
+                                                                            Purchased quantity in
+                                                                            {' '}
+                                                                            {productUnit || 'product units'}.
+                                                                        </span>
                                                                     )}
                                                                 </label>
 
                                                                 <label className="pfm-field">
                                                                     <span className="pfm-label">
-                                                                        Purchase Cost
+                                                                        Purchase Cost per
+                                                                        {' '}
+                                                                        {productUnit || 'Unit'}
 
                                                                         <span className="pfm-required">
                                                                             {' '}*
@@ -2545,16 +3009,10 @@ export default function PurchaseFormModal({
                                                                             }
                                                                             min="0"
                                                                             step="0.01"
-                                                                            value={
-                                                                                item.unit_cost
-                                                                            }
+                                                                            value={item.unit_cost}
                                                                             disabled={isSubmitting}
                                                                             required
-                                                                            aria-invalid={
-                                                                                Boolean(
-                                                                                    unitCostError,
-                                                                                )
-                                                                            }
+                                                                            placeholder="0.00"
                                                                             onChange={(event) => {
                                                                                 onItemChange(
                                                                                     index,
@@ -2574,7 +3032,9 @@ export default function PurchaseFormModal({
 
                                                                 <label className="pfm-field">
                                                                     <span className="pfm-label">
-                                                                        Selling Price
+                                                                        Selling Price per
+                                                                        {' '}
+                                                                        {productUnit || 'Unit'}
 
                                                                         <span className="pfm-required">
                                                                             {' '}*
@@ -2596,16 +3056,10 @@ export default function PurchaseFormModal({
                                                                             }
                                                                             min="0"
                                                                             step="0.01"
-                                                                            value={
-                                                                                item.selling_price
-                                                                            }
+                                                                            value={item.selling_price}
                                                                             disabled={isSubmitting}
                                                                             required
-                                                                            aria-invalid={
-                                                                                Boolean(
-                                                                                    sellingPriceError,
-                                                                                )
-                                                                            }
+                                                                            placeholder="0.00"
                                                                             onChange={(event) => {
                                                                                 onItemChange(
                                                                                     index,
@@ -2627,9 +3081,9 @@ export default function PurchaseFormModal({
                                                                     <span className="pfm-label">
                                                                         Item Discount
 
-                                                                        {/* <span className="pfm-optional">
+                                                                        <span className="pfm-optional">
                                                                             Optional
-                                                                        </span> */}
+                                                                        </span>
                                                                     </span>
 
                                                                     <span className="pfm-control-wrap">
@@ -2645,6 +3099,7 @@ export default function PurchaseFormModal({
                                                                             step="0.01"
                                                                             value={item.discount}
                                                                             disabled={isSubmitting}
+                                                                            placeholder="0.00"
                                                                             onChange={(event) => {
                                                                                 onItemChange(
                                                                                     index,
@@ -2656,6 +3111,275 @@ export default function PurchaseFormModal({
                                                                     </span>
                                                                 </label>
                                                             </div>
+
+                                                            {isBagProduct && (
+                                                                <section className="pfm-dual-unit-card">
+                                                                    <header className="pfm-dual-header">
+                                                                        <div className="pfm-dual-heading">
+                                                                            <span className="pfm-dual-icon">
+                                                                                <Icon name="scale" />
+                                                                            </span>
+
+                                                                            <div>
+                                                                                <h4 className="pfm-dual-title">
+                                                                                    Full Bag + Loose Kg Selling
+                                                                                </h4>
+
+                                                                                <p className="pfm-dual-description">
+                                                                                    Enable this when the product
+                                                                                    can be sold as a complete bag
+                                                                                    or as loose kilograms from the
+                                                                                    same physical stock.
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <label className="pfm-switch-label">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={
+                                                                                    dualUnitEnabled
+                                                                                }
+                                                                                disabled={isSubmitting}
+                                                                                onChange={(event) => {
+                                                                                    handleDualUnitToggle(
+                                                                                        index,
+                                                                                        item,
+                                                                                        event.target.checked,
+                                                                                    );
+                                                                                }}
+                                                                            />
+
+                                                                            Enable Loose Kg Sales
+                                                                        </label>
+                                                                    </header>
+
+                                                                    {!dualUnitEnabled ? (
+                                                                        <div className="pfm-dual-disabled-message">
+                                                                            <Icon name="info" />
+
+                                                                            <span>
+                                                                                The product will currently be
+                                                                                purchased and sold only as full
+                                                                                bags. Enable loose Kg sales to
+                                                                                configure the bag weight and
+                                                                                price per 1 Kg.
+                                                                            </span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <>
+                                                                            <div className="pfm-dual-grid">
+                                                                                <label className="pfm-field">
+                                                                                    <span className="pfm-label">
+                                                                                        Weight in One Bag
+
+                                                                                        <span className="pfm-required">
+                                                                                            {' '}*
+                                                                                        </span>
+                                                                                    </span>
+
+                                                                                    <span className="pfm-control-wrap">
+                                                                                        <input
+                                                                                            type="number"
+                                                                                            inputMode="decimal"
+                                                                                            className={
+                                                                                                conversionError
+                                                                                                    ? 'pfm-input with-suffix has-error'
+                                                                                                    : 'pfm-input with-suffix'
+                                                                                            }
+                                                                                            min="0.001"
+                                                                                            step="0.001"
+                                                                                            value={
+                                                                                                getExtendedItemValue(
+                                                                                                    item,
+                                                                                                    'conversion_factor',
+                                                                                                )
+                                                                                            }
+                                                                                            disabled={isSubmitting}
+                                                                                            required
+                                                                                            placeholder="Example: 50"
+                                                                                            onChange={(event) => {
+                                                                                                changeExtendedItemField(
+                                                                                                    index,
+                                                                                                    'conversion_factor',
+                                                                                                    event.target.value,
+                                                                                                );
+                                                                                            }}
+                                                                                        />
+
+                                                                                        <span className="pfm-suffix">
+                                                                                            Kg
+                                                                                        </span>
+                                                                                    </span>
+
+                                                                                    {conversionError ? (
+                                                                                        <p className="pfm-field-error">
+                                                                                            {conversionError}
+                                                                                        </p>
+                                                                                    ) : (
+                                                                                        <span className="pfm-help">
+                                                                                            Example:
+                                                                                            {' '}
+                                                                                            1 Bag = 50 Kg.
+                                                                                        </span>
+                                                                                    )}
+                                                                                </label>
+
+                                                                                <label className="pfm-field">
+                                                                                    <span className="pfm-label">
+                                                                                        Loose Selling Unit
+                                                                                    </span>
+
+                                                                                    <select
+                                                                                        className="pfm-select"
+                                                                                        value={secondaryUnit}
+                                                                                        disabled
+                                                                                    >
+                                                                                        <option value="Kg">
+                                                                                            Kilogram — Kg
+                                                                                        </option>
+                                                                                    </select>
+
+                                                                                    <span className="pfm-help">
+                                                                                        Loose quantities are entered
+                                                                                        in kilograms at the POS.
+                                                                                    </span>
+                                                                                </label>
+
+                                                                                <label className="pfm-field">
+                                                                                    <span className="pfm-label">
+                                                                                        Selling Price for 1 Kg
+
+                                                                                        <span className="pfm-required">
+                                                                                            {' '}*
+                                                                                        </span>
+                                                                                    </span>
+
+                                                                                    <span className="pfm-control-wrap">
+                                                                                        <span className="pfm-currency-prefix">
+                                                                                            LKR
+                                                                                        </span>
+
+                                                                                        <input
+                                                                                            type="number"
+                                                                                            inputMode="decimal"
+                                                                                            className={
+                                                                                                secondarySellingPriceError
+                                                                                                    ? 'pfm-input with-currency has-error'
+                                                                                                    : 'pfm-input with-currency'
+                                                                                            }
+                                                                                            min="0"
+                                                                                            step="0.01"
+                                                                                            value={
+                                                                                                getExtendedItemValue(
+                                                                                                    item,
+                                                                                                    'secondary_selling_price',
+                                                                                                )
+                                                                                            }
+                                                                                            disabled={isSubmitting}
+                                                                                            required
+                                                                                            placeholder="Price per 1 Kg"
+                                                                                            onChange={(event) => {
+                                                                                                changeExtendedItemField(
+                                                                                                    index,
+                                                                                                    'secondary_selling_price',
+                                                                                                    event.target.value,
+                                                                                                );
+                                                                                            }}
+                                                                                        />
+                                                                                    </span>
+
+                                                                                    {secondarySellingPriceError ? (
+                                                                                        <p className="pfm-field-error">
+                                                                                            {
+                                                                                                secondarySellingPriceError
+                                                                                            }
+                                                                                        </p>
+                                                                                    ) : (
+                                                                                        <span className="pfm-help">
+                                                                                            Example:
+                                                                                            {' '}
+                                                                                            Rs. 180 for 1 Kg.
+                                                                                        </span>
+                                                                                    )}
+                                                                                </label>
+                                                                            </div>
+
+                                                                            <div className="pfm-dual-note">
+                                                                                <Icon name="info" />
+
+                                                                                <span>
+                                                                                    The POS will show two options:
+                                                                                    {' '}
+                                                                                    <strong>Full Bag</strong>
+                                                                                    {' '}
+                                                                                    and
+                                                                                    {' '}
+                                                                                    <strong>Loose Kg</strong>.
+                                                                                    For 500 g, the cashier enters
+                                                                                    {' '}
+                                                                                    <strong>0.5 Kg</strong>.
+                                                                                </span>
+                                                                            </div>
+
+                                                                            <div className="pfm-preview-grid">
+                                                                                <div className="pfm-preview-box">
+                                                                                    <span>
+                                                                                        Stock After Receiving
+                                                                                    </span>
+
+                                                                                    <strong>
+                                                                                        {formatQuantity(
+                                                                                            totalBaseStock,
+                                                                                        )}
+                                                                                        {' '}
+                                                                                        Kg
+                                                                                    </strong>
+                                                                                </div>
+
+                                                                                <div className="pfm-preview-box">
+                                                                                    <span>
+                                                                                        Purchase Cost per Kg
+                                                                                    </span>
+
+                                                                                    <strong>
+                                                                                        {currencyFormatter.format(
+                                                                                            Math.max(
+                                                                                                0,
+                                                                                                costPerKg,
+                                                                                            ),
+                                                                                        )}
+                                                                                    </strong>
+                                                                                </div>
+
+                                                                                <div className="pfm-preview-box profit">
+                                                                                    <span>
+                                                                                        Profit per Full Bag
+                                                                                    </span>
+
+                                                                                    <strong>
+                                                                                        {currencyFormatter.format(
+                                                                                            fullBagProfit,
+                                                                                        )}
+                                                                                    </strong>
+                                                                                </div>
+
+                                                                                <div className="pfm-preview-box profit">
+                                                                                    <span>
+                                                                                        Profit per Loose Kg
+                                                                                    </span>
+
+                                                                                    <strong>
+                                                                                        {currencyFormatter.format(
+                                                                                            looseKgProfit,
+                                                                                        )}
+                                                                                    </strong>
+                                                                                </div>
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+                                                                </section>
+                                                            )}
 
                                                             <div className="pfm-batch-heading">
                                                                 <Icon name="batch" />
@@ -2671,7 +3395,12 @@ export default function PurchaseFormModal({
                                                                         </span>
 
                                                                         <span className="pfm-counter">
-                                                                            {item.batch_number.length}/120
+                                                                            {
+                                                                                item
+                                                                                    .batch_number
+                                                                                    .length
+                                                                            }
+                                                                            /120
                                                                         </span>
                                                                     </span>
 
@@ -2727,15 +3456,8 @@ export default function PurchaseFormModal({
                                                                                 ? 'pfm-input has-error'
                                                                                 : 'pfm-input'
                                                                         }
-                                                                        value={
-                                                                            item.expiry_date
-                                                                        }
+                                                                        value={item.expiry_date}
                                                                         disabled={isSubmitting}
-                                                                        aria-invalid={
-                                                                            Boolean(
-                                                                                expiryError,
-                                                                            )
-                                                                        }
                                                                         onChange={(event) => {
                                                                             onItemChange(
                                                                                 index,
@@ -2878,9 +3600,7 @@ export default function PurchaseFormModal({
                                         <label className="pfm-receive-option">
                                             <input
                                                 type="checkbox"
-                                                checked={
-                                                    values.receive_now
-                                                }
+                                                checked={values.receive_now}
                                                 disabled={isSubmitting}
                                                 onChange={(event) => {
                                                     onHeaderChange(
@@ -2890,7 +3610,7 @@ export default function PurchaseFormModal({
                                                 }}
                                             />
 
-                                            <span className="pfm-receive-copy">
+                                            <span>
                                                 <strong className="pfm-receive-title">
                                                     <Icon name="truck" />
 
@@ -2898,11 +3618,11 @@ export default function PurchaseFormModal({
                                                 </strong>
 
                                                 <span className="pfm-receive-description">
-                                                    Makes the purchased
-                                                    quantities available in
-                                                    inventory immediately and
-                                                    creates their stock-price
-                                                    batches.
+                                                    Creates stock batches and
+                                                    makes the quantities
+                                                    available immediately.
+                                                    Dual-unit Bag stock will
+                                                    be converted into Kg.
                                                 </span>
                                             </span>
                                         </label>

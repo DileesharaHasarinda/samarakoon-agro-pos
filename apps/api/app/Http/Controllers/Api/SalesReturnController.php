@@ -27,7 +27,7 @@ class SalesReturnController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
                 'message' => 'Unauthenticated.',
             ], 401);
@@ -99,10 +99,10 @@ class SalesReturnController extends Controller
             ?? 20
         );
 
-        $query = SaleReturn::query();
+        $query =
+            SaleReturn::query();
 
         $query
-
             ->when(
                 $search !== '',
                 function (
@@ -204,42 +204,39 @@ class SalesReturnController extends Controller
                 ),
             );
 
-        $summaryRecord = (clone $query)
+        $summaryRecord =
+            (clone $query)
             ->selectRaw(
                 '
-                    COUNT(*) AS total_returns,
-                    COALESCE(
-                        SUM(refund_amount),
-                        0
-                    ) AS total_refund,
-                    COALESCE(
-                        SUM(restocked_quantity),
-                        0
-                    ) AS total_restocked,
-                    COALESCE(
-                        SUM(profit_reversal),
-                        0
-                    ) AS profit_reversal
-                ',
+                        COUNT(*) AS total_returns,
+                        COALESCE(
+                            SUM(refund_amount),
+                            0
+                        ) AS total_refund,
+                        COALESCE(
+                            SUM(restocked_quantity),
+                            0
+                        ) AS total_restocked,
+                        COALESCE(
+                            SUM(profit_reversal),
+                            0
+                        ) AS profit_reversal
+                    ',
             )
             ->first();
 
-        /*
-         * The table and primary-key names are read
-         * directly from the SaleReturn model.
-         *
-         * This prevents mismatches between:
-         * sale_returns and sales_returns.
-         */
         $saleReturnModel =
             new SaleReturn();
 
         $qualifiedReturnId =
-            $saleReturnModel->qualifyColumn(
-                $saleReturnModel->getKeyName(),
+            $saleReturnModel
+            ->qualifyColumn(
+                $saleReturnModel
+                    ->getKeyName(),
             );
 
-        $returnIds = (clone $query)
+        $returnIds =
+            (clone $query)
             ->select(
                 $qualifiedReturnId,
             );
@@ -270,9 +267,10 @@ class SalesReturnController extends Controller
         $includeProfit =
             $user->isAdmin();
 
-        $data = collect(
-            $returns->items(),
-        )
+        $data =
+            collect(
+                $returns->items(),
+            )
             ->map(
                 fn(
                     SaleReturn $salesReturn,
@@ -350,7 +348,7 @@ class SalesReturnController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
                 'message' => 'Unauthenticated.',
             ], 401);
@@ -365,7 +363,7 @@ class SalesReturnController extends Controller
 
             'items.product:id,name,unit,sku,barcode',
 
-            'items.stockBatch:id,batch_code,batch_number,expiry_date',
+            'items.stockBatch:id,product_id,batch_code,batch_number,is_dual_unit,stock_unit,secondary_unit,conversion_factor,available_quantity,expiry_date',
         ]);
 
         $discountShares =
@@ -374,7 +372,9 @@ class SalesReturnController extends Controller
                 (float) $sale->discount,
             );
 
-        $items = $sale->items
+        $items =
+            $sale
+            ->items
             ->map(
                 function (
                     SaleItem $item,
@@ -382,28 +382,28 @@ class SalesReturnController extends Controller
                     $discountShares,
                 ): array {
                     $soldQuantity =
-                        round(
-                            (float) $item
-                                ->quantity,
-                            3,
-                        );
+                        $item
+                        ->quantityValue();
 
                     $returnedQuantity =
-                        round(
-                            (float) $item
-                                ->returned_quantity,
-                            3,
-                        );
+                        $item
+                        ->returnedQuantityValue();
 
                     $remainingQuantity =
-                        round(
-                            max(
-                                0,
-                                $soldQuantity
-                                    - $returnedQuantity,
-                            ),
-                            3,
-                        );
+                        $item
+                        ->remainingReturnableQuantity();
+
+                    $soldStockQuantity =
+                        $item
+                        ->stockQuantityValue();
+
+                    $returnedStockQuantity =
+                        $item
+                        ->returnedStockQuantity();
+
+                    $remainingStockQuantity =
+                        $item
+                        ->remainingReturnableStockQuantity();
 
                     $fullRefundableAmount =
                         round(
@@ -412,7 +412,8 @@ class SalesReturnController extends Controller
                                 (float) $item
                                     ->line_total
                                     - (
-                                        $discountShares[$item->id] ?? 0
+                                        $discountShares[$item->id]
+                                        ?? 0
                                     ),
                             ),
                             2,
@@ -429,6 +430,10 @@ class SalesReturnController extends Controller
                             2,
                         );
 
+                    $saleUnit =
+                        $item
+                        ->saleUnitValue();
+
                     return [
                         'sale_item_id' =>
                         $item->id,
@@ -442,6 +447,22 @@ class SalesReturnController extends Controller
                         'remaining_quantity' =>
                         $remainingQuantity,
 
+                        'sale_unit' =>
+                        $saleUnit,
+
+                        'conversion_factor' =>
+                        $item
+                            ->conversionFactorValue(),
+
+                        'sold_stock_quantity' =>
+                        $soldStockQuantity,
+
+                        'returned_stock_quantity' =>
+                        $returnedStockQuantity,
+
+                        'remaining_stock_quantity' =>
+                        $remainingStockQuantity,
+
                         'remaining_refund_amount' =>
                         $remainingRefund,
 
@@ -449,47 +470,91 @@ class SalesReturnController extends Controller
                         (float) $item
                             ->selling_price,
 
-                        'product' => [
-                            'id' =>
-                            $item->product->id,
+                        'product' =>
+                        $item->product
+                            ? [
+                                'id' =>
+                                $item
+                                    ->product
+                                    ->id,
 
-                            'name' =>
-                            $item->product->name,
+                                'name' =>
+                                $item
+                                    ->product
+                                    ->name,
 
-                            'unit' =>
-                            $item->product->unit,
+                                'unit' =>
+                                $item
+                                    ->product
+                                    ->unit,
 
-                            'sku' =>
-                            $item->product->sku,
+                                'sku' =>
+                                $item
+                                    ->product
+                                    ->sku,
 
-                            'barcode' =>
-                            $item->product->barcode,
-                        ],
+                                'barcode' =>
+                                $item
+                                    ->product
+                                    ->barcode,
+                            ]
+                            : null,
 
-                        'batch' => [
-                            'id' =>
-                            $item
-                                ->stockBatch
-                                ->id,
+                        'batch' =>
+                        $item->stockBatch
+                            ? [
+                                'id' =>
+                                $item
+                                    ->stockBatch
+                                    ->id,
 
-                            'batch_code' =>
-                            $item
-                                ->stockBatch
-                                ->batch_code,
+                                'batch_code' =>
+                                $item
+                                    ->stockBatch
+                                    ->batch_code,
 
-                            'batch_number' =>
-                            $item
-                                ->stockBatch
-                                ->batch_number,
+                                'batch_number' =>
+                                $item
+                                    ->stockBatch
+                                    ->batch_number,
 
-                            'expiry_date' =>
-                            $item
-                                ->stockBatch
-                                ->expiry_date
-                                ?->format(
-                                    'Y-m-d',
+                                'is_dual_unit' =>
+                                (bool) $item
+                                    ->stockBatch
+                                    ->is_dual_unit,
+
+                                'stock_unit' =>
+                                $item
+                                    ->stockBatch
+                                    ->stock_unit,
+
+                                'secondary_unit' =>
+                                $item
+                                    ->stockBatch
+                                    ->secondary_unit,
+
+                                'conversion_factor' =>
+                                (float) (
+                                    $item
+                                    ->stockBatch
+                                    ->conversion_factor
+                                    ?? 1
                                 ),
-                        ],
+
+                                'available_quantity' =>
+                                (float) $item
+                                    ->stockBatch
+                                    ->available_quantity,
+
+                                'expiry_date' =>
+                                $item
+                                    ->stockBatch
+                                    ->expiry_date
+                                    ?->format(
+                                        'Y-m-d',
+                                    ),
+                            ]
+                            : null,
                     ];
                 },
             )
@@ -502,7 +567,8 @@ class SalesReturnController extends Controller
                     $sale->id,
 
                     'sale_number' =>
-                    $sale->sale_number,
+                    $sale
+                        ->sale_number,
 
                     'sale_date' =>
                     $sale
@@ -517,25 +583,29 @@ class SalesReturnController extends Controller
                     (float) $sale
                         ->discount,
 
-                    'created_by' => [
-                        'id' =>
-                        $sale
-                            ->createdBy
-                            ->id,
+                    'created_by' =>
+                    $sale->createdBy
+                        ? [
+                            'id' =>
+                            $sale
+                                ->createdBy
+                                ->id,
 
-                        'name' =>
-                        $sale
-                            ->createdBy
-                            ->name,
+                            'name' =>
+                            $sale
+                                ->createdBy
+                                ->name,
 
-                        'username' =>
-                        $sale
-                            ->createdBy
-                            ->username,
-                    ],
+                            'username' =>
+                            $sale
+                                ->createdBy
+                                ->username,
+                        ]
+                        : null,
                 ],
 
-                'items' => $items,
+                'items' =>
+                $items,
 
                 'has_returnable_items' =>
                 $items->contains(
@@ -554,7 +624,7 @@ class SalesReturnController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
                 'message' => 'Unauthenticated.',
             ], 401);
@@ -563,548 +633,633 @@ class SalesReturnController extends Controller
         $validated =
             $request->validated();
 
-        $salesReturn = DB::transaction(
-            function () use (
-                $sale,
-                $validated,
-                $user,
-            ): SaleReturn {
-                $lockedSale =
-                    Sale::query()
-                    ->whereKey(
-                        $sale->id,
-                    )
-                    ->lockForUpdate()
-                    ->firstOrFail();
+        $salesReturn =
+            DB::transaction(
+                function () use (
+                    $sale,
+                    $validated,
+                    $user,
+                ): SaleReturn {
+                    $lockedSale =
+                        Sale::query()
+                        ->whereKey(
+                            $sale->id,
+                        )
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
-                $requestedItems =
-                    collect(
-                        $validated['items'],
-                    );
+                    $requestedItems =
+                        collect(
+                            $validated['items'],
+                        );
 
-                $saleItemIds =
-                    $requestedItems
-                    ->pluck(
-                        'sale_item_id',
-                    )
-                    ->map(
-                        fn(
-                            mixed $id,
-                        ): int => (int) $id,
-                    )
-                    ->values();
+                    $saleItemIds =
+                        $requestedItems
+                        ->pluck(
+                            'sale_item_id',
+                        )
+                        ->map(
+                            fn(
+                                mixed $id,
+                            ): int =>
+                            (int) $id,
+                        )
+                        ->values();
 
-                $selectedSaleItems =
-                    SaleItem::query()
-                    ->where(
-                        'sale_id',
-                        $lockedSale->id,
-                    )
-                    ->whereIn(
-                        'id',
-                        $saleItemIds,
-                    )
-                    ->orderBy('id')
-                    ->lockForUpdate()
-                    ->get()
-                    ->keyBy('id');
+                    if (
+                        $saleItemIds
+                        ->unique()
+                        ->count()
+                        !== $saleItemIds
+                        ->count()
+                    ) {
+                        throw ValidationException::withMessages([
+                            'items' => [
+                                'The same sale item cannot be returned more than once in a single return.',
+                            ],
+                        ]);
+                    }
 
-                if (
-                    $selectedSaleItems
-                    ->count()
-                    !== $saleItemIds
-                    ->count()
-                ) {
-                    throw ValidationException::withMessages([
-                        'items' => [
-                            'One or more selected items do not belong to this sale.',
-                        ],
-                    ]);
-                }
+                    $selectedSaleItems =
+                        SaleItem::query()
+                        ->with([
+                            'product:id,name,unit',
+                        ])
+                        ->where(
+                            'sale_id',
+                            $lockedSale
+                                ->id,
+                        )
+                        ->whereIn(
+                            'id',
+                            $saleItemIds
+                                ->all(),
+                        )
+                        ->orderBy('id')
+                        ->lockForUpdate()
+                        ->get()
+                        ->keyBy('id');
 
-                $allSaleItems =
-                    SaleItem::query()
-                    ->where(
-                        'sale_id',
-                        $lockedSale->id,
-                    )
-                    ->orderBy('id')
-                    ->get([
-                        'id',
-                        'line_total',
-                    ]);
-
-                $saleDiscountShares =
-                    $this->saleDiscountShares(
-                        $allSaleItems,
-                        (float) $lockedSale
-                            ->discount,
-                    );
-
-                $salesReturn =
-                    SaleReturn::query()
-                    ->create([
-                        'sale_id' =>
-                        $lockedSale->id,
-
-                        'return_date' =>
-                        now(),
-
-                        'refund_method' =>
-                        $validated['refund_method'],
-
-                        'refund_amount' =>
-                        0,
-
-                        'cost_value' =>
-                        0,
-
-                        'profit_reversal' =>
-                        0,
-
-                        'restocked_quantity' =>
-                        0,
-
-                        'reason' =>
-                        $validated['reason'],
-
-                        'notes' =>
-                        $validated['notes'] ?? null,
-
-                        'status' =>
-                        SaleReturn::STATUS_COMPLETED,
-
-                        'created_by' =>
-                        $user->id,
-                    ]);
-
-                $salesReturn->update([
-                    'return_number' =>
-                    $this
-                        ->generateReturnNumber(
-                            $salesReturn,
-                        ),
-                ]);
-
-                $totalRefund =
-                    0.0;
-
-                $totalCost =
-                    0.0;
-
-                $totalProfitReversal =
-                    0.0;
-
-                $totalRestocked =
-                    0.0;
-
-                foreach (
-                    $requestedItems
-                    as $index => $requestedItem
-                ) {
-                    $saleItemId =
-                        (int) $requestedItem['sale_item_id'];
-
-                    /** @var SaleItem|null $saleItem */
-                    $saleItem =
+                    if (
                         $selectedSaleItems
-                        ->get(
-                            $saleItemId,
-                        );
-
-                    if (! $saleItem) {
+                        ->count()
+                        !== $saleItemIds
+                        ->count()
+                    ) {
                         throw ValidationException::withMessages([
-                            "items.{$index}.sale_item_id" => [
-                                'The selected sale item is unavailable.',
+                            'items' => [
+                                'One or more selected items do not belong to this sale.',
                             ],
                         ]);
                     }
 
-                    $soldQuantity =
-                        round(
-                            (float) $saleItem
-                                ->quantity,
-                            3,
-                        );
-
-                    $alreadyReturned =
-                        round(
-                            (float) $saleItem
-                                ->returned_quantity,
-                            3,
-                        );
-
-                    $remainingQuantity =
-                        round(
-                            max(
-                                0,
-                                $soldQuantity
-                                    - $alreadyReturned,
-                            ),
-                            3,
-                        );
-
-                    $returnQuantity =
-                        round(
-                            (float) $requestedItem['quantity'],
-                            3,
-                        );
-
-                    if (
-                        $returnQuantity <= 0
-                        || $returnQuantity
-                        > $remainingQuantity
-                    ) {
-                        throw ValidationException::withMessages([
-                            "items.{$index}.quantity" => [
-                                "Only {$remainingQuantity} units remain available for return.",
-                            ],
+                    $allSaleItems =
+                        SaleItem::query()
+                        ->where(
+                            'sale_id',
+                            $lockedSale
+                                ->id,
+                        )
+                        ->orderBy('id')
+                        ->get([
+                            'id',
+                            'line_total',
                         ]);
-                    }
 
-                    $saleDiscountShare =
-                        (float) (
-                            $saleDiscountShares[$saleItem->id] ?? 0
+                    $saleDiscountShares =
+                        $this
+                        ->saleDiscountShares(
+                            $allSaleItems,
+                            (float) $lockedSale
+                                ->discount,
                         );
 
-                    $fullRefundableAmount =
-                        round(
-                            max(
-                                0,
-                                (float) $saleItem
-                                    ->line_total
-                                    - $saleDiscountShare,
-                            ),
-                            2,
-                        );
-
-                    $remainingRefundable =
-                        round(
-                            max(
-                                0,
-                                $fullRefundableAmount
-                                    - (float) $saleItem
-                                        ->returned_amount,
-                            ),
-                            2,
-                        );
-
-                    $isReturningAllRemaining =
-                        abs(
-                            $returnQuantity
-                                - $remainingQuantity,
-                        ) < 0.0001;
-
-                    if (
-                        $isReturningAllRemaining
-                    ) {
-                        $refundAmount =
-                            $remainingRefundable;
-                    } else {
-                        $refundAmount =
-                            round(
-                                $fullRefundableAmount
-                                    * (
-                                        $returnQuantity
-                                        / $soldQuantity
-                                    ),
-                                2,
-                            );
-
-                        $refundAmount =
-                            min(
-                                $refundAmount,
-                                $remainingRefundable,
-                            );
-                    }
-
-                    $existingItemDiscount =
-                        (float) SaleReturnItem::query()
-                            ->where(
-                                'sale_item_id',
-                                $saleItem->id,
-                            )
-                            ->sum(
-                                'item_discount_reversal',
-                            );
-
-                    $remainingItemDiscount =
-                        round(
-                            max(
-                                0,
-                                (float) $saleItem
-                                    ->discount
-                                    - $existingItemDiscount,
-                            ),
-                            2,
-                        );
-
-                    $itemDiscountReversal =
-                        $isReturningAllRemaining
-                        ? $remainingItemDiscount
-                        : min(
-                            round(
-                                (float) $saleItem
-                                    ->discount
-                                    * (
-                                        $returnQuantity
-                                        / $soldQuantity
-                                    ),
-                                2,
-                            ),
-                            $remainingItemDiscount,
-                        );
-
-                    $existingSaleDiscount =
-                        (float) SaleReturnItem::query()
-                            ->where(
-                                'sale_item_id',
-                                $saleItem->id,
-                            )
-                            ->sum(
-                                'sale_discount_reversal',
-                            );
-
-                    $remainingSaleDiscount =
-                        round(
-                            max(
-                                0,
-                                $saleDiscountShare
-                                    - $existingSaleDiscount,
-                            ),
-                            2,
-                        );
-
-                    $saleDiscountReversal =
-                        $isReturningAllRemaining
-                        ? $remainingSaleDiscount
-                        : min(
-                            round(
-                                $saleDiscountShare
-                                    * (
-                                        $returnQuantity
-                                        / $soldQuantity
-                                    ),
-                                2,
-                            ),
-                            $remainingSaleDiscount,
-                        );
-
-                    $purchaseCost =
-                        round(
-                            (float) $saleItem
-                                ->purchase_cost,
-                            2,
-                        );
-
-                    $sellingPrice =
-                        round(
-                            (float) $saleItem
-                                ->selling_price,
-                            2,
-                        );
-
-                    $costValue =
-                        round(
-                            $purchaseCost
-                                * $returnQuantity,
-                            2,
-                        );
-
-                    $profitReversal =
-                        round(
-                            $refundAmount
-                                - $costValue,
-                            2,
-                        );
-
-                    $restock =
-                        (bool) $requestedItem['restock'];
-
-                    SaleReturnItem::query()
+                    $salesReturn =
+                        SaleReturn::query()
                         ->create([
-                            'sale_return_id' =>
-                            $salesReturn->id,
+                            'sale_id' =>
+                            $lockedSale
+                                ->id,
 
-                            'sale_item_id' =>
-                            $saleItem->id,
+                            'return_date' =>
+                            now(),
 
-                            'product_id' =>
-                            $saleItem
-                                ->product_id,
-
-                            'stock_batch_id' =>
-                            $saleItem
-                                ->stock_batch_id,
-
-                            'quantity' =>
-                            $returnQuantity,
-
-                            'purchase_cost' =>
-                            $purchaseCost,
-
-                            'selling_price' =>
-                            $sellingPrice,
-
-                            'item_discount_reversal' =>
-                            $itemDiscountReversal,
-
-                            'sale_discount_reversal' =>
-                            $saleDiscountReversal,
+                            'refund_method' =>
+                            $validated['refund_method'],
 
                             'refund_amount' =>
-                            $refundAmount,
+                            0,
 
                             'cost_value' =>
-                            $costValue,
+                            0,
 
                             'profit_reversal' =>
-                            $profitReversal,
+                            0,
 
-                            'restocked' =>
-                            $restock,
+                            'restocked_quantity' =>
+                            0,
+
+                            'reason' =>
+                            $validated['reason'],
+
+                            'notes' =>
+                            $validated['notes']
+                                ?? null,
+
+                            'status' =>
+                            SaleReturn::STATUS_COMPLETED,
+
+                            'created_by' =>
+                            $user->id,
                         ]);
 
-                    $saleItem->update([
-                        'returned_quantity' =>
-                        round(
-                            $alreadyReturned
-                                + $returnQuantity,
-                            3,
-                        ),
-
-                        'returned_amount' =>
-                        round(
-                            (float) $saleItem
-                                ->returned_amount
-                                + $refundAmount,
-                            2,
-                        ),
+                    $salesReturn->update([
+                        'return_number' =>
+                        $this
+                            ->generateReturnNumber(
+                                $salesReturn,
+                            ),
                     ]);
 
-                    if ($restock) {
-                        $batch =
-                            StockBatch::query()
-                            ->whereKey(
-                                $saleItem
-                                    ->stock_batch_id,
-                            )
-                            ->lockForUpdate()
-                            ->firstOrFail();
+                    $totalRefund = 0.0;
+
+                    $totalCost = 0.0;
+
+                    $totalProfitReversal =
+                        0.0;
+
+                    $totalRestockedStock =
+                        0.0;
+
+                    foreach (
+                        $requestedItems
+                        as $index => $requestedItem
+                    ) {
+                        $saleItemId =
+                            (int) $requestedItem['sale_item_id'];
+
+                        $saleItem =
+                            $selectedSaleItems
+                            ->get(
+                                $saleItemId,
+                            );
 
                         if (
-                            $batch->product_id
-                            !== $saleItem
-                            ->product_id
+                            !$saleItem
+                                instanceof SaleItem
                         ) {
                             throw ValidationException::withMessages([
-                                'items' => [
-                                    'The original stock batch does not match the returned product.',
+                                "items.{$index}.sale_item_id" => [
+                                    'The selected sale item is unavailable.',
                                 ],
                             ]);
                         }
 
-                        $quantityBefore =
+                        $soldQuantity =
+                            $saleItem
+                            ->quantityValue();
+
+                        $alreadyReturned =
+                            $saleItem
+                            ->returnedQuantityValue();
+
+                        $remainingQuantity =
+                            $saleItem
+                            ->remainingReturnableQuantity();
+
+                        $returnQuantity =
                             round(
-                                (float) $batch
-                                    ->available_quantity,
+                                (float) $requestedItem['quantity'],
                                 3,
                             );
 
-                        $quantityAfter =
-                            round(
-                                $quantityBefore
-                                    + $returnQuantity,
-                                3,
+                        if (
+                            $returnQuantity <= 0
+                            || $returnQuantity
+                            > $remainingQuantity
+                            + 0.0001
+                        ) {
+                            throw ValidationException::withMessages([
+                                "items.{$index}.quantity" => [
+                                    "Only {$this->formatQuantity($remainingQuantity)} {$saleItem->saleUnitValue()} remain available for return.",
+                                ],
+                            ]);
+                        }
+
+                        if (
+                            $saleItem
+                            ->usesStockConversion()
+                            && !$this
+                                ->isWholeNumber(
+                                    $returnQuantity,
+                                )
+                        ) {
+                            throw ValidationException::withMessages([
+                                "items.{$index}.quantity" => [
+                                    "{$saleItem->saleUnitValue()} returns must use a whole-number quantity.",
+                                ],
+                            ]);
+                        }
+
+                        $returnUnit =
+                            $saleItem
+                            ->saleUnitValue();
+
+                        $conversionFactor =
+                            $saleItem
+                            ->conversionFactorValue();
+
+                        $stockReturnQuantity =
+                            $saleItem
+                            ->stockQuantityFor(
+                                $returnQuantity,
                             );
 
-                        $batch->update([
-                            'available_quantity' =>
-                            $quantityAfter,
-                        ]);
+                        if (
+                            $stockReturnQuantity <= 0
+                        ) {
+                            throw ValidationException::withMessages([
+                                "items.{$index}.quantity" => [
+                                    'The calculated return stock quantity is invalid.',
+                                ],
+                            ]);
+                        }
 
-                        StockMovement::query()
+                        $saleDiscountShare =
+                            (float) (
+                                $saleDiscountShares[$saleItem->id]
+                                ?? 0
+                            );
+
+                        $fullRefundableAmount =
+                            round(
+                                max(
+                                    0,
+                                    (float) $saleItem
+                                        ->line_total
+                                        - $saleDiscountShare,
+                                ),
+                                2,
+                            );
+
+                        $remainingRefundable =
+                            round(
+                                max(
+                                    0,
+                                    $fullRefundableAmount
+                                        - (float) $saleItem
+                                            ->returned_amount,
+                                ),
+                                2,
+                            );
+
+                        $isReturningAllRemaining =
+                            abs(
+                                $returnQuantity
+                                    - $remainingQuantity,
+                            ) < 0.0001;
+
+                        if (
+                            $isReturningAllRemaining
+                        ) {
+                            $refundAmount =
+                                $remainingRefundable;
+                        } else {
+                            $refundAmount =
+                                round(
+                                    $fullRefundableAmount
+                                        * (
+                                            $returnQuantity
+                                            / $soldQuantity
+                                        ),
+                                    2,
+                                );
+
+                            $refundAmount =
+                                min(
+                                    $refundAmount,
+                                    $remainingRefundable,
+                                );
+                        }
+
+                        $existingItemDiscount =
+                            (float) SaleReturnItem::query()
+                                ->where(
+                                    'sale_item_id',
+                                    $saleItem
+                                        ->id,
+                                )
+                                ->sum(
+                                    'item_discount_reversal',
+                                );
+
+                        $remainingItemDiscount =
+                            round(
+                                max(
+                                    0,
+                                    (float) $saleItem
+                                        ->discount
+                                        - $existingItemDiscount,
+                                ),
+                                2,
+                            );
+
+                        $itemDiscountReversal =
+                            $isReturningAllRemaining
+                            ? $remainingItemDiscount
+                            : min(
+                                round(
+                                    (float) $saleItem
+                                        ->discount
+                                        * (
+                                            $returnQuantity
+                                            / $soldQuantity
+                                        ),
+                                    2,
+                                ),
+                                $remainingItemDiscount,
+                            );
+
+                        $existingSaleDiscount =
+                            (float) SaleReturnItem::query()
+                                ->where(
+                                    'sale_item_id',
+                                    $saleItem
+                                        ->id,
+                                )
+                                ->sum(
+                                    'sale_discount_reversal',
+                                );
+
+                        $remainingSaleDiscount =
+                            round(
+                                max(
+                                    0,
+                                    $saleDiscountShare
+                                        - $existingSaleDiscount,
+                                ),
+                                2,
+                            );
+
+                        $saleDiscountReversal =
+                            $isReturningAllRemaining
+                            ? $remainingSaleDiscount
+                            : min(
+                                round(
+                                    $saleDiscountShare
+                                        * (
+                                            $returnQuantity
+                                            / $soldQuantity
+                                        ),
+                                    2,
+                                ),
+                                $remainingSaleDiscount,
+                            );
+
+                        $purchaseCost =
+                            round(
+                                (float) $saleItem
+                                    ->purchase_cost,
+                                2,
+                            );
+
+                        $sellingPrice =
+                            round(
+                                (float) $saleItem
+                                    ->selling_price,
+                                2,
+                            );
+
+                        $costValue =
+                            round(
+                                $purchaseCost
+                                    * $returnQuantity,
+                                2,
+                            );
+
+                        $profitReversal =
+                            round(
+                                $refundAmount
+                                    - $costValue,
+                                2,
+                            );
+
+                        $restock =
+                            (bool) $requestedItem['restock'];
+
+                        SaleReturnItem::query()
                             ->create([
+                                'sale_return_id' =>
+                                $salesReturn
+                                    ->id,
+
+                                'sale_item_id' =>
+                                $saleItem
+                                    ->id,
+
                                 'product_id' =>
                                 $saleItem
                                     ->product_id,
 
                                 'stock_batch_id' =>
-                                $batch->id,
+                                $saleItem
+                                    ->stock_batch_id,
 
-                                'movement_type' =>
-                                StockMovement::TYPE_SALE_RETURN,
-
-                                'quantity_before' =>
-                                $quantityBefore,
-
-                                'quantity_change' =>
+                                'quantity' =>
                                 $returnQuantity,
 
-                                'quantity_after' =>
-                                $quantityAfter,
+                                'return_unit' =>
+                                $returnUnit,
 
-                                'reference_type' =>
-                                'sale_return',
+                                'conversion_factor' =>
+                                $conversionFactor,
 
-                                'reference_id' =>
-                                $salesReturn->id,
+                                'stock_quantity' =>
+                                $stockReturnQuantity,
 
-                                'reference_number' =>
-                                $salesReturn
-                                    ->return_number,
+                                'purchase_cost' =>
+                                $purchaseCost,
 
-                                'notes' =>
-                                'Returned item restored to its original stock batch.',
+                                'selling_price' =>
+                                $sellingPrice,
 
-                                'created_by' =>
-                                $user->id,
+                                'item_discount_reversal' =>
+                                $itemDiscountReversal,
+
+                                'sale_discount_reversal' =>
+                                $saleDiscountReversal,
+
+                                'refund_amount' =>
+                                $refundAmount,
+
+                                'cost_value' =>
+                                $costValue,
+
+                                'profit_reversal' =>
+                                $profitReversal,
+
+                                'restocked' =>
+                                $restock,
                             ]);
 
-                        $totalRestocked +=
-                            $returnQuantity;
+                        $saleItem->update([
+                            'returned_quantity' =>
+                            round(
+                                $alreadyReturned
+                                    + $returnQuantity,
+                                3,
+                            ),
+
+                            'returned_amount' =>
+                            round(
+                                (float) $saleItem
+                                    ->returned_amount
+                                    + $refundAmount,
+                                2,
+                            ),
+                        ]);
+
+                        if ($restock) {
+                            $batch =
+                                StockBatch::query()
+                                ->whereKey(
+                                    $saleItem
+                                        ->stock_batch_id,
+                                )
+                                ->lockForUpdate()
+                                ->firstOrFail();
+
+                            if (
+                                $batch->product_id
+                                !== $saleItem
+                                ->product_id
+                            ) {
+                                throw ValidationException::withMessages([
+                                    'items' => [
+                                        'The original stock batch does not match the returned product.',
+                                    ],
+                                ]);
+                            }
+
+                            $quantityBefore =
+                                round(
+                                    (float) $batch
+                                        ->available_quantity,
+                                    3,
+                                );
+
+                            $quantityAfter =
+                                round(
+                                    $quantityBefore
+                                        + $stockReturnQuantity,
+                                    3,
+                                );
+
+                            $batch->update([
+                                'available_quantity' =>
+                                $quantityAfter,
+                            ]);
+
+                            StockMovement::query()
+                                ->create([
+                                    'product_id' =>
+                                    $saleItem
+                                        ->product_id,
+
+                                    'stock_batch_id' =>
+                                    $batch
+                                        ->id,
+
+                                    'movement_type' =>
+                                    StockMovement::TYPE_SALE_RETURN,
+
+                                    'quantity_before' =>
+                                    $quantityBefore,
+
+                                    'quantity_change' =>
+                                    $stockReturnQuantity,
+
+                                    'quantity_after' =>
+                                    $quantityAfter,
+
+                                    'reference_type' =>
+                                    'sale_return',
+
+                                    'reference_id' =>
+                                    $salesReturn
+                                        ->id,
+
+                                    'reference_number' =>
+                                    $salesReturn
+                                        ->return_number,
+
+                                    'notes' =>
+                                    sprintf(
+                                        'Returned %s %s. Restored %s %s to the original stock batch.',
+                                        $this->formatQuantity(
+                                            $returnQuantity,
+                                        ),
+                                        $returnUnit,
+                                        $this->formatQuantity(
+                                            $stockReturnQuantity,
+                                        ),
+                                        $batch
+                                            ->stockUnitValue(),
+                                    ),
+
+                                    'created_by' =>
+                                    $user
+                                        ->id,
+                                ]);
+
+                            $totalRestockedStock =
+                                round(
+                                    $totalRestockedStock
+                                        + $stockReturnQuantity,
+                                    3,
+                                );
+                        }
+
+                        $totalRefund =
+                            round(
+                                $totalRefund
+                                    + $refundAmount,
+                                2,
+                            );
+
+                        $totalCost =
+                            round(
+                                $totalCost
+                                    + $costValue,
+                                2,
+                            );
+
+                        $totalProfitReversal =
+                            round(
+                                $totalProfitReversal
+                                    + $profitReversal,
+                                2,
+                            );
                     }
 
-                    $totalRefund +=
-                        $refundAmount;
-
-                    $totalCost +=
-                        $costValue;
-
-                    $totalProfitReversal +=
-                        $profitReversal;
-                }
-
-                $salesReturn->update([
-                    'refund_amount' =>
-                    round(
+                    $salesReturn->update([
+                        'refund_amount' =>
                         $totalRefund,
-                        2,
-                    ),
 
-                    'cost_value' =>
-                    round(
+                        'cost_value' =>
                         $totalCost,
-                        2,
-                    ),
 
-                    'profit_reversal' =>
-                    round(
+                        'profit_reversal' =>
                         $totalProfitReversal,
-                        2,
-                    ),
 
-                    'restocked_quantity' =>
-                    round(
-                        $totalRestocked,
-                        3,
-                    ),
-                ]);
+                        'restocked_quantity' =>
+                        $totalRestockedStock,
+                    ]);
 
-                return $salesReturn;
-            },
-            3,
-        );
+                    return $salesReturn;
+                },
+                3,
+            );
 
         return response()->json([
             'message' =>
@@ -1126,7 +1281,7 @@ class SalesReturnController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return response()->json([
                 'message' => 'Unauthenticated.',
             ], 401);
@@ -1170,15 +1325,13 @@ class SalesReturnController extends Controller
             'RET-%s-%06d',
             $salesReturn
                 ->return_date
-                ->format('Ymd'),
+                ->format(
+                    'Ymd',
+                ),
             $salesReturn->id,
         );
     }
 
-    /**
-     * @param Collection<int, mixed> $items
-     * @return array<int, float>
-     */
     private function saleDiscountShares(
         Collection $items,
         float $saleDiscount,
@@ -1286,24 +1439,23 @@ class SalesReturnController extends Controller
 
             'items' =>
             fn($query) =>
-            $query->orderBy('id'),
+            $query
+                ->orderBy('id'),
 
             'items.product:id,name,unit,sku,barcode',
 
-            'items.stockBatch:id,batch_code,batch_number,expiry_date',
+            'items.stockBatch:id,product_id,batch_code,batch_number,is_dual_unit,stock_unit,secondary_unit,conversion_factor,available_quantity,expiry_date',
         ]);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private function returnSummaryData(
         SaleReturn $salesReturn,
         bool $includeProfit,
     ): array {
         return [
             'id' =>
-            $salesReturn->id,
+            $salesReturn
+                ->id,
 
             'return_number' =>
             $salesReturn
@@ -1333,13 +1485,16 @@ class SalesReturnController extends Controller
                 ->restocked_quantity,
 
             'reason' =>
-            $salesReturn->reason,
+            $salesReturn
+                ->reason,
 
             'notes' =>
-            $salesReturn->notes,
+            $salesReturn
+                ->notes,
 
             'status' =>
-            $salesReturn->status,
+            $salesReturn
+                ->status,
 
             'items_count' =>
             (int) (
@@ -1356,43 +1511,52 @@ class SalesReturnController extends Controller
                 ->total_quantity
                 ?? $salesReturn
                 ->items()
-                ->sum('quantity')
+                ->sum(
+                    'quantity',
+                )
             ),
 
-            'sale' => [
-                'id' =>
-                $salesReturn
-                    ->sale
-                    ->id,
+            'sale' =>
+            $salesReturn->sale
+                ? [
+                    'id' =>
+                    $salesReturn
+                        ->sale
+                        ->id,
 
-                'sale_number' =>
-                $salesReturn
-                    ->sale
-                    ->sale_number,
+                    'sale_number' =>
+                    $salesReturn
+                        ->sale
+                        ->sale_number,
 
-                'sale_date' =>
-                $salesReturn
-                    ->sale
-                    ->sale_date
-                    ->toISOString(),
-            ],
+                    'sale_date' =>
+                    $salesReturn
+                        ->sale
+                        ->sale_date
+                        ->toISOString(),
+                ]
+                : null,
 
-            'created_by' => [
-                'id' =>
-                $salesReturn
-                    ->createdBy
-                    ->id,
+            'created_by' =>
+            $salesReturn
+                ->createdBy
+                ? [
+                    'id' =>
+                    $salesReturn
+                        ->createdBy
+                        ->id,
 
-                'name' =>
-                $salesReturn
-                    ->createdBy
-                    ->name,
+                    'name' =>
+                    $salesReturn
+                        ->createdBy
+                        ->name,
 
-                'username' =>
-                $salesReturn
-                    ->createdBy
-                    ->username,
-            ],
+                    'username' =>
+                    $salesReturn
+                        ->createdBy
+                        ->username,
+                ]
+                : null,
 
             'created_at' =>
             $salesReturn
@@ -1401,18 +1565,16 @@ class SalesReturnController extends Controller
         ];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private function returnData(
         SaleReturn $salesReturn,
         bool $includeProfit,
     ): array {
         return [
-            ...$this->returnSummaryData(
-                $salesReturn,
-                $includeProfit,
-            ),
+            ...$this
+                ->returnSummaryData(
+                    $salesReturn,
+                    $includeProfit,
+                ),
 
             'cost_value' =>
             $includeProfit
@@ -1420,51 +1582,60 @@ class SalesReturnController extends Controller
                     ->cost_value
                 : null,
 
-            'sale' => [
-                'id' =>
-                $salesReturn
-                    ->sale
-                    ->id,
-
-                'sale_number' =>
-                $salesReturn
-                    ->sale
-                    ->sale_number,
-
-                'sale_date' =>
-                $salesReturn
-                    ->sale
-                    ->sale_date
-                    ->toISOString(),
-
-                'grand_total' =>
-                (float) $salesReturn
-                    ->sale
-                    ->grand_total,
-
-                'created_by' => [
+            'sale' =>
+            $salesReturn->sale
+                ? [
                     'id' =>
                     $salesReturn
                         ->sale
-                        ->createdBy
                         ->id,
 
-                    'name' =>
+                    'sale_number' =>
                     $salesReturn
                         ->sale
-                        ->createdBy
-                        ->name,
+                        ->sale_number,
 
-                    'username' =>
+                    'sale_date' =>
+                    $salesReturn
+                        ->sale
+                        ->sale_date
+                        ->toISOString(),
+
+                    'grand_total' =>
+                    (float) $salesReturn
+                        ->sale
+                        ->grand_total,
+
+                    'created_by' =>
                     $salesReturn
                         ->sale
                         ->createdBy
-                        ->username,
-                ],
-            ],
+                        ? [
+                            'id' =>
+                            $salesReturn
+                                ->sale
+                                ->createdBy
+                                ->id,
+
+                            'name' =>
+                            $salesReturn
+                                ->sale
+                                ->createdBy
+                                ->name,
+
+                            'username' =>
+                            $salesReturn
+                                ->sale
+                                ->createdBy
+                                ->username,
+                        ]
+                        : null,
+                ]
+                : null,
 
             'items' =>
-            $salesReturn->items
+            $salesReturn
+                ->items
                 ->map(
                     fn(
                         SaleReturnItem $item,
@@ -1479,6 +1650,25 @@ class SalesReturnController extends Controller
                         'quantity' =>
                         (float) $item
                             ->quantity,
+
+                        'return_unit' =>
+                        $item
+                            ->return_unit,
+
+                        'conversion_factor' =>
+                        (float) (
+                            $item
+                            ->conversion_factor
+                            ?? 1
+                        ),
+
+                        'stock_quantity' =>
+                        (float) (
+                            $item
+                            ->stock_quantity
+                            ?? $item
+                            ->quantity
+                        ),
 
                         'purchase_cost' =>
                         $includeProfit
@@ -1518,60 +1708,120 @@ class SalesReturnController extends Controller
                         (bool) $item
                             ->restocked,
 
-                        'product' => [
-                            'id' =>
-                            $item
-                                ->product
-                                ->id,
+                        'product' =>
+                        $item->product
+                            ? [
+                                'id' =>
+                                $item
+                                    ->product
+                                    ->id,
 
-                            'name' =>
-                            $item
-                                ->product
-                                ->name,
+                                'name' =>
+                                $item
+                                    ->product
+                                    ->name,
 
-                            'unit' =>
-                            $item
-                                ->product
-                                ->unit,
+                                'unit' =>
+                                $item
+                                    ->product
+                                    ->unit,
 
-                            'sku' =>
-                            $item
-                                ->product
-                                ->sku,
+                                'sku' =>
+                                $item
+                                    ->product
+                                    ->sku,
 
-                            'barcode' =>
-                            $item
-                                ->product
-                                ->barcode,
-                        ],
+                                'barcode' =>
+                                $item
+                                    ->product
+                                    ->barcode,
+                            ]
+                            : null,
 
-                        'batch' => [
-                            'id' =>
-                            $item
-                                ->stockBatch
-                                ->id,
+                        'batch' =>
+                        $item->stockBatch
+                            ? [
+                                'id' =>
+                                $item
+                                    ->stockBatch
+                                    ->id,
 
-                            'batch_code' =>
-                            $item
-                                ->stockBatch
-                                ->batch_code,
+                                'batch_code' =>
+                                $item
+                                    ->stockBatch
+                                    ->batch_code,
 
-                            'batch_number' =>
-                            $item
-                                ->stockBatch
-                                ->batch_number,
+                                'batch_number' =>
+                                $item
+                                    ->stockBatch
+                                    ->batch_number,
 
-                            'expiry_date' =>
-                            $item
-                                ->stockBatch
-                                ->expiry_date
-                                ?->format(
-                                    'Y-m-d',
+                                'is_dual_unit' =>
+                                (bool) $item
+                                    ->stockBatch
+                                    ->is_dual_unit,
+
+                                'stock_unit' =>
+                                $item
+                                    ->stockBatch
+                                    ->stock_unit,
+
+                                'secondary_unit' =>
+                                $item
+                                    ->stockBatch
+                                    ->secondary_unit,
+
+                                'conversion_factor' =>
+                                (float) (
+                                    $item
+                                    ->stockBatch
+                                    ->conversion_factor
+                                    ?? 1
                                 ),
-                        ],
+
+                                'available_quantity' =>
+                                (float) $item
+                                    ->stockBatch
+                                    ->available_quantity,
+
+                                'expiry_date' =>
+                                $item
+                                    ->stockBatch
+                                    ->expiry_date
+                                    ?->format(
+                                        'Y-m-d',
+                                    ),
+                            ]
+                            : null,
                     ],
                 )
                 ->values(),
         ];
+    }
+
+    private function isWholeNumber(
+        float $value,
+    ): bool {
+        return abs(
+            $value
+                - round($value),
+        ) < 0.0001;
+    }
+
+    private function formatQuantity(
+        float $quantity,
+    ): string {
+        return rtrim(
+            rtrim(
+                number_format(
+                    $quantity,
+                    3,
+                    '.',
+                    '',
+                ),
+                '0',
+            ),
+            '.',
+        );
     }
 }

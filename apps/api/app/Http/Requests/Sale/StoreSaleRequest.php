@@ -23,10 +23,15 @@ class StoreSaleRequest extends FormRequest
             );
 
         $notes =
-            $this->input('notes');
+            $this->input(
+                'notes',
+            );
 
         $items = collect(
-            $this->input('items', []),
+            $this->input(
+                'items',
+                [],
+            ),
         )
             ->map(
                 function (
@@ -37,8 +42,31 @@ class StoreSaleRequest extends FormRequest
                         ? $item
                         : [];
 
+                    $saleUnit =
+                        $item['sale_unit']
+                        ?? null;
+
                     return [
                         ...$item,
+
+                        'stock_batch_id' =>
+                        isset(
+                            $item['stock_batch_id'],
+                        )
+                            ? (int) $item['stock_batch_id']
+                            : null,
+
+                        'sale_unit' =>
+                        is_string(
+                            $saleUnit,
+                        )
+                            && trim(
+                                $saleUnit,
+                            ) !== ''
+                            ? trim(
+                                $saleUnit,
+                            )
+                            : null,
 
                         'discount' =>
                         $item['discount']
@@ -65,15 +93,27 @@ class StoreSaleRequest extends FormRequest
             ),
 
             'reference_number' =>
-            is_string($reference)
-                && trim($reference) !== ''
-                ? trim($reference)
+            is_string(
+                $reference,
+            )
+                && trim(
+                    $reference,
+                ) !== ''
+                ? trim(
+                    $reference,
+                )
                 : null,
 
             'notes' =>
-            is_string($notes)
-                && trim($notes) !== ''
-                ? trim($notes)
+            is_string(
+                $notes,
+            )
+                && trim(
+                    $notes,
+                ) !== ''
+                ? trim(
+                    $notes,
+                )
                 : null,
 
             'items' =>
@@ -149,11 +189,41 @@ class StoreSaleRequest extends FormRequest
                 'max:100',
             ],
 
+            /*
+             * IMPORTANT:
+             *
+             * Do NOT use "distinct" here.
+             *
+             * A dual-unit stock batch can appear more
+             * than once in the same sale:
+             *
+             * Batch 10 -> 2 Bag
+             * Batch 10 -> 5 Kg
+             *
+             * Both lines use the same physical stock.
+             */
             'items.*.stock_batch_id' => [
                 'required',
                 'integer',
-                'distinct',
                 'exists:stock_batches,id',
+            ],
+
+            /*
+             * IMPORTANT:
+             *
+             * sale_unit must survive validated().
+             *
+             * Examples:
+             * Bag
+             * Kg
+             * Unit
+             * Bottle
+             * Piece
+             */
+            'items.*.sale_unit' => [
+                'required',
+                'string',
+                'max:40',
             ],
 
             'items.*.quantity' => [
@@ -170,6 +240,9 @@ class StoreSaleRequest extends FormRequest
         ];
     }
 
+    /**
+     * @return array<int, callable>
+     */
     public function after(): array
     {
         return [
@@ -196,6 +269,10 @@ class StoreSaleRequest extends FormRequest
                         'due_date',
                     );
 
+                /*
+                 * Partial and due sales require
+                 * a registered customer.
+                 */
                 if (
                     in_array(
                         $type,
@@ -215,6 +292,10 @@ class StoreSaleRequest extends FormRequest
                         );
                 }
 
+                /*
+                 * Partial and due sales require
+                 * a due date.
+                 */
                 if (
                     in_array(
                         $type,
@@ -234,6 +315,10 @@ class StoreSaleRequest extends FormRequest
                         );
                 }
 
+                /*
+                 * Full and partial payments require
+                 * a payment method.
+                 */
                 if (
                     in_array(
                         $type,
@@ -252,7 +337,145 @@ class StoreSaleRequest extends FormRequest
                             'Please select the payment method.',
                         );
                 }
+
+                /*
+                 * Extra item-level validation.
+                 */
+                $items =
+                    $this->input(
+                        'items',
+                        [],
+                    );
+
+                if (
+                    ! is_array(
+                        $items,
+                    )
+                ) {
+                    return;
+                }
+
+                foreach (
+                    $items as $index => $item
+                ) {
+                    if (
+                        ! is_array(
+                            $item,
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    $saleUnit =
+                        trim(
+                            (string) (
+                                $item['sale_unit']
+                                ?? ''
+                            ),
+                        );
+
+                    if (
+                        $saleUnit === ''
+                    ) {
+                        $validator
+                            ->errors()
+                            ->add(
+                                "items.{$index}.sale_unit",
+                                'Please select the selling unit.',
+                            );
+                    }
+
+                    $quantity =
+                        (float) (
+                            $item['quantity']
+                            ?? 0
+                        );
+
+                    if (
+                        $quantity <= 0
+                    ) {
+                        $validator
+                            ->errors()
+                            ->add(
+                                "items.{$index}.quantity",
+                                'The sale quantity must be greater than zero.',
+                            );
+                    }
+
+                    $discount =
+                        (float) (
+                            $item['discount']
+                            ?? 0
+                        );
+
+                    if (
+                        $discount < 0
+                    ) {
+                        $validator
+                            ->errors()
+                            ->add(
+                                "items.{$index}.discount",
+                                'The item discount cannot be negative.',
+                            );
+                    }
+                }
             },
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'items.required' =>
+            'Please add at least one product to the sale.',
+
+            'items.min' =>
+            'Please add at least one product to the sale.',
+
+            'items.*.stock_batch_id.required' =>
+            'Please select a stock batch.',
+
+            'items.*.stock_batch_id.exists' =>
+            'The selected stock batch does not exist.',
+
+            'items.*.sale_unit.required' =>
+            'Please select whether this item is being sold as Bag, Kg, or its normal unit.',
+
+            'items.*.sale_unit.string' =>
+            'The selected selling unit is invalid.',
+
+            'items.*.quantity.required' =>
+            'Please enter the quantity.',
+
+            'items.*.quantity.numeric' =>
+            'The quantity must be a valid number.',
+
+            'items.*.quantity.min' =>
+            'The quantity must be greater than zero.',
+
+            'items.*.discount.numeric' =>
+            'The item discount must be a valid amount.',
+
+            'items.*.discount.min' =>
+            'The item discount cannot be negative.',
+
+            'settlement_type.required' =>
+            'Please select the sale settlement type.',
+
+            'payment_method.in' =>
+            'The selected payment method is invalid.',
+
+            'amount_received.required' =>
+            'Please enter the received amount.',
+
+            'amount_received.numeric' =>
+            'The received amount must be a valid number.',
+
+            'amount_received.min' =>
+            'The received amount cannot be negative.',
         ];
     }
 }

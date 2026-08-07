@@ -59,7 +59,7 @@ import type {
 
 const currencyFormatter =
     new Intl.NumberFormat(
-        'en-GB',
+        'en-LK',
         {
             style: 'currency',
             currency: 'LKR',
@@ -115,8 +115,10 @@ function Icon({
         fill: 'none',
         stroke: 'currentColor',
         strokeWidth: 2,
-        strokeLinecap: 'round' as const,
-        strokeLinejoin: 'round' as const,
+        strokeLinecap:
+            'round' as const,
+        strokeLinejoin:
+            'round' as const,
         'aria-hidden': true,
         focusable: false,
     };
@@ -263,16 +265,47 @@ function createRowId(): string {
 function createEmptyItem():
     PurchaseItemFormValues {
     return {
-        row_id: createRowId(),
-        product_id: '',
-        quantity: '1',
-        unit_cost: '',
-        selling_price: '',
-        discount: '0',
-        batch_number: '',
-        manufactured_date: '',
-        expiry_date: '',
-        notes: '',
+        row_id:
+            createRowId(),
+
+        product_id:
+            '',
+
+        quantity:
+            '1',
+
+        unit_cost:
+            '',
+
+        selling_price:
+            '',
+
+        is_dual_unit:
+            '0',
+
+        secondary_unit:
+            'Kg',
+
+        conversion_factor:
+            '',
+
+        secondary_selling_price:
+            '',
+
+        discount:
+            '0',
+
+        batch_number:
+            '',
+
+        manufactured_date:
+            '',
+
+        expiry_date:
+            '',
+
+        notes:
+            '',
     };
 }
 
@@ -285,13 +318,27 @@ function today(): string {
 function createEmptyForm():
     PurchaseFormValues {
     return {
-        supplier_id: '',
-        supplier_invoice_number: '',
-        purchase_date: today(),
-        discount: '0',
-        additional_cost: '0',
-        notes: '',
-        receive_now: false,
+        supplier_id:
+            '',
+
+        supplier_invoice_number:
+            '',
+
+        purchase_date:
+            today(),
+
+        discount:
+            '0',
+
+        additional_cost:
+            '0',
+
+        notes:
+            '',
+
+        receive_now:
+            false,
+
         items: [
             createEmptyItem(),
         ],
@@ -299,17 +346,28 @@ function createEmptyForm():
 }
 
 function formatDate(
-    value: string | null | undefined,
+    value:
+        | string
+        | null
+        | undefined,
 ): string {
     if (!value) {
         return 'Not available';
     }
 
-    const date = new Date(
-        `${value.substring(0, 10)}T00:00:00`,
-    );
+    const date =
+        new Date(
+            `${value.substring(
+                0,
+                10,
+            )}T00:00:00`,
+        );
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+        Number.isNaN(
+            date.getTime(),
+        )
+    ) {
         return value;
     }
 
@@ -327,7 +385,9 @@ function formatQuantity(
     value: number,
 ): string {
     return quantityFormatter.format(
-        Number.isFinite(Number(value))
+        Number.isFinite(
+            Number(value),
+        )
             ? Number(value)
             : 0,
     );
@@ -339,6 +399,76 @@ function getStatusLabel(
     return status === 'received'
         ? 'Received'
         : 'Draft';
+}
+
+function isDualUnitEnabled(
+    value: string,
+): boolean {
+    return [
+        '1',
+        'true',
+        'yes',
+        'on',
+    ].includes(
+        value
+            .trim()
+            .toLowerCase(),
+    );
+}
+
+function isBagUnit(
+    value:
+        | string
+        | null
+        | undefined,
+): boolean {
+    const unit =
+        String(
+            value ?? '',
+        )
+            .trim()
+            .toLowerCase();
+
+    return (
+        unit === 'bag'
+        || unit === 'bags'
+    );
+}
+
+function isPositiveNumber(
+    value: string,
+): boolean {
+    if (
+        value.trim() === ''
+    ) {
+        return false;
+    }
+
+    const parsed =
+        Number(value);
+
+    return (
+        Number.isFinite(parsed)
+        && parsed > 0
+    );
+}
+
+function isNonNegativeNumber(
+    value: string,
+): boolean {
+    if (
+        value.trim() === ''
+    ) {
+        return false;
+    }
+
+    const parsed =
+        Number(value);
+
+    return (
+        Number.isFinite(parsed)
+        && parsed >= 0
+    );
 }
 
 const purchasesPageStyles = `
@@ -356,48 +486,74 @@ const purchasesPageStyles = `
     --pur-green-700: #15803d;
     --pur-green-100: #dcfce7;
     --pur-green-50: #f0fdf4;
+
     --pur-blue: #175cd3;
     --pur-blue-50: #eff8ff;
+
     --pur-amber: #b54708;
     --pur-amber-50: #fffaeb;
+
     --pur-red: #b42318;
     --pur-red-50: #fef3f2;
+
     --pur-text: #101828;
     --pur-text-2: #344054;
     --pur-muted: #667085;
+
     --pur-border: #d0d9d2;
     --pur-border-strong: #aebdb2;
+
     --pur-page: #f5f8f6;
 
     position: relative !important;
+
     display: flex !important;
 
     width: 100% !important;
 
     height:
-        calc(100vh - 96px) !important;
+        calc(
+            100vh - 96px
+        ) !important;
 
     height:
-        calc(100dvh - 96px) !important;
+        calc(
+            100dvh - 96px
+        ) !important;
 
     min-width: 0 !important;
     min-height: 0 !important;
 
     max-height:
-        calc(100vh - 96px) !important;
+        calc(
+            100vh - 96px
+        ) !important;
 
     max-height:
-        calc(100dvh - 96px) !important;
+        calc(
+            100dvh - 96px
+        ) !important;
 
     flex: 1 1 auto !important;
-    flex-direction: column !important;
+
+    flex-direction:
+        column !important;
+
     gap: 14px !important;
 
     margin: 0 !important;
-    padding: 0 8px 34px 0 !important;
 
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+    padding:
+        0
+        8px
+        34px
+        0 !important;
+
+    overflow-x:
+        hidden !important;
+
+    overflow-y:
+        auto !important;
 
     overscroll-behavior-y:
         contain !important;
@@ -405,7 +561,8 @@ const purchasesPageStyles = `
     scrollbar-gutter:
         stable !important;
 
-    color: var(--pur-text) !important;
+    color:
+        var(--pur-text) !important;
 
     font-family:
         -apple-system,
@@ -417,11 +574,14 @@ const purchasesPageStyles = `
         sans-serif !important;
 
     font-size: 14px !important;
+
     line-height: 1.5 !important;
 
-    background: transparent !important;
+    background:
+        transparent !important;
 
-    isolation: isolate !important;
+    isolation:
+        isolate !important;
 
     -webkit-font-smoothing:
         antialiased !important;
@@ -439,18 +599,23 @@ const purchasesPageStyles = `
 }
 
 #purchases-page::-webkit-scrollbar-track {
-    background: #e8eeea !important;
-    border-radius: 999px !important;
+    background:
+        #e8eeea !important;
+
+    border-radius:
+        999px !important;
 }
 
 #purchases-page::-webkit-scrollbar-thumb {
-    background: #89a091 !important;
+    background:
+        #89a091 !important;
 
     border:
         2px solid
         #e8eeea !important;
 
-    border-radius: 999px !important;
+    border-radius:
+        999px !important;
 }
 
 #purchases-page::-webkit-scrollbar-thumb:hover {
@@ -462,8 +627,12 @@ const purchasesPageStyles = `
 #purchases-page input,
 #purchases-page select {
     font: inherit !important;
-    text-transform: none !important;
-    letter-spacing: normal !important;
+
+    text-transform:
+        none !important;
+
+    letter-spacing:
+        normal !important;
 }
 
 #purchases-page h1,
@@ -476,7 +645,8 @@ const purchasesPageStyles = `
 #purchases-page button:focus-visible,
 #purchases-page input:focus,
 #purchases-page select:focus {
-    outline: none !important;
+    outline:
+        none !important;
 
     border-color:
         var(--pur-green-700) !important;
@@ -494,13 +664,19 @@ const purchasesPageStyles = `
 #purchases-page .pur-header {
     display: flex !important;
 
-    min-height: 98px !important;
+    min-height:
+        98px !important;
 
-    align-items: center !important;
-    justify-content: space-between !important;
+    align-items:
+        center !important;
+
+    justify-content:
+        space-between !important;
+
     gap: 20px !important;
 
-    padding: 17px 19px !important;
+    padding:
+        17px 19px !important;
 
     background:
         linear-gradient(
@@ -513,7 +689,8 @@ const purchasesPageStyles = `
         1px solid
         var(--pur-border) !important;
 
-    border-radius: 14px !important;
+    border-radius:
+        14px !important;
 
     box-shadow:
         0 1px 3px
@@ -532,62 +709,94 @@ const purchasesPageStyles = `
 #purchases-page .pur-kicker {
     display: block !important;
 
-    margin-bottom: 3px !important;
+    margin-bottom:
+        3px !important;
 
     color:
         var(--pur-green-700) !important;
 
-    font-size: 11px !important;
-    font-weight: 750 !important;
-    letter-spacing: 0.055em !important;
+    font-size:
+        11px !important;
 
-    text-transform: uppercase !important;
+    font-weight:
+        800 !important;
+
+    letter-spacing:
+        0.055em !important;
+
+    text-transform:
+        uppercase !important;
 }
 
 #purchases-page .pur-title {
-    color: var(--pur-text) !important;
+    color:
+        var(--pur-text) !important;
 
-    font-size: 24px !important;
-    font-weight: 740 !important;
-    line-height: 1.2 !important;
-    letter-spacing: -0.02em !important;
+    font-size:
+        25px !important;
+
+    font-weight:
+        800 !important;
+
+    line-height:
+        1.2 !important;
+
+    letter-spacing:
+        -0.02em !important;
 }
 
 #purchases-page .pur-subtitle {
-    margin-top: 4px !important;
+    margin-top:
+        4px !important;
 
-    color: var(--pur-muted) !important;
+    color:
+        var(--pur-muted) !important;
 
-    font-size: 13px !important;
+    font-size:
+        13px !important;
 }
 
 #purchases-page .pur-header-actions {
     display: flex !important;
 
-    flex: 0 0 auto !important;
+    flex:
+        0 0 auto !important;
 
-    align-items: center !important;
+    align-items:
+        center !important;
+
     gap: 8px !important;
 }
 
 #purchases-page .pur-total-badge {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    min-height: 40px !important;
+    min-height:
+        42px !important;
 
-    align-items: center !important;
-    justify-content: center !important;
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
     gap: 6px !important;
 
-    padding: 7px 10px !important;
+    padding:
+        7px 11px !important;
 
     color:
         var(--pur-green-900) !important;
 
-    font-size: 12px !important;
-    font-weight: 700 !important;
+    font-size:
+        12px !important;
 
-    white-space: nowrap !important;
+    font-weight:
+        800 !important;
+
+    white-space:
+        nowrap !important;
 
     background:
         var(--pur-green-50) !important;
@@ -596,45 +805,68 @@ const purchasesPageStyles = `
         1px solid
         #b8dfc3 !important;
 
-    border-radius: 9px !important;
+    border-radius:
+        9px !important;
 }
 
 #purchases-page .pur-total-badge svg {
-    width: 15px !important;
-    height: 15px !important;
+    width:
+        16px !important;
+
+    height:
+        16px !important;
 }
 
 #purchases-page .pur-button {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    min-height: 40px !important;
+    min-height:
+        42px !important;
 
-    align-items: center !important;
-    justify-content: center !important;
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
     gap: 6px !important;
 
-    padding: 7px 11px !important;
+    padding:
+        7px 12px !important;
 
-    font-size: 13px !important;
-    font-weight: 700 !important;
+    font-size:
+        13px !important;
 
-    border-radius: 9px !important;
+    font-weight:
+        800 !important;
 
-    cursor: pointer !important;
+    border-radius:
+        9px !important;
+
+    cursor:
+        pointer !important;
 }
 
 #purchases-page .pur-button svg {
-    width: 16px !important;
-    height: 16px !important;
+    width:
+        16px !important;
+
+    height:
+        16px !important;
 }
 
 #purchases-page .pur-button:disabled {
-    opacity: 0.55 !important;
-    cursor: not-allowed !important;
+    opacity:
+        0.55 !important;
+
+    cursor:
+        not-allowed !important;
 }
 
 #purchases-page .pur-primary-button {
-    color: #ffffff !important;
+    color:
+        #ffffff !important;
 
     background:
         var(--pur-green-700) !important;
@@ -666,7 +898,8 @@ const purchasesPageStyles = `
     color:
         var(--pur-green-900) !important;
 
-    background: #ffffff !important;
+    background:
+        #ffffff !important;
 
     border:
         1px solid
@@ -675,7 +908,8 @@ const purchasesPageStyles = `
 
 #purchases-page
 .pur-secondary-button:hover:not(:disabled) {
-    color: #ffffff !important;
+    color:
+        #ffffff !important;
 
     background:
         var(--pur-green-800) !important;
@@ -685,7 +919,8 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-blue-button {
-    color: var(--pur-blue) !important;
+    color:
+        var(--pur-blue) !important;
 
     background:
         var(--pur-blue-50) !important;
@@ -697,14 +932,19 @@ const purchasesPageStyles = `
 
 #purchases-page
 .pur-blue-button:hover:not(:disabled) {
-    color: #ffffff !important;
+    color:
+        #ffffff !important;
 
-    background: var(--pur-blue) !important;
-    border-color: var(--pur-blue) !important;
+    background:
+        var(--pur-blue) !important;
+
+    border-color:
+        var(--pur-blue) !important;
 }
 
 #purchases-page .pur-danger-button {
-    color: var(--pur-red) !important;
+    color:
+        var(--pur-red) !important;
 
     background:
         var(--pur-red-50) !important;
@@ -716,26 +956,39 @@ const purchasesPageStyles = `
 
 #purchases-page
 .pur-danger-button:hover:not(:disabled) {
-    color: #ffffff !important;
+    color:
+        #ffffff !important;
 
-    background: var(--pur-red) !important;
-    border-color: var(--pur-red) !important;
+    background:
+        var(--pur-red) !important;
+
+    border-color:
+        var(--pur-red) !important;
 }
 
 #purchases-page .pur-message {
     display: flex !important;
 
-    min-height: 48px !important;
+    min-height:
+        48px !important;
 
-    align-items: center !important;
-    gap: 9px !important;
+    align-items:
+        center !important;
 
-    padding: 10px 12px !important;
+    gap:
+        9px !important;
 
-    font-size: 13px !important;
-    font-weight: 600 !important;
+    padding:
+        10px 12px !important;
 
-    border-radius: 10px !important;
+    font-size:
+        13px !important;
+
+    font-weight:
+        650 !important;
+
+    border-radius:
+        10px !important;
 }
 
 #purchases-page .pur-message.success {
@@ -751,7 +1004,8 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-message.error {
-    color: var(--pur-red) !important;
+    color:
+        var(--pur-red) !important;
 
     background:
         var(--pur-red-50) !important;
@@ -762,28 +1016,45 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-message > svg {
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
+    width:
+        18px !important;
+
+    height:
+        18px !important;
+
+    min-width:
+        18px !important;
 }
 
 #purchases-page .pur-message-text {
-    min-width: 0 !important;
-    flex: 1 !important;
+    min-width:
+        0 !important;
+
+    flex:
+        1 !important;
 }
 
 #purchases-page .pur-message-close {
-    display: grid !important;
+    display:
+        grid !important;
 
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
+    width:
+        32px !important;
 
-    place-items: center !important;
+    height:
+        32px !important;
 
-    padding: 0 !important;
+    min-width:
+        32px !important;
 
-    color: inherit !important;
+    place-items:
+        center !important;
+
+    padding:
+        0 !important;
+
+    color:
+        inherit !important;
 
     background:
         rgba(
@@ -797,34 +1068,52 @@ const purchasesPageStyles = `
         1px solid
         currentColor !important;
 
-    border-radius: 7px !important;
+    border-radius:
+        7px !important;
 
-    cursor: pointer !important;
+    cursor:
+        pointer !important;
 }
 
 #purchases-page .pur-message-close svg {
-    width: 14px !important;
-    height: 14px !important;
+    width:
+        14px !important;
+
+    height:
+        14px !important;
 }
 
 #purchases-page .pur-retry-button {
-    min-height: 34px !important;
-    padding: 5px 8px !important;
-    font-size: 12px !important;
+    min-height:
+        34px !important;
+
+    padding:
+        5px 8px !important;
+
+    font-size:
+        12px !important;
 }
 
 #purchases-page .pur-readiness {
     display: flex !important;
 
-    align-items: flex-start !important;
-    gap: 8px !important;
+    align-items:
+        flex-start !important;
 
-    padding: 9px 11px !important;
+    gap:
+        8px !important;
 
-    color: var(--pur-amber) !important;
+    padding:
+        10px 12px !important;
 
-    font-size: 12px !important;
-    font-weight: 600 !important;
+    color:
+        var(--pur-amber) !important;
+
+    font-size:
+        12px !important;
+
+    font-weight:
+        650 !important;
 
     background:
         var(--pur-amber-50) !important;
@@ -833,31 +1122,43 @@ const purchasesPageStyles = `
         1px solid
         #f0d48f !important;
 
-    border-radius: 10px !important;
+    border-radius:
+        10px !important;
 }
 
 #purchases-page .pur-readiness svg {
-    width: 17px !important;
-    height: 17px !important;
-    min-width: 17px !important;
+    width:
+        17px !important;
+
+    height:
+        17px !important;
+
+    min-width:
+        17px !important;
 }
 
 #purchases-page .pur-panel {
-    display: flex !important;
+    display:
+        flex !important;
 
-    min-width: 0 !important;
+    min-width:
+        0 !important;
 
-    flex-direction: column !important;
+    flex-direction:
+        column !important;
 
-    overflow: hidden !important;
+    overflow:
+        hidden !important;
 
-    background: #ffffff !important;
+    background:
+        #ffffff !important;
 
     border:
         1px solid
         var(--pur-border) !important;
 
-    border-radius: 14px !important;
+    border-radius:
+        14px !important;
 
     box-shadow:
         0 1px 3px
@@ -870,19 +1171,33 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-toolbar {
-    display: grid !important;
+    display:
+        grid !important;
 
     grid-template-columns:
-        minmax(230px, 1fr)
-        minmax(150px, 210px)
-        minmax(130px, 160px)
+        minmax(
+            230px,
+            1fr
+        )
+        minmax(
+            150px,
+            210px
+        )
+        minmax(
+            130px,
+            160px
+        )
         86px
         auto !important;
 
-    align-items: end !important;
-    gap: 10px !important;
+    align-items:
+        end !important;
 
-    padding: 13px !important;
+    gap:
+        10px !important;
+
+    padding:
+        13px !important;
 
     border-bottom:
         1px solid
@@ -890,194 +1205,304 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-field {
-    display: grid !important;
-    gap: 5px !important;
+    display:
+        grid !important;
+
+    gap:
+        5px !important;
 }
 
 #purchases-page .pur-field-label {
-    color: var(--pur-text-2) !important;
+    color:
+        var(--pur-text-2) !important;
 
-    font-size: 11px !important;
-    font-weight: 650 !important;
+    font-size:
+        11px !important;
+
+    font-weight:
+        700 !important;
 }
 
 #purchases-page .pur-search-wrapper {
-    position: relative !important;
+    position:
+        relative !important;
 }
 
 #purchases-page .pur-search-icon {
-    position: absolute !important;
+    position:
+        absolute !important;
 
-    top: 50% !important;
-    left: 12px !important;
-    z-index: 2 !important;
+    top:
+        50% !important;
 
-    display: grid !important;
+    left:
+        12px !important;
 
-    width: 18px !important;
-    height: 18px !important;
+    z-index:
+        2 !important;
 
-    place-items: center !important;
+    display:
+        grid !important;
 
-    color: var(--pur-muted) !important;
+    width:
+        18px !important;
+
+    height:
+        18px !important;
+
+    place-items:
+        center !important;
+
+    color:
+        var(--pur-muted) !important;
 
     transform:
-        translateY(-50%) !important;
+        translateY(
+            -50%
+        ) !important;
 
-    pointer-events: none !important;
+    pointer-events:
+        none !important;
 }
 
 #purchases-page .pur-search-icon svg {
-    display: block !important;
+    display:
+        block !important;
 
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
-    max-width: 18px !important;
-    min-height: 18px !important;
-    max-height: 18px !important;
+    width:
+        18px !important;
+
+    height:
+        18px !important;
 }
 
 #purchases-page .pur-input,
 #purchases-page .pur-select {
-    display: block !important;
+    display:
+        block !important;
 
-    width: 100% !important;
+    width:
+        100% !important;
 
-    height: 42px !important;
-    min-height: 42px !important;
+    height:
+        44px !important;
 
-    color: var(--pur-text) !important;
+    min-height:
+        44px !important;
 
-    font-size: 14px !important;
-    font-weight: 500 !important;
+    color:
+        var(--pur-text) !important;
 
-    outline: none !important;
+    font-size:
+        14px !important;
 
-    background: #ffffff !important;
+    font-weight:
+        550 !important;
+
+    outline:
+        none !important;
+
+    background:
+        #ffffff !important;
 
     border:
         1px solid
         var(--pur-border-strong) !important;
 
-    border-radius: 9px !important;
+    border-radius:
+        9px !important;
 }
 
 #purchases-page .pur-input {
     padding:
-        0 42px 0 40px !important;
+        0 42px
+        0 40px !important;
 
-    background: #f8faf9 !important;
+    background:
+        #f8faf9 !important;
 }
 
 #purchases-page .pur-input::placeholder {
-    color: #7a8696 !important;
-    opacity: 1 !important;
+    color:
+        #7a8696 !important;
+
+    opacity:
+        1 !important;
 }
 
 #purchases-page .pur-select {
-    padding: 0 9px !important;
-    cursor: pointer !important;
+    padding:
+        0 9px !important;
+
+    cursor:
+        pointer !important;
 }
 
 #purchases-page .pur-clear-search {
-    position: absolute !important;
+    position:
+        absolute !important;
 
-    top: 50% !important;
-    right: 5px !important;
-    z-index: 3 !important;
+    top:
+        50% !important;
 
-    display: grid !important;
+    right:
+        5px !important;
 
-    width: 32px !important;
-    height: 32px !important;
+    z-index:
+        3 !important;
 
-    place-items: center !important;
+    display:
+        grid !important;
 
-    padding: 0 !important;
+    width:
+        32px !important;
 
-    color: var(--pur-muted) !important;
+    height:
+        32px !important;
 
-    background: transparent !important;
+    place-items:
+        center !important;
 
-    border: 0 !important;
-    border-radius: 7px !important;
+    padding:
+        0 !important;
+
+    color:
+        var(--pur-muted) !important;
+
+    background:
+        transparent !important;
+
+    border:
+        0 !important;
+
+    border-radius:
+        7px !important;
 
     transform:
-        translateY(-50%) !important;
+        translateY(
+            -50%
+        ) !important;
 
-    cursor: pointer !important;
+    cursor:
+        pointer !important;
 }
 
 #purchases-page .pur-clear-search:hover {
-    color: var(--pur-text) !important;
-    background: #eaf0ec !important;
+    color:
+        var(--pur-text) !important;
+
+    background:
+        #eaf0ec !important;
 }
 
 #purchases-page .pur-clear-search svg {
-    width: 16px !important;
-    height: 16px !important;
+    width:
+        16px !important;
+
+    height:
+        16px !important;
 }
 
 #purchases-page .pur-clear-filters {
-    min-height: 42px !important;
-    white-space: nowrap !important;
+    min-height:
+        44px !important;
+
+    white-space:
+        nowrap !important;
 }
 
 #purchases-page .pur-list {
     display: flex !important;
 
-    min-width: 0 !important;
+    min-width:
+        0 !important;
 
-    flex-direction: column !important;
-    gap: 8px !important;
+    flex-direction:
+        column !important;
 
-    padding: 10px !important;
+    gap:
+        8px !important;
 
-    background: var(--pur-page) !important;
+    padding:
+        10px !important;
+
+    background:
+        var(--pur-page) !important;
 }
 
 #purchases-page .pur-list-head,
 #purchases-page .pur-row {
-    display: grid !important;
+    display:
+        grid !important;
 
     grid-template-columns:
-        minmax(180px, 1.15fr)
-        minmax(150px, 1fr)
+        minmax(
+            180px,
+            1.15fr
+        )
+        minmax(
+            150px,
+            1fr
+        )
         112px
-        minmax(120px, 0.75fr)
-        minmax(135px, 0.8fr)
+        minmax(
+            120px,
+            0.75fr
+        )
+        minmax(
+            135px,
+            0.8fr
+        )
         100px
-        minmax(230px, auto) !important;
+        minmax(
+            230px,
+            auto
+        ) !important;
 
-    gap: 11px !important;
-    align-items: center !important;
+    gap:
+        11px !important;
+
+    align-items:
+        center !important;
 }
 
 #purchases-page .pur-list-head {
-    padding: 0 12px 2px !important;
+    padding:
+        0 12px
+        2px !important;
 
-    color: var(--pur-muted) !important;
+    color:
+        var(--pur-muted) !important;
 
-    font-size: 9px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.04em !important;
+    font-size:
+        9px !important;
 
-    text-transform: uppercase !important;
+    font-weight:
+        800 !important;
+
+    letter-spacing:
+        0.04em !important;
+
+    text-transform:
+        uppercase !important;
 }
 
 #purchases-page .pur-row {
-    min-width: 0 !important;
+    min-width:
+        0 !important;
 
-    padding: 11px 12px !important;
+    padding:
+        11px 12px !important;
 
-    background: #ffffff !important;
+    background:
+        #ffffff !important;
 
     border:
         1px solid
         var(--pur-border) !important;
 
-    border-radius: 10px !important;
+    border-radius:
+        10px !important;
 
     box-shadow:
         0 1px 2px
@@ -1090,7 +1515,8 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-row:hover {
-    border-color: #9dceaa !important;
+    border-color:
+        #9dceaa !important;
 
     box-shadow:
         0 4px 12px
@@ -1103,24 +1529,37 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-identity {
-    display: flex !important;
+    display:
+        flex !important;
 
-    min-width: 0 !important;
+    min-width:
+        0 !important;
 
-    align-items: center !important;
-    gap: 9px !important;
+    align-items:
+        center !important;
+
+    gap:
+        9px !important;
 }
 
 #purchases-page .pur-record-icon {
-    display: grid !important;
+    display:
+        grid !important;
 
-    width: 40px !important;
-    height: 40px !important;
-    min-width: 40px !important;
+    width:
+        40px !important;
 
-    place-items: center !important;
+    height:
+        40px !important;
 
-    color: #ffffff !important;
+    min-width:
+        40px !important;
+
+    place-items:
+        center !important;
+
+    color:
+        #ffffff !important;
 
     background:
         linear-gradient(
@@ -1129,113 +1568,176 @@ const purchasesPageStyles = `
             var(--pur-green-700)
         ) !important;
 
-    border-radius: 10px !important;
+    border-radius:
+        10px !important;
 }
 
 #purchases-page .pur-record-icon svg {
-    width: 18px !important;
-    height: 18px !important;
+    width:
+        18px !important;
+
+    height:
+        18px !important;
 }
 
 #purchases-page .pur-copy {
-    min-width: 0 !important;
+    min-width:
+        0 !important;
 }
 
 #purchases-page .pur-number {
-    display: block !important;
+    display:
+        block !important;
 
-    overflow: hidden !important;
+    overflow:
+        hidden !important;
 
-    color: var(--pur-text) !important;
+    color:
+        var(--pur-text) !important;
 
-    font-size: 14px !important;
-    font-weight: 700 !important;
-    line-height: 1.3 !important;
+    font-size:
+        14px !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    font-weight:
+        800 !important;
+
+    line-height:
+        1.3 !important;
+
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
 }
 
 #purchases-page .pur-invoice {
-    display: block !important;
+    display:
+        block !important;
 
-    margin-top: 2px !important;
+    margin-top:
+        2px !important;
 
-    overflow: hidden !important;
+    overflow:
+        hidden !important;
 
-    color: var(--pur-muted) !important;
+    color:
+        var(--pur-muted) !important;
 
-    font-size: 10px !important;
+    font-size:
+        10px !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
 }
 
 #purchases-page .pur-cell {
-    min-width: 0 !important;
+    min-width:
+        0 !important;
 }
 
 #purchases-page .pur-mobile-label {
-    display: none !important;
+    display:
+        none !important;
 }
 
 #purchases-page .pur-value {
-    display: block !important;
+    display:
+        block !important;
 
-    overflow: hidden !important;
+    overflow:
+        hidden !important;
 
-    color: var(--pur-text-2) !important;
+    color:
+        var(--pur-text-2) !important;
 
-    font-size: 12px !important;
-    font-weight: 550 !important;
+    font-size:
+        12px !important;
 
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    font-weight:
+        600 !important;
+
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
 }
 
 #purchases-page .pur-value.strong {
-    color: var(--pur-text) !important;
-    font-size: 13px !important;
-    font-weight: 700 !important;
+    color:
+        var(--pur-text) !important;
+
+    font-size:
+        13px !important;
+
+    font-weight:
+        800 !important;
 }
 
 #purchases-page .pur-meta {
-    display: flex !important;
+    display:
+        flex !important;
 
-    align-items: center !important;
-    gap: 4px !important;
+    align-items:
+        center !important;
 
-    color: var(--pur-muted) !important;
+    gap:
+        4px !important;
 
-    font-size: 10px !important;
+    color:
+        var(--pur-muted) !important;
+
+    font-size:
+        10px !important;
 }
 
 #purchases-page .pur-meta svg {
-    width: 12px !important;
-    height: 12px !important;
+    width:
+        12px !important;
+
+    height:
+        12px !important;
 }
 
 #purchases-page .pur-status {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    min-height: 28px !important;
+    min-height:
+        28px !important;
 
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 5px !important;
+    align-items:
+        center !important;
 
-    padding: 4px 8px !important;
+    justify-content:
+        center !important;
 
-    font-size: 10px !important;
-    font-weight: 700 !important;
+    gap:
+        5px !important;
 
-    white-space: nowrap !important;
+    padding:
+        4px 8px !important;
 
-    border-radius: 999px !important;
+    font-size:
+        10px !important;
+
+    font-weight:
+        800 !important;
+
+    white-space:
+        nowrap !important;
+
+    border-radius:
+        999px !important;
 }
 
 #purchases-page .pur-status.draft {
-    color: var(--pur-amber) !important;
+    color:
+        var(--pur-amber) !important;
 
     background:
         var(--pur-amber-50) !important;
@@ -1258,40 +1760,65 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-status svg {
-    width: 13px !important;
-    height: 13px !important;
+    width:
+        13px !important;
+
+    height:
+        13px !important;
 }
 
 #purchases-page .pur-actions {
-    display: flex !important;
+    display:
+        flex !important;
 
-    align-items: center !important;
-    justify-content: flex-end !important;
-    gap: 6px !important;
+    align-items:
+        center !important;
+
+    justify-content:
+        flex-end !important;
+
+    gap:
+        6px !important;
 }
 
 #purchases-page .pur-action-button {
-    min-height: 34px !important;
-    padding: 5px 8px !important;
-    font-size: 11px !important;
+    min-height:
+        34px !important;
+
+    padding:
+        5px 8px !important;
+
+    font-size:
+        11px !important;
 }
 
 #purchases-page .pur-completed {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    min-height: 34px !important;
+    min-height:
+        34px !important;
 
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 5px !important;
+    align-items:
+        center !important;
 
-    padding: 5px 8px !important;
+    justify-content:
+        center !important;
+
+    gap:
+        5px !important;
+
+    padding:
+        5px 8px !important;
 
     color:
         var(--pur-green-900) !important;
 
-    font-size: 11px !important;
-    font-weight: 650 !important;
+    font-size:
+        11px !important;
+
+    font-weight:
+        700 !important;
 
     background:
         var(--pur-green-50) !important;
@@ -1300,40 +1827,62 @@ const purchasesPageStyles = `
         1px solid
         #b8dfc3 !important;
 
-    border-radius: 8px !important;
+    border-radius:
+        8px !important;
 }
 
 #purchases-page .pur-completed svg {
-    width: 14px !important;
-    height: 14px !important;
+    width:
+        14px !important;
+
+    height:
+        14px !important;
 }
 
 #purchases-page .pur-state {
-    display: flex !important;
+    display:
+        flex !important;
 
-    min-height: 280px !important;
+    min-height:
+        280px !important;
 
-    align-items: center !important;
-    justify-content: center !important;
-    flex-direction: column !important;
-    gap: 8px !important;
+    align-items:
+        center !important;
 
-    padding: 28px !important;
+    justify-content:
+        center !important;
 
-    color: var(--pur-muted) !important;
+    flex-direction:
+        column !important;
 
-    text-align: center !important;
+    gap:
+        8px !important;
 
-    background: #ffffff !important;
+    padding:
+        28px !important;
+
+    color:
+        var(--pur-muted) !important;
+
+    text-align:
+        center !important;
+
+    background:
+        #ffffff !important;
 }
 
 #purchases-page .pur-state-icon {
-    display: grid !important;
+    display:
+        grid !important;
 
-    width: 48px !important;
-    height: 48px !important;
+    width:
+        48px !important;
 
-    place-items: center !important;
+    height:
+        48px !important;
+
+    place-items:
+        center !important;
 
     color:
         var(--pur-green-700) !important;
@@ -1345,33 +1894,48 @@ const purchasesPageStyles = `
         1px solid
         #b8dfc3 !important;
 
-    border-radius: 11px !important;
+    border-radius:
+        11px !important;
 }
 
 #purchases-page .pur-state-icon svg {
-    width: 23px !important;
-    height: 23px !important;
+    width:
+        23px !important;
+
+    height:
+        23px !important;
 }
 
 #purchases-page .pur-state-title {
-    color: var(--pur-text) !important;
+    color:
+        var(--pur-text) !important;
 
-    font-size: 16px !important;
-    font-weight: 700 !important;
+    font-size:
+        16px !important;
+
+    font-weight:
+        800 !important;
 }
 
 #purchases-page .pur-state-message {
-    max-width: 440px !important;
-    font-size: 12px !important;
+    max-width:
+        440px !important;
+
+    font-size:
+        12px !important;
 }
 
 #purchases-page .pur-state-action {
-    margin-top: 4px !important;
+    margin-top:
+        4px !important;
 }
 
 #purchases-page .pur-spinner {
-    width: 36px !important;
-    height: 36px !important;
+    width:
+        36px !important;
+
+    height:
+        36px !important;
 
     border:
         4px solid
@@ -1380,7 +1944,8 @@ const purchasesPageStyles = `
     border-top-color:
         var(--pur-green-700) !important;
 
-    border-radius: 50% !important;
+    border-radius:
+        50% !important;
 
     animation:
         pur-spin
@@ -1391,20 +1956,31 @@ const purchasesPageStyles = `
 
 @keyframes pur-spin {
     to {
-        transform: rotate(360deg);
+        transform:
+            rotate(
+                360deg
+            );
     }
 }
 
 #purchases-page .pur-pagination {
-    display: flex !important;
+    display:
+        flex !important;
 
-    min-height: 62px !important;
+    min-height:
+        62px !important;
 
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 12px !important;
+    align-items:
+        center !important;
 
-    padding: 10px 14px !important;
+    justify-content:
+        space-between !important;
+
+    gap:
+        12px !important;
+
+    padding:
+        10px 14px !important;
 
     border-top:
         1px solid
@@ -1412,154 +1988,246 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-pagination-info {
-    color: var(--pur-muted) !important;
-    font-size: 12px !important;
+    color:
+        var(--pur-muted) !important;
+
+    font-size:
+        12px !important;
 }
 
 #purchases-page .pur-pagination-info strong {
-    color: var(--pur-text-2) !important;
-    font-weight: 700 !important;
+    color:
+        var(--pur-text-2) !important;
+
+    font-weight:
+        800 !important;
 }
 
 #purchases-page .pur-pagination-actions {
-    display: flex !important;
+    display:
+        flex !important;
 
-    align-items: center !important;
-    gap: 7px !important;
+    align-items:
+        center !important;
+
+    gap:
+        7px !important;
 }
 
 #purchases-page .pur-page-number {
-    display: inline-flex !important;
+    display:
+        inline-flex !important;
 
-    min-height: 36px !important;
+    min-height:
+        36px !important;
 
-    align-items: center !important;
-    justify-content: center !important;
+    align-items:
+        center !important;
 
-    padding: 6px 9px !important;
+    justify-content:
+        center !important;
 
-    color: var(--pur-text-2) !important;
+    padding:
+        6px 9px !important;
 
-    font-size: 11px !important;
-    font-weight: 600 !important;
+    color:
+        var(--pur-text-2) !important;
 
-    white-space: nowrap !important;
+    font-size:
+        11px !important;
 
-    background: #f8faf9 !important;
+    font-weight:
+        650 !important;
+
+    white-space:
+        nowrap !important;
+
+    background:
+        #f8faf9 !important;
 
     border:
         1px solid
         #e4e9e5 !important;
 
-    border-radius: 8px !important;
+    border-radius:
+        8px !important;
 }
 
 #purchases-page .pur-page-button {
-    min-height: 36px !important;
-    padding: 6px 9px !important;
-    font-size: 12px !important;
+    min-height:
+        36px !important;
+
+    padding:
+        6px 9px !important;
+
+    font-size:
+        12px !important;
 }
 
-@media (max-width: 1180px) {
+@media (
+    max-width: 1180px
+) {
     #purchases-page .pur-list-head {
-        display: none !important;
+        display:
+            none !important;
     }
 
     #purchases-page .pur-row {
         grid-template-columns:
             repeat(
                 3,
-                minmax(0, 1fr)
+                minmax(
+                    0,
+                    1fr
+                )
             ) !important;
 
-        align-items: start !important;
+        align-items:
+            start !important;
     }
 
     #purchases-page .pur-identity,
     #purchases-page .pur-actions {
-        grid-column: 1 / -1 !important;
+        grid-column:
+            1 / -1 !important;
     }
 
     #purchases-page .pur-mobile-label {
-        display: block !important;
+        display:
+            block !important;
 
-        margin-bottom: 2px !important;
+        margin-bottom:
+            2px !important;
 
-        color: var(--pur-muted) !important;
+        color:
+            var(--pur-muted) !important;
 
-        font-size: 9px !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.04em !important;
+        font-size:
+            9px !important;
 
-        text-transform: uppercase !important;
+        font-weight:
+            800 !important;
+
+        letter-spacing:
+            0.04em !important;
+
+        text-transform:
+            uppercase !important;
     }
 
     #purchases-page .pur-actions {
-        justify-content: flex-start !important;
+        justify-content:
+            flex-start !important;
     }
 }
 
-@media (max-width: 980px) {
+@media (
+    max-width: 980px
+) {
     #purchases-page .pur-toolbar {
         grid-template-columns:
-            minmax(0, 1fr)
-            minmax(150px, 210px)
-            minmax(130px, 160px) !important;
+            minmax(
+                0,
+                1fr
+            )
+            minmax(
+                150px,
+                210px
+            )
+            minmax(
+                130px,
+                160px
+            ) !important;
     }
 
-    #purchases-page .pur-toolbar .pur-field:nth-child(4),
-    #purchases-page .pur-clear-filters {
-        grid-row: 2 !important;
+    #purchases-page
+    .pur-toolbar
+    .pur-field:nth-child(4),
+    #purchases-page
+    .pur-clear-filters {
+        grid-row:
+            2 !important;
     }
 
-    #purchases-page .pur-toolbar .pur-field:nth-child(4) {
-        grid-column: 1 / 2 !important;
-        max-width: 120px !important;
+    #purchases-page
+    .pur-toolbar
+    .pur-field:nth-child(4) {
+        grid-column:
+            1 / 2 !important;
+
+        max-width:
+            120px !important;
     }
 
-    #purchases-page .pur-clear-filters {
-        grid-column: 2 / -1 !important;
-        justify-self: end !important;
+    #purchases-page
+    .pur-clear-filters {
+        grid-column:
+            2 / -1 !important;
+
+        justify-self:
+            end !important;
     }
 }
 
-@media (max-width: 700px) {
+@media (
+    max-width: 700px
+) {
     #purchases-page {
         height:
-            calc(100vh - 72px) !important;
+            calc(
+                100vh - 72px
+            ) !important;
 
         height:
-            calc(100dvh - 72px) !important;
+            calc(
+                100dvh - 72px
+            ) !important;
 
         max-height:
-            calc(100vh - 72px) !important;
+            calc(
+                100vh - 72px
+            ) !important;
 
         max-height:
-            calc(100dvh - 72px) !important;
+            calc(
+                100dvh - 72px
+            ) !important;
 
-        padding: 0 4px 28px 0 !important;
+        padding:
+            0 4px
+            28px 0 !important;
     }
 
     #purchases-page .pur-header {
-        min-height: 0 !important;
+        min-height:
+            0 !important;
 
-        align-items: stretch !important;
-        flex-direction: column !important;
+        align-items:
+            stretch !important;
 
-        padding: 15px !important;
+        flex-direction:
+            column !important;
+
+        padding:
+            15px !important;
     }
 
     #purchases-page .pur-title {
-        font-size: 21px !important;
+        font-size:
+            21px !important;
     }
 
     #purchases-page .pur-header-actions {
-        display: grid !important;
+        display:
+            grid !important;
 
         grid-template-columns:
             repeat(
                 2,
-                minmax(0, 1fr)
+                minmax(
+                    0,
+                    1fr
+                )
             ) !important;
     }
 
@@ -1567,103 +2235,149 @@ const purchasesPageStyles = `
     #purchases-page
     .pur-header-actions
     .pur-button {
-        width: 100% !important;
+        width:
+            100% !important;
     }
 
     #purchases-page .pur-toolbar {
-        grid-template-columns: 1fr !important;
+        grid-template-columns:
+            1fr !important;
     }
 
-    #purchases-page .pur-toolbar .pur-field:nth-child(4),
-    #purchases-page .pur-clear-filters {
-        grid-row: auto !important;
-        grid-column: auto !important;
-        max-width: none !important;
+    #purchases-page
+    .pur-toolbar
+    .pur-field:nth-child(4),
+    #purchases-page
+    .pur-clear-filters {
+        grid-row:
+            auto !important;
+
+        grid-column:
+            auto !important;
+
+        max-width:
+            none !important;
     }
 
-    #purchases-page .pur-clear-filters {
-        width: 100% !important;
-        justify-self: stretch !important;
+    #purchases-page
+    .pur-clear-filters {
+        width:
+            100% !important;
+
+        justify-self:
+            stretch !important;
     }
 
     #purchases-page .pur-row {
-        grid-template-columns: 1fr !important;
+        grid-template-columns:
+            1fr !important;
     }
 
     #purchases-page .pur-actions {
-        display: grid !important;
+        display:
+            grid !important;
 
         grid-template-columns:
             repeat(
                 3,
-                minmax(0, 1fr)
+                minmax(
+                    0,
+                    1fr
+                )
             ) !important;
     }
 
     #purchases-page .pur-action-button,
     #purchases-page .pur-completed {
-        width: 100% !important;
+        width:
+            100% !important;
     }
 
     #purchases-page .pur-completed {
-        grid-column: 1 / -1 !important;
+        grid-column:
+            1 / -1 !important;
     }
 
     #purchases-page .pur-message {
-        align-items: flex-start !important;
-        flex-wrap: wrap !important;
+        align-items:
+            flex-start !important;
+
+        flex-wrap:
+            wrap !important;
     }
 
     #purchases-page .pur-retry-button {
-        width: 100% !important;
+        width:
+            100% !important;
     }
 
     #purchases-page .pur-pagination {
-        align-items: stretch !important;
-        flex-direction: column !important;
+        align-items:
+            stretch !important;
+
+        flex-direction:
+            column !important;
     }
 
     #purchases-page .pur-pagination-actions {
-        display: grid !important;
+        display:
+            grid !important;
 
         grid-template-columns:
             repeat(
                 2,
-                minmax(0, 1fr)
+                minmax(
+                    0,
+                    1fr
+                )
             ) !important;
     }
 
     #purchases-page .pur-page-number {
-        grid-column: 1 / -1 !important;
-        grid-row: 1 !important;
+        grid-column:
+            1 / -1 !important;
+
+        grid-row:
+            1 !important;
     }
 
     #purchases-page .pur-page-button {
-        width: 100% !important;
+        width:
+            100% !important;
     }
 }
 
-@media (max-width: 480px) {
+@media (
+    max-width: 480px
+) {
     #purchases-page .pur-header-actions,
     #purchases-page .pur-actions {
-        grid-template-columns: 1fr !important;
+        grid-template-columns:
+            1fr !important;
     }
 
     #purchases-page .pur-number {
-        white-space: normal !important;
+        white-space:
+            normal !important;
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (
+    prefers-reduced-motion: reduce
+) {
     #purchases-page *,
     #purchases-page *::before,
     #purchases-page *::after {
-        transition: none !important;
-        scroll-behavior: auto !important;
+        transition:
+            none !important;
+
+        scroll-behavior:
+            auto !important;
     }
 
     #purchases-page .pur-spinner {
-        animation-duration: 1.2s !important;
+        animation-duration:
+            1.2s !important;
     }
 }
 `;
@@ -1701,7 +2415,9 @@ export default function PurchasesPage() {
     const [
         pagination,
         setPagination,
-    ] = useState(initialPagination);
+    ] = useState(
+        initialPagination,
+    );
 
     const [
         page,
@@ -1756,14 +2472,16 @@ export default function PurchasesPage() {
     const [
         editingPurchase,
         setEditingPurchase,
-    ] = useState<Purchase | null>(
-        null,
-    );
+    ] = useState<
+        Purchase | null
+    >(null);
 
     const [
         formValues,
         setFormValues,
-    ] = useState<PurchaseFormValues>(
+    ] = useState<
+        PurchaseFormValues
+    >(
         createEmptyForm,
     );
 
@@ -1780,14 +2498,16 @@ export default function PurchasesPage() {
     const [
         fieldErrors,
         setFieldErrors,
-    ] = useState<ValidationErrors>({});
+    ] = useState<
+        ValidationErrors
+    >({});
 
     const [
         receivingPurchase,
         setReceivingPurchase,
-    ] = useState<Purchase | null>(
-        null,
-    );
+    ] = useState<
+        Purchase | null
+    >(null);
 
     const [
         receiveValues,
@@ -1804,9 +2524,9 @@ export default function PurchasesPage() {
     const [
         deleteTarget,
         setDeleteTarget,
-    ] = useState<Purchase | null>(
-        null,
-    );
+    ] = useState<
+        Purchase | null
+    >(null);
 
     const [
         isDeleting,
@@ -1829,10 +2549,16 @@ export default function PurchasesPage() {
                     const [
                         supplierResponse,
                         productResponse,
-                    ] = await Promise.all([
-                        getSupplierOptions(token),
-                        getPurchaseProducts(token),
-                    ]);
+                    ] =
+                        await Promise.all([
+                            getSupplierOptions(
+                                token,
+                            ),
+
+                            getPurchaseProducts(
+                                token,
+                            ),
+                        ]);
 
                     setSuppliers(
                         supplierResponse.data,
@@ -1843,7 +2569,8 @@ export default function PurchasesPage() {
                     );
                 } catch (error) {
                     setPageError(
-                        error instanceof ApiError
+                        error
+                            instanceof ApiError
                             ? error.message
                             : 'Unable to load purchase options.',
                     );
@@ -1856,14 +2583,20 @@ export default function PurchasesPage() {
         useCallback(
             async (): Promise<void> => {
                 if (!token) {
-                    setIsLoading(false);
+                    setIsLoading(
+                        false,
+                    );
+
                     return;
                 }
 
                 const requestId =
-                    purchaseRequestIdRef.current + 1;
+                    purchaseRequestIdRef
+                        .current
+                    + 1;
 
-                purchaseRequestIdRef.current =
+                purchaseRequestIdRef
+                    .current =
                     requestId;
 
                 setIsLoading(true);
@@ -1876,6 +2609,7 @@ export default function PurchasesPage() {
                             {
                                 page,
                                 perPage,
+
                                 search:
                                     appliedSearch,
 
@@ -1888,7 +2622,8 @@ export default function PurchasesPage() {
                         );
 
                     if (
-                        purchaseRequestIdRef.current
+                        purchaseRequestIdRef
+                            .current
                         !== requestId
                     ) {
                         return;
@@ -1903,7 +2638,8 @@ export default function PurchasesPage() {
                     );
                 } catch (error) {
                     if (
-                        purchaseRequestIdRef.current
+                        purchaseRequestIdRef
+                            .current
                         !== requestId
                     ) {
                         return;
@@ -1912,16 +2648,20 @@ export default function PurchasesPage() {
                     setPurchases([]);
 
                     setPageError(
-                        error instanceof ApiError
+                        error
+                            instanceof ApiError
                             ? error.message
                             : 'Unable to load purchases.',
                     );
                 } finally {
                     if (
-                        purchaseRequestIdRef.current
+                        purchaseRequestIdRef
+                            .current
                         === requestId
                     ) {
-                        setIsLoading(false);
+                        setIsLoading(
+                            false,
+                        );
                     }
                 }
             },
@@ -1937,11 +2677,15 @@ export default function PurchasesPage() {
 
     useEffect(() => {
         void loadOptions();
-    }, [loadOptions]);
+    }, [
+        loadOptions,
+    ]);
 
     useEffect(() => {
         void loadPurchases();
-    }, [loadPurchases]);
+    }, [
+        loadPurchases,
+    ]);
 
     useEffect(() => {
         const timeout =
@@ -1961,7 +2705,9 @@ export default function PurchasesPage() {
                 timeout,
             );
         };
-    }, [searchInput]);
+    }, [
+        searchInput,
+    ]);
 
     useEffect(() => {
         if (!successMessage) {
@@ -1971,7 +2717,9 @@ export default function PurchasesPage() {
         const timeout =
             window.setTimeout(
                 () => {
-                    setSuccessMessage('');
+                    setSuccessMessage(
+                        '',
+                    );
                 },
                 3500,
             );
@@ -1981,26 +2729,47 @@ export default function PurchasesPage() {
                 timeout,
             );
         };
-    }, [successMessage]);
+    }, [
+        successMessage,
+    ]);
 
-    const openCreateForm = (): void => {
-        setEditingPurchase(null);
-        setFormValues(createEmptyForm());
-        setFormError('');
-        setFieldErrors({});
-        setIsFormOpen(true);
-    };
+    const openCreateForm =
+        (): void => {
+            setEditingPurchase(
+                null,
+            );
 
-    const closePurchaseForm = (): void => {
-        if (isSubmitting) {
-            return;
-        }
+            setFormValues(
+                createEmptyForm(),
+            );
 
-        setIsFormOpen(false);
-        setEditingPurchase(null);
-        setFormError('');
-        setFieldErrors({});
-    };
+            setFormError('');
+
+            setFieldErrors({});
+
+            setIsFormOpen(
+                true,
+            );
+        };
+
+    const closePurchaseForm =
+        (): void => {
+            if (isSubmitting) {
+                return;
+            }
+
+            setIsFormOpen(
+                false,
+            );
+
+            setEditingPurchase(
+                null,
+            );
+
+            setFormError('');
+
+            setFieldErrors({});
+        };
 
     const openEditForm =
         async (
@@ -2019,14 +2788,19 @@ export default function PurchasesPage() {
                         purchase.id,
                     );
 
-                const details = response.data;
+                const details =
+                    response.data;
 
-                setEditingPurchase(details);
+                setEditingPurchase(
+                    details,
+                );
 
                 setFormValues({
                     supplier_id:
                         String(
-                            details.supplier.id,
+                            details
+                                .supplier
+                                .id,
                         ),
 
                     supplier_invoice_number:
@@ -2035,79 +2809,143 @@ export default function PurchasesPage() {
                         ?? '',
 
                     purchase_date:
-                        details.purchase_date,
+                        details
+                            .purchase_date,
 
                     discount:
-                        String(details.discount),
+                        String(
+                            details
+                                .discount,
+                        ),
 
                     additional_cost:
                         String(
-                            details.additional_cost,
+                            details
+                                .additional_cost,
                         ),
 
                     notes:
-                        details.notes ?? '',
+                        details.notes
+                        ?? '',
 
-                    receive_now: false,
+                    receive_now:
+                        false,
 
                     items:
-                        details.items?.map(
-                            (item) => ({
-                                row_id:
-                                    createRowId(),
+                        details
+                            .items
+                            ?.map(
+                                (
+                                    item,
+                                ) => ({
+                                    row_id:
+                                        createRowId(),
 
-                                product_id:
-                                    String(
-                                        item.product_id,
-                                    ),
+                                    product_id:
+                                        String(
+                                            item
+                                                .product_id,
+                                        ),
 
-                                quantity:
-                                    String(
-                                        item.quantity,
-                                    ),
+                                    quantity:
+                                        String(
+                                            item
+                                                .quantity,
+                                        ),
 
-                                unit_cost:
-                                    String(
-                                        item.unit_cost,
-                                    ),
+                                    unit_cost:
+                                        String(
+                                            item
+                                                .unit_cost,
+                                        ),
 
-                                selling_price:
-                                    String(
-                                        item.selling_price,
-                                    ),
+                                    selling_price:
+                                        String(
+                                            item
+                                                .selling_price,
+                                        ),
 
-                                discount:
-                                    String(
-                                        item.discount,
-                                    ),
+                                    is_dual_unit:
+                                        item
+                                            .is_dual_unit
+                                            ? '1'
+                                            : '0',
 
-                                batch_number:
-                                    item.batch_number
-                                    ?? '',
+                                    secondary_unit:
+                                        item
+                                            .secondary_unit
+                                        ?? (
+                                            item
+                                                .is_dual_unit
+                                                ? 'Kg'
+                                                : 'Kg'
+                                        ),
 
-                                manufactured_date:
-                                    item
-                                        .manufactured_date
-                                    ?? '',
+                                    conversion_factor:
+                                        item
+                                            .is_dual_unit
+                                            ? String(
+                                                item
+                                                    .conversion_factor
+                                                ?? '',
+                                            )
+                                            : '',
 
-                                expiry_date:
-                                    item.expiry_date
-                                    ?? '',
+                                    secondary_selling_price:
+                                        item
+                                            .secondary_selling_price
+                                            !== null
+                                            && item
+                                                .secondary_selling_price
+                                            !== undefined
+                                            ? String(
+                                                item
+                                                    .secondary_selling_price,
+                                            )
+                                            : '',
 
-                                notes:
-                                    item.notes ?? '',
-                            }),
-                        ) ?? [
+                                    discount:
+                                        String(
+                                            item
+                                                .discount,
+                                        ),
+
+                                    batch_number:
+                                        item
+                                            .batch_number
+                                        ?? '',
+
+                                    manufactured_date:
+                                        item
+                                            .manufactured_date
+                                        ?? '',
+
+                                    expiry_date:
+                                        item
+                                            .expiry_date
+                                        ?? '',
+
+                                    notes:
+                                        item.notes
+                                        ?? '',
+                                }),
+                            )
+                        ?? [
                             createEmptyItem(),
                         ],
                 });
 
                 setFormError('');
+
                 setFieldErrors({});
-                setIsFormOpen(true);
+
+                setIsFormOpen(
+                    true,
+                );
             } catch (error) {
                 setPageError(
-                    error instanceof ApiError
+                    error
+                        instanceof ApiError
                         ? error.message
                         : 'Unable to load the purchase details.',
                 );
@@ -2115,23 +2953,30 @@ export default function PurchasesPage() {
         };
 
     const handleHeaderChange = (
-        field: keyof Omit<
-            PurchaseFormValues,
-            'items'
-        >,
-        value: string | boolean,
+        field:
+            keyof Omit<
+                PurchaseFormValues,
+                'items'
+            >,
+        value:
+            string
+            | boolean,
     ): void => {
         setFormValues(
             (current) => ({
                 ...current,
-                [field]: value,
+
+                [field]:
+                    value,
             }),
         );
 
         setFieldErrors(
             (current) => ({
                 ...current,
-                [field]: undefined,
+
+                [field]:
+                    undefined,
             }),
         );
 
@@ -2140,30 +2985,44 @@ export default function PurchasesPage() {
 
     const handleItemChange = (
         index: number,
+
         field:
             keyof PurchaseItemFormValues,
+
         value: string,
     ): void => {
         setFormValues(
             (current) => ({
                 ...current,
 
-                items: current.items.map(
-                    (item, itemIndex) =>
-                        itemIndex === index
-                            ? {
-                                ...item,
-                                [field]: value,
-                            }
-                            : item,
-                ),
+                items:
+                    current
+                        .items
+                        .map(
+                            (
+                                item,
+                                itemIndex,
+                            ) =>
+                                itemIndex
+                                    === index
+                                    ? {
+                                        ...item,
+
+                                        [field]:
+                                            value,
+                                    }
+                                    : item,
+                        ),
             }),
         );
 
         setFieldErrors(
             (current) => ({
                 ...current,
-                [`items.${index}.${field}`]:
+
+                [
+                    `items.${index}.${field}`
+                ]:
                     undefined,
             }),
         );
@@ -2176,87 +3035,278 @@ export default function PurchasesPage() {
             const errors:
                 ValidationErrors = {};
 
-            if (!formValues.supplier_id) {
+            if (
+                !formValues
+                    .supplier_id
+            ) {
                 errors.supplier_id = [
                     'Please select a supplier.',
                 ];
             }
 
-            if (!formValues.purchase_date) {
+            if (
+                !formValues
+                    .purchase_date
+            ) {
                 errors.purchase_date = [
                     'Please select a purchase date.',
                 ];
             }
 
-            formValues.items.forEach(
-                (item, index) => {
-                    if (!item.product_id) {
-                        errors[
-                            `items.${index}.product_id`
-                        ] = [
-                                `Select a product for item ${index + 1}.`,
-                            ];
-                    }
-
-                    if (
-                        Number(item.quantity) <= 0
-                    ) {
-                        errors[
-                            `items.${index}.quantity`
-                        ] = [
-                                'Quantity must be greater than zero.',
-                            ];
-                    }
-
-                    if (
-                        item.unit_cost === ''
-                        || Number(
-                            item.unit_cost,
-                        ) < 0
-                    ) {
-                        errors[
-                            `items.${index}.unit_cost`
-                        ] = [
-                                'Enter a valid purchase cost.',
-                            ];
-                    }
-
-                    if (
-                        item.selling_price === ''
-                        || Number(
-                            item.selling_price,
-                        ) < 0
-                    ) {
-                        errors[
-                            `items.${index}.selling_price`
-                        ] = [
-                                'Enter a valid selling price.',
-                            ];
-                    }
-
-                    if (
-                        item.manufactured_date
-                        && item.expiry_date
-                        && item.manufactured_date
-                        > item.expiry_date
-                    ) {
-                        errors[
-                            `items.${index}.expiry_date`
-                        ] = [
-                                'Expiry must be after manufacture.',
-                            ];
-                    }
-                },
-            );
-
-            setFieldErrors(errors);
+            if (
+                !isNonNegativeNumber(
+                    formValues
+                        .discount,
+                )
+            ) {
+                errors.discount = [
+                    'Purchase discount must be zero or greater.',
+                ];
+            }
 
             if (
-                Object.keys(errors).length
+                !isNonNegativeNumber(
+                    formValues
+                        .additional_cost,
+                )
+            ) {
+                errors.additional_cost = [
+                    'Additional cost must be zero or greater.',
+                ];
+            }
+
+            if (
+                formValues
+                    .items
+                    .length
+                === 0
+            ) {
+                errors.items = [
+                    'Add at least one product.',
+                ];
+            }
+
+            formValues
+                .items
+                .forEach(
+                    (
+                        item,
+                        index,
+                    ) => {
+                        const selectedProduct =
+                            products.find(
+                                (
+                                    product,
+                                ) =>
+                                    String(
+                                        product.id,
+                                    )
+                                    === item
+                                        .product_id,
+                            );
+
+                        if (
+                            !item
+                                .product_id
+                        ) {
+                            errors[
+                                `items.${index}.product_id`
+                            ] = [
+                                    `Select a product for item ${index + 1}.`,
+                                ];
+                        }
+
+                        if (
+                            !isPositiveNumber(
+                                item.quantity,
+                            )
+                        ) {
+                            errors[
+                                `items.${index}.quantity`
+                            ] = [
+                                    'Quantity must be greater than zero.',
+                                ];
+                        }
+
+                        if (
+                            !isNonNegativeNumber(
+                                item
+                                    .unit_cost,
+                            )
+                        ) {
+                            errors[
+                                `items.${index}.unit_cost`
+                            ] = [
+                                    'Enter a valid purchase cost.',
+                                ];
+                        }
+
+                        if (
+                            !isPositiveNumber(
+                                item
+                                    .selling_price,
+                            )
+                        ) {
+                            errors[
+                                `items.${index}.selling_price`
+                            ] = [
+                                    'Selling price must be greater than zero.',
+                                ];
+                        }
+
+                        if (
+                            !isNonNegativeNumber(
+                                item.discount,
+                            )
+                        ) {
+                            errors[
+                                `items.${index}.discount`
+                            ] = [
+                                    'Item discount must be zero or greater.',
+                                ];
+                        }
+
+                        const quantity =
+                            Number(
+                                item
+                                    .quantity
+                                || 0,
+                            );
+
+                        const unitCost =
+                            Number(
+                                item
+                                    .unit_cost
+                                || 0,
+                            );
+
+                        const itemDiscount =
+                            Number(
+                                item
+                                    .discount
+                                || 0,
+                            );
+
+                        const lineSubtotal =
+                            quantity
+                            * unitCost;
+
+                        if (
+                            Number.isFinite(
+                                lineSubtotal,
+                            )
+                            && itemDiscount
+                            > lineSubtotal
+                        ) {
+                            errors[
+                                `items.${index}.discount`
+                            ] = [
+                                    'Item discount cannot exceed the purchase value of this line.',
+                                ];
+                        }
+
+                        if (
+                            item
+                                .manufactured_date
+                            && item
+                                .expiry_date
+                            && item
+                                .manufactured_date
+                            > item
+                                .expiry_date
+                        ) {
+                            errors[
+                                `items.${index}.expiry_date`
+                            ] = [
+                                    'Expiry date must be after the manufactured date.',
+                                ];
+                        }
+
+                        const dualUnit =
+                            isDualUnitEnabled(
+                                item
+                                    .is_dual_unit,
+                            );
+
+                        if (
+                            dualUnit
+                        ) {
+                            if (
+                                !selectedProduct
+                            ) {
+                                errors[
+                                    `items.${index}.product_id`
+                                ] = [
+                                        'Select the Bag product before enabling loose Kg selling.',
+                                    ];
+                            } else if (
+                                !isBagUnit(
+                                    selectedProduct
+                                        .unit,
+                                )
+                            ) {
+                                errors[
+                                    `items.${index}.is_dual_unit`
+                                ] = [
+                                        'Loose Kg selling is only available for products using Bag as the main unit.',
+                                    ];
+                            }
+
+                            if (
+                                !isPositiveNumber(
+                                    item
+                                        .conversion_factor,
+                                )
+                            ) {
+                                errors[
+                                    `items.${index}.conversion_factor`
+                                ] = [
+                                        'Enter the Kg weight contained in one Bag.',
+                                    ];
+                            }
+
+                            if (
+                                item
+                                    .secondary_unit
+                                    .trim()
+                                    .toLowerCase()
+                                !== 'kg'
+                            ) {
+                                errors[
+                                    `items.${index}.secondary_unit`
+                                ] = [
+                                        'Loose selling unit must be Kg.',
+                                    ];
+                            }
+
+                            if (
+                                !isPositiveNumber(
+                                    item
+                                        .secondary_selling_price,
+                                )
+                            ) {
+                                errors[
+                                    `items.${index}.secondary_selling_price`
+                                ] = [
+                                        'Enter a selling price for 1 Kg.',
+                                    ];
+                            }
+                        }
+                    },
+                );
+
+            setFieldErrors(
+                errors,
+            );
+
+            if (
+                Object.keys(
+                    errors,
+                ).length
                 > 0
             ) {
                 setFormError(
-                    'Please correct the highlighted purchase details.',
+                    'Please correct the highlighted purchase details before saving.',
                 );
 
                 return false;
@@ -2280,7 +3330,10 @@ export default function PurchasesPage() {
                 return;
             }
 
-            setIsSubmitting(true);
+            setIsSubmitting(
+                true,
+            );
+
             setFormError('');
 
             try {
@@ -2301,20 +3354,31 @@ export default function PurchasesPage() {
                     ?? 'Purchase saved successfully.',
                 );
 
-                setIsFormOpen(false);
-                setEditingPurchase(null);
+                setIsFormOpen(
+                    false,
+                );
+
+                setEditingPurchase(
+                    null,
+                );
+
+                setFormValues(
+                    createEmptyForm(),
+                );
 
                 await loadPurchases();
             } catch (error) {
                 if (
-                    error instanceof ApiError
+                    error
+                    instanceof ApiError
                 ) {
                     setFormError(
                         error.message,
                     );
 
                     setFieldErrors(
-                        error.errors ?? {},
+                        error.errors
+                        ?? {},
                     );
                 } else {
                     setFormError(
@@ -2322,7 +3386,9 @@ export default function PurchasesPage() {
                     );
                 }
             } finally {
-                setIsSubmitting(false);
+                setIsSubmitting(
+                    false,
+                );
             }
         };
 
@@ -2343,48 +3409,71 @@ export default function PurchasesPage() {
                         purchase.id,
                     );
 
-                const details = response.data;
+                const details =
+                    response.data;
 
-                setReceivingPurchase(details);
+                setReceivingPurchase(
+                    details,
+                );
 
                 setReceiveValues(
-                    details.items?.map(
-                        (item) => ({
-                            purchase_item_id:
-                                item.id,
+                    details
+                        .items
+                        ?.map(
+                            (
+                                item,
+                            ) => ({
+                                purchase_item_id:
+                                    item.id,
 
-                            received_quantity:
-                                String(
-                                    item.quantity
-                                    - item
-                                        .received_quantity,
-                                ),
+                                received_quantity:
+                                    String(
+                                        Math.max(
+                                            0,
+                                            Number(
+                                                (
+                                                    item
+                                                        .quantity
+                                                    - item
+                                                        .received_quantity
+                                                )
+                                                    .toFixed(
+                                                        3,
+                                                    ),
+                                            ),
+                                        ),
+                                    ),
 
-                            selling_price:
-                                String(
-                                    item.selling_price,
-                                ),
+                                selling_price:
+                                    String(
+                                        item
+                                            .selling_price,
+                                    ),
 
-                            batch_number:
-                                item.batch_number
-                                ?? '',
+                                batch_number:
+                                    item
+                                        .batch_number
+                                    ?? '',
 
-                            manufactured_date:
-                                item
-                                    .manufactured_date
-                                ?? '',
+                                manufactured_date:
+                                    item
+                                        .manufactured_date
+                                    ?? '',
 
-                            expiry_date:
-                                item.expiry_date
-                                ?? '',
-                        }),
-                    ) ?? [],
+                                expiry_date:
+                                    item
+                                        .expiry_date
+                                    ?? '',
+                            }),
+                        )
+                    ?? [],
                 );
 
                 setReceiveError('');
             } catch (error) {
                 setPageError(
-                    error instanceof ApiError
+                    error
+                        instanceof ApiError
                         ? error.message
                         : 'Unable to load stock intake.',
                 );
@@ -2406,7 +3495,38 @@ export default function PurchasesPage() {
                 return;
             }
 
-            setIsSubmitting(true);
+            const invalidReceiveItem =
+                receiveValues.find(
+                    (
+                        item,
+                    ) =>
+                        !Number.isFinite(
+                            Number(
+                                item
+                                    .received_quantity,
+                            ),
+                        )
+                        || Number(
+                            item
+                                .received_quantity,
+                        )
+                        <= 0,
+                );
+
+            if (
+                invalidReceiveItem
+            ) {
+                setReceiveError(
+                    'Every received quantity must be greater than zero.',
+                );
+
+                return;
+            }
+
+            setIsSubmitting(
+                true,
+            );
+
             setReceiveError('');
 
             try {
@@ -2422,17 +3542,26 @@ export default function PurchasesPage() {
                     ?? 'Stock received successfully.',
                 );
 
-                setReceivingPurchase(null);
+                setReceivingPurchase(
+                    null,
+                );
+
+                setReceiveValues(
+                    [],
+                );
 
                 await loadPurchases();
             } catch (error) {
                 setReceiveError(
-                    error instanceof ApiError
+                    error
+                        instanceof ApiError
                         ? error.message
                         : 'Unable to receive stock.',
                 );
             } finally {
-                setIsSubmitting(false);
+                setIsSubmitting(
+                    false,
+                );
             }
         };
 
@@ -2446,7 +3575,10 @@ export default function PurchasesPage() {
                 return;
             }
 
-            setIsDeleting(true);
+            setIsDeleting(
+                true,
+            );
+
             setDeleteError('');
 
             try {
@@ -2461,10 +3593,13 @@ export default function PurchasesPage() {
                     ?? 'Purchase deleted successfully.',
                 );
 
-                setDeleteTarget(null);
+                setDeleteTarget(
+                    null,
+                );
 
                 if (
-                    purchases.length === 1
+                    purchases.length
+                    === 1
                     && page > 1
                 ) {
                     setPage(
@@ -2481,34 +3616,47 @@ export default function PurchasesPage() {
                 }
             } catch (error) {
                 setDeleteError(
-                    error instanceof ApiError
+                    error
+                        instanceof ApiError
                         ? error.message
                         : 'Unable to delete purchase.',
                 );
             } finally {
-                setIsDeleting(false);
+                setIsDeleting(
+                    false,
+                );
             }
         };
 
-    const clearSearch = (): void => {
-        setSearchInput('');
-        setAppliedSearch('');
-        setPage(1);
+    const clearSearch =
+        (): void => {
+            setSearchInput('');
 
-        searchInputRef.current
-            ?.focus();
-    };
+            setAppliedSearch('');
 
-    const clearFilters = (): void => {
-        setSearchInput('');
-        setAppliedSearch('');
-        setSupplierFilter('');
-        setStatusFilter('');
-        setPage(1);
+            setPage(1);
 
-        searchInputRef.current
-            ?.focus();
-    };
+            searchInputRef
+                .current
+                ?.focus();
+        };
+
+    const clearFilters =
+        (): void => {
+            setSearchInput('');
+
+            setAppliedSearch('');
+
+            setSupplierFilter('');
+
+            setStatusFilter('');
+
+            setPage(1);
+
+            searchInputRef
+                .current
+                ?.focus();
+        };
 
     const hasActiveFilters =
         Boolean(
@@ -2539,8 +3687,10 @@ export default function PurchasesPage() {
 
                     <p className="pur-subtitle">
                         Record supplier purchases,
-                        manage drafts and receive items
-                        into available stock.
+                        set selling prices and receive
+                        stock. Bag products can also
+                        be configured for full Bag and
+                        loose Kg selling.
                     </p>
                 </div>
 
@@ -2551,7 +3701,8 @@ export default function PurchasesPage() {
                         {pagination.total}
                         {' '}
 
-                        {pagination.total === 1
+                        {pagination.total
+                            === 1
                             ? 'Purchase'
                             : 'Purchases'}
                     </span>
@@ -2559,13 +3710,17 @@ export default function PurchasesPage() {
                     <button
                         type="button"
                         className="pur-button pur-primary-button"
-                        disabled={!canCreatePurchase}
+                        disabled={
+                            !canCreatePurchase
+                        }
                         title={
                             canCreatePurchase
                                 ? 'Create a new supplier purchase'
                                 : 'Add at least one supplier and product first'
                         }
-                        onClick={openCreateForm}
+                        onClick={
+                            openCreateForm
+                        }
                     >
                         <Icon name="plus" />
 
@@ -2580,9 +3735,9 @@ export default function PurchasesPage() {
                         <Icon name="alert" />
 
                         <span>
-                            A purchase needs at least one
-                            supplier and one product. Add
-                            the missing records before
+                            A purchase needs at least
+                            one supplier and one product.
+                            Add the missing records before
                             creating a purchase.
                         </span>
                     </div>
@@ -2605,7 +3760,9 @@ export default function PurchasesPage() {
                         className="pur-message-close"
                         aria-label="Close success message"
                         onClick={() => {
-                            setSuccessMessage('');
+                            setSuccessMessage(
+                                '',
+                            );
                         }}
                     >
                         <Icon name="close" />
@@ -2629,6 +3786,7 @@ export default function PurchasesPage() {
                         className="pur-button pur-secondary-button pur-retry-button"
                         onClick={() => {
                             void loadOptions();
+
                             void loadPurchases();
                         }}
                     >
@@ -2662,9 +3820,13 @@ export default function PurchasesPage() {
                                 autoComplete="off"
                                 placeholder="Purchase number, invoice or supplier"
                                 aria-label="Search purchases"
-                                onChange={(event) => {
+                                onChange={(
+                                    event,
+                                ) => {
                                     setSearchInput(
-                                        event.target.value,
+                                        event
+                                            .target
+                                            .value,
                                     );
                                 }}
                             />
@@ -2674,7 +3836,9 @@ export default function PurchasesPage() {
                                     type="button"
                                     className="pur-clear-search"
                                     aria-label="Clear purchase search"
-                                    onClick={clearSearch}
+                                    onClick={
+                                        clearSearch
+                                    }
                                 >
                                     <Icon name="close" />
                                 </button>
@@ -2689,12 +3853,18 @@ export default function PurchasesPage() {
 
                         <select
                             className="pur-select"
-                            value={supplierFilter}
-                            onChange={(event) => {
+                            value={
+                                supplierFilter
+                            }
+                            onChange={(
+                                event,
+                            ) => {
                                 setPage(1);
 
                                 setSupplierFilter(
-                                    event.target.value,
+                                    event
+                                        .target
+                                        .value,
                                 );
                             }}
                         >
@@ -2703,12 +3873,21 @@ export default function PurchasesPage() {
                             </option>
 
                             {suppliers.map(
-                                (supplier) => (
+                                (
+                                    supplier,
+                                ) => (
                                     <option
-                                        key={supplier.id}
-                                        value={supplier.id}
+                                        key={
+                                            supplier.id
+                                        }
+                                        value={
+                                            supplier.id
+                                        }
                                     >
-                                        {supplier.name}
+                                        {
+                                            supplier
+                                                .name
+                                        }
                                     </option>
                                 ),
                             )}
@@ -2722,12 +3901,18 @@ export default function PurchasesPage() {
 
                         <select
                             className="pur-select"
-                            value={statusFilter}
-                            onChange={(event) => {
+                            value={
+                                statusFilter
+                            }
+                            onChange={(
+                                event,
+                            ) => {
                                 setPage(1);
 
                                 setStatusFilter(
-                                    event.target.value,
+                                    event
+                                        .target
+                                        .value,
                                 );
                             }}
                         >
@@ -2753,12 +3938,16 @@ export default function PurchasesPage() {
                         <select
                             className="pur-select"
                             value={perPage}
-                            onChange={(event) => {
+                            onChange={(
+                                event,
+                            ) => {
                                 setPage(1);
 
                                 setPerPage(
                                     Number(
-                                        event.target.value,
+                                        event
+                                            .target
+                                            .value,
                                     ),
                                 );
                             }}
@@ -2780,8 +3969,12 @@ export default function PurchasesPage() {
                     <button
                         type="button"
                         className="pur-button pur-secondary-button pur-clear-filters"
-                        disabled={!hasActiveFilters}
-                        onClick={clearFilters}
+                        disabled={
+                            !hasActiveFilters
+                        }
+                        onClick={
+                            clearFilters
+                        }
                     >
                         <Icon name="filter" />
 
@@ -2801,11 +3994,13 @@ export default function PurchasesPage() {
                         </strong>
 
                         <span className="pur-state-message">
-                            Retrieving supplier purchase
-                            records and stock intake status.
+                            Retrieving supplier
+                            purchase records and
+                            stock intake status.
                         </span>
                     </div>
-                ) : purchases.length === 0 ? (
+                ) : purchases.length
+                    === 0 ? (
                     <div className="pur-state">
                         <span className="pur-state-icon">
                             <Icon name="receipt" />
@@ -2828,7 +4023,9 @@ export default function PurchasesPage() {
                                 <button
                                     type="button"
                                     className="pur-button pur-primary-button pur-state-action"
-                                    onClick={openCreateForm}
+                                    onClick={
+                                        openCreateForm
+                                    }
                                 >
                                     <Icon name="plus" />
 
@@ -2872,9 +4069,13 @@ export default function PurchasesPage() {
                         </div>
 
                         {purchases.map(
-                            (purchase) => (
+                            (
+                                purchase,
+                            ) => (
                                 <article
-                                    key={purchase.id}
+                                    key={
+                                        purchase.id
+                                    }
                                     className="pur-row"
                                 >
                                     <div className="pur-identity">
@@ -2956,10 +4157,15 @@ export default function PurchasesPage() {
                                         </span>
 
                                         <span className="pur-value">
-                                            {purchase.items_count}
+                                            {
+                                                purchase
+                                                    .items_count
+                                            }
                                             {' '}
 
-                                            {purchase.items_count === 1
+                                            {purchase
+                                                .items_count
+                                                === 1
                                                 ? 'item'
                                                 : 'items'}
                                         </span>
@@ -2971,7 +4177,8 @@ export default function PurchasesPage() {
                                                 purchase
                                                     .total_quantity,
                                             )}
-                                            {' '}total units
+                                            {' '}
+                                            purchased
                                         </span>
                                     </div>
 
@@ -2997,7 +4204,8 @@ export default function PurchasesPage() {
 
                                         <span
                                             className={
-                                                purchase.status
+                                                purchase
+                                                    .status
                                                     === 'received'
                                                     ? 'pur-status received'
                                                     : 'pur-status draft'
@@ -3005,7 +4213,8 @@ export default function PurchasesPage() {
                                         >
                                             <Icon
                                                 name={
-                                                    purchase.status
+                                                    purchase
+                                                        .status
                                                         === 'received'
                                                         ? 'check'
                                                         : 'receipt'
@@ -3013,13 +4222,15 @@ export default function PurchasesPage() {
                                             />
 
                                             {getStatusLabel(
-                                                purchase.status,
+                                                purchase
+                                                    .status,
                                             )}
                                         </span>
                                     </div>
 
                                     <div className="pur-actions">
-                                        {purchase.status
+                                        {purchase
+                                            .status
                                             === 'draft' ? (
                                             <>
                                                 <button
@@ -3083,29 +4294,46 @@ export default function PurchasesPage() {
                 )}
 
                 {!isLoading
-                    && pagination.total > 0 && (
+                    && pagination.total
+                    > 0 && (
                         <footer className="pur-pagination">
                             <p className="pur-pagination-info">
                                 Showing
                                 {' '}
 
                                 <strong>
-                                    {pagination.from ?? 0}
+                                    {
+                                        pagination
+                                            .from
+                                        ?? 0
+                                    }
                                 </strong>
 
-                                {' '}to{' '}
+                                {' '}
+                                to
+                                {' '}
 
                                 <strong>
-                                    {pagination.to ?? 0}
+                                    {
+                                        pagination
+                                            .to
+                                        ?? 0
+                                    }
                                 </strong>
 
-                                {' '}of{' '}
+                                {' '}
+                                of
+                                {' '}
 
                                 <strong>
-                                    {pagination.total}
+                                    {
+                                        pagination
+                                            .total
+                                    }
                                 </strong>
 
-                                {' '}purchases
+                                {' '}
+                                purchases
                             </p>
 
                             <div className="pur-pagination-actions">
@@ -3113,7 +4341,8 @@ export default function PurchasesPage() {
                                     type="button"
                                     className="pur-button pur-secondary-button pur-page-button"
                                     disabled={
-                                        pagination.current_page
+                                        pagination
+                                            .current_page
                                         <= 1
                                     }
                                     onClick={() => {
@@ -3137,17 +4366,29 @@ export default function PurchasesPage() {
                                     Page
                                     {' '}
 
-                                    {pagination.current_page}
-                                    {' '}of{' '}
-                                    {pagination.last_page}
+                                    {
+                                        pagination
+                                            .current_page
+                                    }
+
+                                    {' '}
+                                    of
+                                    {' '}
+
+                                    {
+                                        pagination
+                                            .last_page
+                                    }
                                 </span>
 
                                 <button
                                     type="button"
                                     className="pur-button pur-secondary-button pur-page-button"
                                     disabled={
-                                        pagination.current_page
-                                        >= pagination.last_page
+                                        pagination
+                                            .current_page
+                                        >= pagination
+                                            .last_page
                                     }
                                     onClick={() => {
                                         setPage(
@@ -3155,8 +4396,11 @@ export default function PurchasesPage() {
                                                 currentPage,
                                             ) =>
                                                 Math.min(
-                                                    pagination.last_page,
-                                                    currentPage + 1,
+                                                    pagination
+                                                        .last_page,
+
+                                                    currentPage
+                                                    + 1,
                                                 ),
                                         );
                                     }}
@@ -3171,16 +4415,31 @@ export default function PurchasesPage() {
             </section>
 
             <PurchaseFormModal
-                isOpen={isFormOpen}
-                isEditing={
-                    editingPurchase !== null
+                isOpen={
+                    isFormOpen
                 }
-                values={formValues}
-                suppliers={suppliers}
-                products={products}
-                isSubmitting={isSubmitting}
-                errorMessage={formError}
-                fieldErrors={fieldErrors}
+                isEditing={
+                    editingPurchase
+                    !== null
+                }
+                values={
+                    formValues
+                }
+                suppliers={
+                    suppliers
+                }
+                products={
+                    products
+                }
+                isSubmitting={
+                    isSubmitting
+                }
+                errorMessage={
+                    formError
+                }
+                fieldErrors={
+                    fieldErrors
+                }
                 onHeaderChange={
                     handleHeaderChange
                 }
@@ -3189,35 +4448,60 @@ export default function PurchasesPage() {
                 }
                 onAddItem={() => {
                     setFormValues(
-                        (current) => ({
+                        (
+                            current,
+                        ) => ({
                             ...current,
+
                             items: [
-                                ...current.items,
+                                ...current
+                                    .items,
+
                                 createEmptyItem(),
                             ],
                         }),
                     );
                 }}
-                onRemoveItem={(index) => {
+                onRemoveItem={(
+                    index,
+                ) => {
                     setFormValues(
-                        (current) => ({
-                            ...current,
-                            items:
-                                current.items.filter(
-                                    (
-                                        _,
-                                        itemIndex,
-                                    ) =>
-                                        itemIndex
-                                        !== index,
-                                ),
-                        }),
+                        (
+                            current,
+                        ) => {
+                            if (
+                                current
+                                    .items
+                                    .length
+                                <= 1
+                            ) {
+                                return current;
+                            }
+
+                            return {
+                                ...current,
+
+                                items:
+                                    current
+                                        .items
+                                        .filter(
+                                            (
+                                                _,
+                                                itemIndex,
+                                            ) =>
+                                                itemIndex
+                                                !== index,
+                                        ),
+                            };
+                        },
                     );
                 }}
                 onClose={
                     closePurchaseForm
                 }
-                onSubmit={(event) => {
+                onSubmit={(
+                    event,
+                ) => {
                     void submitPurchase(
                         event,
                     );
@@ -3225,17 +4509,27 @@ export default function PurchasesPage() {
             />
 
             <ReceiveStockModal
-                purchase={receivingPurchase}
-                values={receiveValues}
-                isSubmitting={isSubmitting}
-                errorMessage={receiveError}
+                purchase={
+                    receivingPurchase
+                }
+                values={
+                    receiveValues
+                }
+                isSubmitting={
+                    isSubmitting
+                }
+                errorMessage={
+                    receiveError
+                }
                 onChange={(
                     index,
                     field,
                     value,
                 ) => {
                     setReceiveValues(
-                        (current) =>
+                        (
+                            current,
+                        ) =>
                             current.map(
                                 (
                                     item,
@@ -3245,20 +4539,38 @@ export default function PurchasesPage() {
                                         === index
                                         ? {
                                             ...item,
+
                                             [field]:
                                                 value,
                                         }
                                         : item,
                             ),
                     );
+
+                    setReceiveError(
+                        '',
+                    );
                 }}
                 onClose={() => {
-                    if (!isSubmitting) {
-                        setReceivingPurchase(null);
-                        setReceiveError('');
+                    if (
+                        !isSubmitting
+                    ) {
+                        setReceivingPurchase(
+                            null,
+                        );
+
+                        setReceiveValues(
+                            [],
+                        );
+
+                        setReceiveError(
+                            '',
+                        );
                     }
                 }}
-                onSubmit={(event) => {
+                onSubmit={(
+                    event,
+                ) => {
                     void submitStockIntake(
                         event,
                     );
@@ -3266,13 +4578,26 @@ export default function PurchasesPage() {
             />
 
             <DeletePurchaseModal
-                purchase={deleteTarget}
-                isDeleting={isDeleting}
-                errorMessage={deleteError}
+                purchase={
+                    deleteTarget
+                }
+                isDeleting={
+                    isDeleting
+                }
+                errorMessage={
+                    deleteError
+                }
                 onCancel={() => {
-                    if (!isDeleting) {
-                        setDeleteTarget(null);
-                        setDeleteError('');
+                    if (
+                        !isDeleting
+                    ) {
+                        setDeleteTarget(
+                            null,
+                        );
+
+                        setDeleteError(
+                            '',
+                        );
                     }
                 }}
                 onConfirm={() => {

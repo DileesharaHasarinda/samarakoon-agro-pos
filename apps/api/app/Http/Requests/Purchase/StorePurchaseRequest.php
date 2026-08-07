@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Purchase;
 
+use App\Models\Product;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -40,13 +41,11 @@ class StorePurchaseRequest extends FormRequest
                 $this->input('notes'),
             ),
 
-            'items' => $items,
+            'items' =>
+            $items,
         ]);
     }
 
-    /**
-     * @return array<string, array<int, mixed>>
-     */
     public function rules(): array
     {
         return [
@@ -103,6 +102,12 @@ class StorePurchaseRequest extends FormRequest
                 'exists:products,id',
             ],
 
+            'items.*.purchase_unit_name' => [
+                'nullable',
+                'string',
+                'max:80',
+            ],
+
             'items.*.quantity' => [
                 'required',
                 'numeric',
@@ -117,6 +122,29 @@ class StorePurchaseRequest extends FormRequest
 
             'items.*.selling_price' => [
                 'required',
+                'numeric',
+                'min:0',
+            ],
+
+            'items.*.is_dual_unit' => [
+                'required',
+                'boolean',
+            ],
+
+            'items.*.secondary_unit' => [
+                'nullable',
+                'string',
+                'max:40',
+            ],
+
+            'items.*.conversion_factor' => [
+                'nullable',
+                'numeric',
+                'gt:0',
+            ],
+
+            'items.*.secondary_selling_price' => [
+                'nullable',
                 'numeric',
                 'min:0',
             ],
@@ -151,9 +179,6 @@ class StorePurchaseRequest extends FormRequest
         ];
     }
 
-    /**
-     * @return array<int, callable>
-     */
     public function after(): array
     {
         return [
@@ -164,6 +189,44 @@ class StorePurchaseRequest extends FormRequest
                     'items',
                     [],
                 );
+
+                if (! is_array($items)) {
+                    return;
+                }
+
+                $productIds = collect($items)
+                    ->filter(
+                        fn(mixed $item): bool =>
+                        is_array($item)
+                            && isset(
+                                $item['product_id'],
+                            ),
+                    )
+                    ->pluck(
+                        'product_id',
+                    )
+                    ->map(
+                        fn(mixed $id): int =>
+                        (int) $id,
+                    )
+                    ->filter(
+                        fn(int $id): bool =>
+                        $id > 0,
+                    )
+                    ->unique()
+                    ->values();
+
+                $products = Product::query()
+                    ->whereIn(
+                        'id',
+                        $productIds,
+                    )
+                    ->get([
+                        'id',
+                        'name',
+                        'unit',
+                    ])
+                    ->keyBy('id');
 
                 $subtotal = 0.0;
                 $itemDiscountTotal = 0.0;
@@ -191,14 +254,18 @@ class StorePurchaseRequest extends FormRequest
                     );
 
                     $lineValue =
-                        $quantity * $unitCost;
+                        $quantity
+                        * $unitCost;
 
-                    $subtotal += $lineValue;
+                    $subtotal +=
+                        $lineValue;
+
                     $itemDiscountTotal +=
                         $discount;
 
                     if (
-                        $discount > $lineValue
+                        $discount
+                        > $lineValue
                     ) {
                         $validator
                             ->errors()
@@ -209,10 +276,12 @@ class StorePurchaseRequest extends FormRequest
                     }
 
                     $manufacturedDate =
-                        $item['manufactured_date'] ?? null;
+                        $item['manufactured_date']
+                        ?? null;
 
                     $expiryDate =
-                        $item['expiry_date'] ?? null;
+                        $item['expiry_date']
+                        ?? null;
 
                     if (
                         is_string(
@@ -229,6 +298,116 @@ class StorePurchaseRequest extends FormRequest
                             ->add(
                                 "items.{$index}.expiry_date",
                                 'The expiry date must be after the manufactured date.',
+                            );
+                    }
+
+                    $isDualUnit =
+                        (bool) (
+                            $item['is_dual_unit']
+                            ?? false
+                        );
+
+                    if (! $isDualUnit) {
+                        continue;
+                    }
+
+                    $productId =
+                        (int) (
+                            $item['product_id']
+                            ?? 0
+                        );
+
+                    $product =
+                        $products->get(
+                            $productId,
+                        );
+
+                    if ($product) {
+                        $productUnit =
+                            strtolower(
+                                trim(
+                                    (string) $product->unit,
+                                ),
+                            );
+
+                        if (
+                            ! in_array(
+                                $productUnit,
+                                [
+                                    'bag',
+                                    'bags',
+                                ],
+                                true,
+                            )
+                        ) {
+                            $validator
+                                ->errors()
+                                ->add(
+                                    "items.{$index}.is_dual_unit",
+                                    'Loose Kg selling can only be enabled for products with Bag as the product unit.',
+                                );
+                        }
+                    }
+
+                    $secondaryUnit =
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $item['secondary_unit']
+                                    ?? ''
+                                ),
+                            ),
+                        );
+
+                    if (
+                        $secondaryUnit
+                        !== 'kg'
+                    ) {
+                        $validator
+                            ->errors()
+                            ->add(
+                                "items.{$index}.secondary_unit",
+                                'The loose selling unit must be Kg.',
+                            );
+                    }
+
+                    $conversionFactor =
+                        $item['conversion_factor']
+                        ?? null;
+
+                    if (
+                        $conversionFactor === null
+                        || ! is_numeric(
+                            $conversionFactor,
+                        )
+                        || (float) $conversionFactor
+                        <= 0
+                    ) {
+                        $validator
+                            ->errors()
+                            ->add(
+                                "items.{$index}.conversion_factor",
+                                'Please enter the Kg weight of one Bag.',
+                            );
+                    }
+
+                    $secondarySellingPrice =
+                        $item['secondary_selling_price']
+                        ?? null;
+
+                    if (
+                        $secondarySellingPrice === null
+                        || ! is_numeric(
+                            $secondarySellingPrice,
+                        )
+                        || (float) $secondarySellingPrice
+                        < 0
+                    ) {
+                        $validator
+                            ->errors()
+                            ->add(
+                                "items.{$index}.secondary_selling_price",
+                                'Please enter the loose Kg selling price.',
                             );
                     }
                 }
@@ -258,9 +437,6 @@ class StorePurchaseRequest extends FormRequest
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [
@@ -282,6 +458,9 @@ class StorePurchaseRequest extends FormRequest
             'items.*.product_id.required' =>
             'Please select a product.',
 
+            'items.*.product_id.exists' =>
+            'The selected product does not exist.',
+
             'items.*.quantity.required' =>
             'Please enter the quantity.',
 
@@ -292,19 +471,84 @@ class StorePurchaseRequest extends FormRequest
             'Please enter the purchase cost.',
 
             'items.*.selling_price.required' =>
-            'Please enter the selling price for this stock batch.',
+            'Please enter the full-unit selling price for this stock batch.',
+
+            'items.*.is_dual_unit.required' =>
+            'Please specify whether loose Kg selling is enabled.',
+
+            'items.*.is_dual_unit.boolean' =>
+            'The loose selling option is invalid.',
+
+            'items.*.conversion_factor.numeric' =>
+            'The Bag weight must be a valid number.',
+
+            'items.*.conversion_factor.gt' =>
+            'The Bag weight must be greater than zero.',
+
+            'items.*.secondary_selling_price.numeric' =>
+            'The loose Kg selling price must be a valid number.',
+
+            'items.*.secondary_selling_price.min' =>
+            'The loose Kg selling price cannot be negative.',
         ];
     }
 
-    /**
-     * @param array<string, mixed> $item
-     * @return array<string, mixed>
-     */
     private function normaliseItem(
         array $item,
     ): array {
+        $isDualUnit =
+            $this->booleanValue(
+                $item['is_dual_unit']
+                    ?? false,
+            );
+
+        $secondaryUnit =
+            $isDualUnit
+            ? (
+                $this->nullableString(
+                    $item['secondary_unit']
+                        ?? null,
+                )
+                ?? 'Kg'
+            )
+            : null;
+
+        $conversionFactor =
+            $isDualUnit
+            ? (
+                $item['conversion_factor']
+                ?? null
+            )
+            : 1;
+
+        $secondarySellingPrice =
+            $isDualUnit
+            ? (
+                $item['secondary_selling_price']
+                ?? null
+            )
+            : null;
+
         return [
             ...$item,
+
+            'purchase_unit_name' =>
+            $this->nullableString(
+                $item['purchase_unit_name']
+                    ?? null,
+            ),
+
+            'is_dual_unit' =>
+            $isDualUnit,
+
+            'secondary_unit' =>
+            $secondaryUnit,
+
+            'conversion_factor' =>
+            $conversionFactor,
+
+            'secondary_selling_price' =>
+            $secondarySellingPrice,
 
             'batch_number' =>
             $this->nullableString(
@@ -314,7 +558,8 @@ class StorePurchaseRequest extends FormRequest
 
             'manufactured_date' =>
             $this->nullableString(
-                $item['manufactured_date'] ?? null,
+                $item['manufactured_date']
+                    ?? null,
             ),
 
             'expiry_date' =>
@@ -331,6 +576,35 @@ class StorePurchaseRequest extends FormRequest
         ];
     }
 
+    private function booleanValue(
+        mixed $value,
+    ): bool {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return $value === 1;
+        }
+
+        if (is_string($value)) {
+            return in_array(
+                strtolower(
+                    trim($value),
+                ),
+                [
+                    '1',
+                    'true',
+                    'yes',
+                    'on',
+                ],
+                true,
+            );
+        }
+
+        return false;
+    }
+
     private function nullableString(
         mixed $value,
     ): ?string {
@@ -338,7 +612,8 @@ class StorePurchaseRequest extends FormRequest
             return null;
         }
 
-        $trimmedValue = trim($value);
+        $trimmedValue =
+            trim($value);
 
         return $trimmedValue === ''
             ? null

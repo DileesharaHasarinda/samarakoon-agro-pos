@@ -2224,9 +2224,12 @@ export default function SalesHistoryPage() {
 
                                                     <td>
                                                         {
-                                                            sale
+                                                            (sale
                                                                 .created_by
-                                                                .name
+                                                                ?.name
+                                                                ?? 'U')
+                                                                .charAt(0)
+                                                                .toUpperCase()
                                                         }
                                                     </td>
 
