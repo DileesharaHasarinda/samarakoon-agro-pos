@@ -1,29 +1,18 @@
-import {
-    useEffect,
-    useRef,
-} from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
+import { createPortal } from 'react-dom';
 
-import type {
-    FormEvent,
-} from 'react';
-
-import {
-    createPortal,
-} from 'react-dom';
-
-import type {
-    ValidationErrors,
-} from '../../types/auth';
-
+import type { ValidationErrors } from '../../types/auth';
 import type {
     PurchaseFormValues,
     PurchaseItemFormValues,
     PurchaseProductOption,
 } from '../../types/purchase';
+import type { SupplierOption } from '../../types/supplier';
 
-import type {
-    SupplierOption,
-} from '../../types/supplier';
+/* =========================================================
+   TYPES
+   ========================================================= */
 
 interface PurchaseFormModalProps {
     isOpen: boolean;
@@ -36,10 +25,7 @@ interface PurchaseFormModalProps {
     fieldErrors: ValidationErrors;
 
     onHeaderChange: (
-        field: keyof Omit<
-            PurchaseFormValues,
-            'items'
-        >,
+        field: keyof Omit<PurchaseFormValues, 'items'>,
         value: string | boolean,
     ) => void;
 
@@ -50,59 +36,59 @@ interface PurchaseFormModalProps {
     ) => void;
 
     onAddItem: () => void;
-
-    onRemoveItem: (
-        index: number,
-    ) => void;
-
+    onRemoveItem: (index: number) => void;
     onClose: () => void;
-
-    onSubmit: (
-        event: FormEvent<HTMLFormElement>,
-    ) => void;
+    onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }
 
-/**
- * These fields are part of the new dual-unit
- * purchase workflow.
- *
- * The cast helper below allows this modal to compile
- * before types/purchase.ts is updated in the next step.
- */
 type DualUnitItemField =
     | 'is_dual_unit'
     | 'conversion_factor'
     | 'secondary_unit'
     | 'secondary_selling_price';
 
-type ExtendedPurchaseItem =
-    PurchaseItemFormValues
-    & Partial<
-        Record<
-            DualUnitItemField,
-            string
-        >
-    >;
+type ExtendedPurchaseItem = PurchaseItemFormValues & Partial<Record<DualUnitItemField, string>>;
 
-const currencyFormatter =
-    new Intl.NumberFormat(
-        'en-LK',
-        {
-            style: 'currency',
-            currency: 'LKR',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        },
-    );
+interface SearchableSelectOption {
+    value: string;
+    label: string;
+    secondary?: string;
+    searchText?: string;
+}
 
-const quantityFormatter =
-    new Intl.NumberFormat(
-        'en-GB',
-        {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 3,
-        },
-    );
+interface SearchableSelectProps {
+    value: string;
+    options: SearchableSelectOption[];
+    placeholder: string;
+    searchPlaceholder: string;
+    emptyMessage: string;
+    disabled?: boolean;
+    hasError?: boolean;
+    withIcon?: boolean;
+    ariaLabel: string;
+    triggerRef?: RefObject<HTMLButtonElement | null>;
+    onChange: (value: string) => void;
+}
+
+/* =========================================================
+   FORMATTERS
+   ========================================================= */
+
+const currencyFormatter = new Intl.NumberFormat('en-LK', {
+    style: 'currency',
+    currency: 'LKR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+});
+
+const quantityFormatter = new Intl.NumberFormat('en-GB', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+});
+
+/* =========================================================
+   ICONS
+   ========================================================= */
 
 type IconName =
     | 'alert'
@@ -110,10 +96,12 @@ type IconName =
     | 'batch'
     | 'calendar'
     | 'check'
+    | 'chevron'
     | 'close'
+    | 'collapse'
+    | 'edit'
     | 'info'
     | 'invoice'
-    | 'kg'
     | 'money'
     | 'note'
     | 'package'
@@ -121,24 +109,19 @@ type IconName =
     | 'receipt'
     | 'save'
     | 'scale'
+    | 'search'
     | 'supplier'
     | 'trash'
     | 'truck';
 
-function Icon({
-    name,
-}: {
-    name: IconName;
-}) {
+function Icon({ name }: { name: IconName }) {
     const props = {
         viewBox: '0 0 24 24',
         fill: 'none',
         stroke: 'currentColor',
         strokeWidth: 2,
-        strokeLinecap:
-            'round' as const,
-        strokeLinejoin:
-            'round' as const,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
         'aria-hidden': true,
         focusable: false,
     };
@@ -151,7 +134,6 @@ function Icon({
                     <path d="M12 9v4M12 17h.01" />
                 </svg>
             );
-
         case 'bag':
             return (
                 <svg {...props}>
@@ -160,7 +142,6 @@ function Icon({
                     <path d="M9 12h6" />
                 </svg>
             );
-
         case 'batch':
             return (
                 <svg {...props}>
@@ -168,49 +149,51 @@ function Icon({
                     <path d="m3 12 9 5 9-5M3 17l9 5 9-5" />
                 </svg>
             );
-
         case 'calendar':
             return (
                 <svg {...props}>
-                    <rect
-                        x="3"
-                        y="5"
-                        width="18"
-                        height="16"
-                        rx="2"
-                    />
-
+                    <rect x="3" y="5" width="18" height="16" rx="2" />
                     <path d="M16 3v4M8 3v4M3 11h18" />
                 </svg>
             );
-
         case 'check':
             return (
                 <svg {...props}>
                     <path d="m5 12 4 4L19 6" />
                 </svg>
             );
-
+        case 'chevron':
+            return (
+                <svg {...props}>
+                    <path d="m7 10 5 5 5-5" />
+                </svg>
+            );
         case 'close':
             return (
                 <svg {...props}>
                     <path d="m6 6 12 12M18 6 6 18" />
                 </svg>
             );
-
+        case 'collapse':
+            return (
+                <svg {...props}>
+                    <path d="m18 15-6-6-6 6" />
+                </svg>
+            );
+        case 'edit':
+            return (
+                <svg {...props}>
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                </svg>
+            );
         case 'info':
             return (
                 <svg {...props}>
-                    <circle
-                        cx="12"
-                        cy="12"
-                        r="9"
-                    />
-
+                    <circle cx="12" cy="12" r="9" />
                     <path d="M12 11v5M12 8h.01" />
                 </svg>
             );
-
         case 'invoice':
             return (
                 <svg {...props}>
@@ -218,37 +201,14 @@ function Icon({
                     <path d="M9 8h6M9 12h6M9 16h4" />
                 </svg>
             );
-
-        case 'kg':
-            return (
-                <svg {...props}>
-                    <path d="M5 4v16M5 12l7-8M5 12l7 8" />
-                    <path d="M20 9a4 4 0 1 0 0 6" />
-                    <path d="M20 9v11" />
-                </svg>
-            );
-
         case 'money':
             return (
                 <svg {...props}>
-                    <rect
-                        x="3"
-                        y="5"
-                        width="18"
-                        height="14"
-                        rx="2"
-                    />
-
-                    <circle
-                        cx="12"
-                        cy="12"
-                        r="3"
-                    />
-
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <circle cx="12" cy="12" r="3" />
                     <path d="M7 9H6a1 1 0 0 0-1 1v1M17 15h1a1 1 0 0 0 1-1v-1" />
                 </svg>
             );
-
         case 'note':
             return (
                 <svg {...props}>
@@ -256,7 +216,6 @@ function Icon({
                     <path d="M14 2v6h6M8 13h8M8 17h6" />
                 </svg>
             );
-
         case 'package':
             return (
                 <svg {...props}>
@@ -264,14 +223,12 @@ function Icon({
                     <path d="m3 8 9 5 9-5M3 8v8l9 5 9-5V8M12 13v8" />
                 </svg>
             );
-
         case 'plus':
             return (
                 <svg {...props}>
                     <path d="M12 5v14M5 12h14" />
                 </svg>
             );
-
         case 'receipt':
             return (
                 <svg {...props}>
@@ -279,7 +236,6 @@ function Icon({
                     <path d="M9 8h6M9 12h6M9 16h4" />
                 </svg>
             );
-
         case 'save':
             return (
                 <svg {...props}>
@@ -287,7 +243,6 @@ function Icon({
                     <path d="M8 3v6h8V3M8 21v-7h8v7" />
                 </svg>
             );
-
         case 'scale':
             return (
                 <svg {...props}>
@@ -295,21 +250,25 @@ function Icon({
                     <path d="M8 21h8" />
                 </svg>
             );
-
+        case 'search':
+            return (
+                <svg {...props}>
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-4-4" />
+                </svg>
+            );
         case 'supplier':
             return (
                 <svg {...props}>
                     <path d="M3 21h18M6 21V4h12v17M9 8h.01M12 8h.01M15 8h.01M9 12h.01M12 12h.01M15 12h.01M9 16h.01M12 16h.01M15 16h.01" />
                 </svg>
             );
-
         case 'trash':
             return (
                 <svg {...props}>
                     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5" />
                 </svg>
             );
-
         case 'truck':
         default:
             return (
@@ -321,33 +280,17 @@ function Icon({
     }
 }
 
-function numberValue(
-    value:
-        | string
-        | number
-        | null
-        | undefined,
-): number {
-    const parsed =
-        Number(
-            value ?? 0,
-        );
+/* =========================================================
+   HELPERS
+   ========================================================= */
 
-    return Number.isFinite(
-        parsed,
-    )
-        ? parsed
-        : 0;
+function numberValue(value: string | number | null | undefined): number {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function formatQuantity(
-    value: number,
-): string {
-    return quantityFormatter.format(
-        Number.isFinite(value)
-            ? value
-            : 0,
-    );
+function formatQuantity(value: number): string {
+    return quantityFormatter.format(Number.isFinite(value) ? value : 0);
 }
 
 function getExtendedItemValue(
@@ -355,48 +298,296 @@ function getExtendedItemValue(
     field: DualUnitItemField,
     fallback = '',
 ): string {
-    const extendedItem =
-        item as ExtendedPurchaseItem;
+    const extendedItem = item as ExtendedPurchaseItem;
+    const value = extendedItem[field];
 
-    const value =
-        extendedItem[field];
-
-    if (
-        value === undefined
-        || value === null
-    ) {
+    if (value === undefined || value === null) {
         return fallback;
     }
 
     return String(value);
 }
 
-function isEnabledFlag(
-    value: string,
-): boolean {
+function isEnabledFlag(value: string): boolean {
+    return value === '1' || value === 'true' || value === 'yes';
+}
+
+function isBagUnit(unit: string | null | undefined): boolean {
+    const normalised = String(unit ?? '').trim().toLowerCase();
+    return normalised === 'bag' || normalised === 'bags';
+}
+
+/* =========================================================
+   SEARCHABLE SELECT
+   ========================================================= */
+
+function SearchableSelect({
+    value,
+    options,
+    placeholder,
+    searchPlaceholder,
+    emptyMessage,
+    disabled = false,
+    hasError = false,
+    withIcon = false,
+    ariaLabel,
+    triggerRef,
+    onChange,
+}: SearchableSelectProps) {
+    const rootRef = useRef<HTMLDivElement | null>(null);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
+    const optionButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [highlightedIndex, setHighlightedIndex] = useState(0);
+
+    const selectedOption = useMemo(
+        () => options.find((option) => option.value === value) ?? null,
+        [options, value],
+    );
+
+    const filteredOptions = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+
+        if (!query) {
+            return options;
+        }
+
+        return options.filter((option) => {
+            const searchValue = [option.label, option.secondary, option.searchText]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+
+            return searchValue.includes(query);
+        });
+    }, [options, searchQuery]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        const selectedIndex = options.findIndex((option) => option.value === value);
+        setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+
+        const timer = window.setTimeout(() => {
+            searchInputRef.current?.focus();
+            searchInputRef.current?.select();
+        }, 30);
+
+        const handleOutsideClick = (event: MouseEvent): void => {
+            if (
+                event.target instanceof Node
+                && !rootRef.current?.contains(event.target)
+            ) {
+                setIsOpen(false);
+                setSearchQuery('');
+            }
+        };
+
+        document.addEventListener('mousedown', handleOutsideClick);
+
+        return () => {
+            window.clearTimeout(timer);
+            document.removeEventListener('mousedown', handleOutsideClick);
+        };
+    }, [isOpen, options, value]);
+
+    useEffect(() => {
+        if (isOpen && searchQuery) {
+            setHighlightedIndex(0);
+        }
+    }, [searchQuery, isOpen]);
+
+    const closeDropdown = (): void => {
+        setIsOpen(false);
+        setSearchQuery('');
+    };
+
+    const chooseOption = (option: SearchableSelectOption): void => {
+        onChange(option.value);
+        closeDropdown();
+    };
+
+    const moveHighlight = (direction: number): void => {
+        if (filteredOptions.length === 0) {
+            return;
+        }
+
+        setHighlightedIndex((current) => {
+            const next = (current + direction + filteredOptions.length) % filteredOptions.length;
+            const option = filteredOptions[next];
+
+            if (option) {
+                window.setTimeout(() => {
+                    optionButtonRefs.current.get(option.value)?.scrollIntoView({ block: 'nearest' });
+                }, 0);
+            }
+
+            return next;
+        });
+    };
+
+    const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            moveHighlight(1);
+            return;
+        }
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            moveHighlight(-1);
+            return;
+        }
+
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const option = filteredOptions[highlightedIndex];
+
+            if (option) {
+                chooseOption(option);
+            }
+
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closeDropdown();
+        }
+    };
+
     return (
-        value === '1'
-        || value === 'true'
-        || value === 'yes'
+        <div ref={rootRef} className={isOpen ? 'pfm-searchable-select is-open' : 'pfm-searchable-select'}>
+            <button
+                ref={triggerRef}
+                type="button"
+                className={[
+                    'pfm-searchable-trigger',
+                    withIcon ? 'with-icon' : '',
+                    hasError ? 'has-error' : '',
+                    selectedOption ? '' : 'placeholder',
+                ]
+                    .filter(Boolean)
+                    .join(' ')}
+                disabled={disabled}
+                aria-label={ariaLabel}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
+                onClick={() => setIsOpen((current) => !current)}
+                onKeyDown={(event) => {
+                    if (
+                        (event.key === 'Enter' || event.key === 'ArrowDown' || event.key === ' ')
+                        && !isOpen
+                    ) {
+                        event.preventDefault();
+                        setIsOpen(true);
+                    }
+
+                    if (event.key === 'Escape' && isOpen) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeDropdown();
+                    }
+                }}
+            >
+                <span className="pfm-searchable-trigger-text">
+                    {selectedOption?.label ?? placeholder}
+                </span>
+
+                <span className={isOpen ? 'pfm-searchable-chevron open' : 'pfm-searchable-chevron'}>
+                    <Icon name="chevron" />
+                </span>
+            </button>
+
+            {isOpen && (
+                <div className="pfm-searchable-menu">
+                    <div className="pfm-searchable-search-wrap">
+                        <span className="pfm-searchable-search-icon">
+                            <Icon name="search" />
+                        </span>
+
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            className="pfm-searchable-search-input"
+                            value={searchQuery}
+                            placeholder={searchPlaceholder}
+                            autoComplete="off"
+                            spellCheck={false}
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                            onKeyDown={handleSearchKeyDown}
+                        />
+                    </div>
+
+                    <div className="pfm-searchable-options" role="listbox" aria-label={ariaLabel}>
+                        {filteredOptions.length === 0 ? (
+                            <div className="pfm-searchable-empty">
+                                <Icon name="search" />
+                                <strong>No results found</strong>
+                                <span>{emptyMessage}</span>
+                            </div>
+                        ) : (
+                            filteredOptions.map((option, index) => {
+                                const selected = option.value === value;
+                                const highlighted = index === highlightedIndex;
+
+                                return (
+                                    <button
+                                        ref={(node) => {
+                                            if (node) {
+                                                optionButtonRefs.current.set(option.value, node);
+                                            } else {
+                                                optionButtonRefs.current.delete(option.value);
+                                            }
+                                        }}
+                                        key={option.value}
+                                        type="button"
+                                        role="option"
+                                        aria-selected={selected}
+                                        className={[
+                                            'pfm-searchable-option',
+                                            selected ? 'selected' : '',
+                                            highlighted ? 'highlighted' : '',
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' ')}
+                                        onMouseEnter={() => setHighlightedIndex(index)}
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onClick={() => chooseOption(option)}
+                                    >
+                                        <span className="pfm-searchable-option-copy">
+                                            <strong>{option.label}</strong>
+                                            {option.secondary && <small>{option.secondary}</small>}
+                                        </span>
+
+                                        {selected && (
+                                            <span className="pfm-searchable-option-check">
+                                                <Icon name="check" />
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    <div className="pfm-searchable-keyboard-help">
+                        Type to search • ↑ ↓ move • Enter select • Esc close
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 
-function isBagUnit(
-    unit:
-        | string
-        | null
-        | undefined,
-): boolean {
-    const normalised =
-        String(unit ?? '')
-            .trim()
-            .toLowerCase();
-
-    return (
-        normalised === 'bag'
-        || normalised === 'bags'
-    );
-}
+/* =========================================================
+   SCOPED STYLES
+   ========================================================= */
 
 const purchaseFormStyles = `
 #purchase-form-modal,
@@ -429,39 +620,24 @@ const purchaseFormStyles = `
     --pfm-text: #101828;
     --pfm-text-2: #344054;
     --pfm-muted: #667085;
+
     --pfm-border: #d0d9d2;
     --pfm-border-strong: #aebdb2;
-    --pfm-surface: #ffffff;
-    --pfm-page: #f4f7f5;
 
     position: fixed !important;
     inset: 0 !important;
     z-index: 2147483647 !important;
-
     width: 100vw !important;
     height: 100dvh !important;
-
     margin: 0 !important;
     padding: 0 !important;
-
     overflow: hidden !important;
-
     color: var(--pfm-text) !important;
-
-    font-family:
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Roboto,
-        Helvetica,
-        Arial,
-        sans-serif !important;
-
+    background: transparent !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     font-size: 15px !important;
     line-height: 1.5 !important;
-
     isolation: isolate !important;
-    -webkit-font-smoothing: antialiased !important;
 }
 
 #purchase-form-modal button,
@@ -480,65 +656,66 @@ const purchaseFormStyles = `
     margin: 0 !important;
 }
 
+/*
+ * IMPORTANT SVG RESET
+ *
+ * Every Icon component renders an inline <svg>. When an SVG does not
+ * receive an explicit size, the browser can render it at its intrinsic
+ * 300px × 150px size. This root-scoped rule keeps every icon compact and
+ * also protects this modal from any global index.css SVG rules.
+ *
+ * More-specific icon rules below can still intentionally use 20px, 23px,
+ * 24px, etc.
+ */
+#purchase-form-modal svg {
+    display: block !important;
+    width: 18px !important;
+    height: 18px !important;
+    flex-shrink: 0 !important;
+}
+
+/* =========================================================
+   MODAL
+   ========================================================= */
+
 #purchase-form-modal .pfm-backdrop {
     position: absolute !important;
     inset: 0 !important;
-
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-
     padding: 14px !important;
-
-    overflow: auto !important;
-
     background: rgba(3, 18, 10, 0.76) !important;
     backdrop-filter: blur(4px) !important;
 }
 
 #purchase-form-modal .pfm-dialog {
     display: flex !important;
-
-    width: min(1280px, 100%) !important;
+    width: min(1320px, 100%) !important;
     max-height: calc(100dvh - 28px) !important;
-
-    min-width: 0 !important;
     min-height: 0 !important;
-
     flex-direction: column !important;
-
     overflow: hidden !important;
-
     background: #ffffff !important;
-
     border: 1px solid var(--pfm-border) !important;
     border-radius: 18px !important;
-
-    box-shadow:
-        0 30px 90px
-        rgba(0, 0, 0, 0.4) !important;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.40) !important;
 }
+
+/* =========================================================
+   HEADER
+   ========================================================= */
 
 #purchase-form-modal .pfm-header {
     display: flex !important;
-
     min-height: 84px !important;
     flex: 0 0 auto !important;
-
     align-items: center !important;
     justify-content: space-between !important;
     gap: 18px !important;
-
     padding: 14px 18px !important;
-
     color: #ffffff !important;
-
-    background:
-        linear-gradient(
-            135deg,
-            var(--pfm-green-950),
-            var(--pfm-green-700)
-        ) !important;
+    background: linear-gradient(135deg, var(--pfm-green-950), var(--pfm-green-700)) !important;
 }
 
 #purchase-form-modal .pfm-header-main {
@@ -550,16 +727,12 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-header-icon {
     display: grid !important;
-
     width: 46px !important;
     height: 46px !important;
     min-width: 46px !important;
-
     place-items: center !important;
-
     color: var(--pfm-green-900) !important;
     background: #ffffff !important;
-
     border-radius: 12px !important;
 }
 
@@ -570,21 +743,16 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-kicker {
     display: block !important;
-
     margin-bottom: 2px !important;
-
     color: #bbf7d0 !important;
-
     font-size: 11px !important;
     font-weight: 800 !important;
     letter-spacing: 0.06em !important;
-
     text-transform: uppercase !important;
 }
 
 #purchase-form-modal .pfm-title {
     color: #ffffff !important;
-
     font-size: 23px !important;
     font-weight: 800 !important;
     line-height: 1.2 !important;
@@ -592,47 +760,16 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-close {
     display: grid !important;
-
     width: 44px !important;
     height: 44px !important;
     min-width: 44px !important;
-
     place-items: center !important;
-
     padding: 0 !important;
-
     color: #ffffff !important;
-
-    background:
-        rgba(
-            255,
-            255,
-            255,
-            0.13
-        ) !important;
-
-    border:
-        1px solid
-        rgba(
-            255,
-            255,
-            255,
-            0.35
-        ) !important;
-
+    background: rgba(255, 255, 255, 0.13) !important;
+    border: 1px solid rgba(255, 255, 255, 0.35) !important;
     border-radius: 11px !important;
-
     cursor: pointer !important;
-}
-
-#purchase-form-modal .pfm-close:hover:not(:disabled) {
-    background:
-        rgba(
-            255,
-            255,
-            255,
-            0.24
-        ) !important;
 }
 
 #purchase-form-modal .pfm-close svg {
@@ -640,79 +777,45 @@ const purchaseFormStyles = `
     height: 20px !important;
 }
 
+/* =========================================================
+   FORM BODY
+   ========================================================= */
+
 #purchase-form-modal .pfm-form {
     display: flex !important;
-
     min-height: 0 !important;
-    flex: 1 !important;
-
+    flex: 1 1 auto !important;
     flex-direction: column !important;
-
     overflow: hidden !important;
 }
 
 #purchase-form-modal .pfm-body {
     display: flex !important;
-
     min-height: 0 !important;
-    flex: 1 !important;
-
+    flex: 1 1 auto !important;
     flex-direction: column !important;
     gap: 15px !important;
-
     padding: 16px !important;
-
     overflow-x: hidden !important;
     overflow-y: auto !important;
-
-    background: var(--pfm-page) !important;
-
+    background: #f4f7f5 !important;
     scrollbar-width: thin !important;
     scrollbar-color: #9cad9f #eaf0eb !important;
 }
 
-#purchase-form-modal .pfm-intro {
-    display: flex !important;
-
-    align-items: flex-start !important;
-    gap: 8px !important;
-
-    padding: 12px 14px !important;
-
-    color: #245134 !important;
-
-    font-size: 13px !important;
-    font-weight: 600 !important;
-
-    background: var(--pfm-green-50) !important;
-
-    border: 1px solid #b8dfc3 !important;
-    border-radius: 11px !important;
-}
-
-#purchase-form-modal .pfm-intro svg {
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
-
-    margin-top: 1px !important;
-}
+/* =========================================================
+   ALERT
+   ========================================================= */
 
 #purchase-form-modal .pfm-alert {
     display: flex !important;
-
     align-items: flex-start !important;
     gap: 9px !important;
-
     padding: 11px 13px !important;
-
     color: var(--pfm-red-800) !important;
-
     font-size: 13px !important;
     font-weight: 700 !important;
-
     background: var(--pfm-red-50) !important;
-
     border: 1px solid var(--pfm-red-100) !important;
     border-radius: 10px !important;
 }
@@ -721,59 +824,47 @@ const purchaseFormStyles = `
     width: 18px !important;
     height: 18px !important;
     min-width: 18px !important;
-
-    margin-top: 1px !important;
 }
+
+/* =========================================================
+   SECTIONS
+   ========================================================= */
 
 #purchase-form-modal .pfm-section {
     display: flex !important;
-
     min-width: 0 !important;
-
     flex-direction: column !important;
     gap: 13px !important;
-
     padding: 15px !important;
-
     background: #ffffff !important;
-
     border: 1px solid var(--pfm-border) !important;
     border-radius: 13px !important;
 }
 
 #purchase-form-modal .pfm-section-header {
     display: flex !important;
-
-    align-items: flex-start !important;
+    align-items: center !important;
     justify-content: space-between !important;
     gap: 14px !important;
-
     padding-bottom: 11px !important;
-
     border-bottom: 1px solid #e7ece8 !important;
 }
 
 #purchase-form-modal .pfm-section-heading {
     display: flex !important;
-
     min-width: 0 !important;
-
-    align-items: flex-start !important;
+    align-items: center !important;
     gap: 10px !important;
 }
 
 #purchase-form-modal .pfm-section-icon {
     display: grid !important;
-
     width: 36px !important;
     height: 36px !important;
     min-width: 36px !important;
-
     place-items: center !important;
-
     color: var(--pfm-green-900) !important;
     background: var(--pfm-green-50) !important;
-
     border: 1px solid #b8dfc3 !important;
     border-radius: 9px !important;
 }
@@ -785,77 +876,61 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-section-title {
     color: var(--pfm-text-2) !important;
-
     font-size: 16px !important;
     font-weight: 800 !important;
 }
 
-#purchase-form-modal .pfm-section-description {
-    margin-top: 2px !important;
-
-    color: var(--pfm-muted) !important;
-
-    font-size: 12px !important;
-}
+/* =========================================================
+   HEADER FIELDS
+   ========================================================= */
 
 #purchase-form-modal .pfm-header-grid {
     display: grid !important;
-
     grid-template-columns:
-        minmax(230px, 1.25fr)
-        minmax(165px, 0.7fr)
-        minmax(210px, 1fr)
-        minmax(160px, 0.7fr)
-        minmax(160px, 0.7fr) !important;
-
+        minmax(240px, 1.25fr)
+        minmax(170px, 0.7fr)
+        minmax(220px, 1fr)
+        minmax(175px, 0.7fr)
+        minmax(175px, 0.7fr) !important;
     gap: 12px !important;
+    align-items: start !important;
 }
 
 #purchase-form-modal .pfm-notes-field {
     grid-column: 1 / -1 !important;
 }
 
+/* =========================================================
+   WORKSPACE
+   ========================================================= */
+
 #purchase-form-modal .pfm-workspace {
     display: grid !important;
-
-    grid-template-columns:
-        minmax(0, 1fr)
-        295px !important;
-
+    grid-template-columns: minmax(0, 1fr) 295px !important;
     align-items: start !important;
     gap: 14px !important;
 }
 
 #purchase-form-modal .pfm-items-list {
     display: flex !important;
-
     min-width: 0 !important;
-
     flex-direction: column !important;
-    gap: 12px !important;
+    gap: 10px !important;
 }
 
 #purchase-form-modal .pfm-add-item {
     display: inline-flex !important;
-
-    min-height: 40px !important;
-
+    min-height: 42px !important;
     align-items: center !important;
     justify-content: center !important;
     gap: 7px !important;
-
-    padding: 7px 12px !important;
-
+    padding: 8px 14px !important;
     color: var(--pfm-green-900) !important;
-
     font-size: 13px !important;
     font-weight: 800 !important;
-
     background: var(--pfm-green-50) !important;
-
     border: 1px solid #b8dfc3 !important;
     border-radius: 9px !important;
-
     cursor: pointer !important;
 }
 
@@ -864,598 +939,246 @@ const purchaseFormStyles = `
     height: 16px !important;
 }
 
+/* =========================================================
+   PRODUCT ACCORDION CARD
+   ========================================================= */
+
 #purchase-form-modal .pfm-item-card {
+    position: relative !important;
     display: flex !important;
-
     min-width: 0 !important;
-
     flex-direction: column !important;
-
-    overflow: hidden !important;
-
     background: #ffffff !important;
-
     border: 1px solid var(--pfm-border) !important;
     border-radius: 12px !important;
+    overflow: visible !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+#purchase-form-modal .pfm-item-card.expanded {
+    border-color: #9acba7 !important;
+    box-shadow: 0 3px 12px rgba(21, 128, 61, 0.08) !important;
+}
+
+#purchase-form-modal .pfm-item-card.collapsed {
+    border-color: #d5ddd7 !important;
 }
 
 #purchase-form-modal .pfm-item-header {
     display: flex !important;
-
+    min-height: 58px !important;
     align-items: center !important;
     justify-content: space-between !important;
     gap: 12px !important;
-
-    padding: 11px 13px !important;
-
+    padding: 10px 12px !important;
     background: #f8faf9 !important;
+    border-radius: 12px !important;
+}
 
+#purchase-form-modal .pfm-item-card.expanded .pfm-item-header {
     border-bottom: 1px solid #e3e9e4 !important;
+    border-radius: 12px 12px 0 0 !important;
 }
 
 #purchase-form-modal .pfm-item-heading {
     display: flex !important;
-
     min-width: 0 !important;
-
     align-items: center !important;
     gap: 9px !important;
 }
 
 #purchase-form-modal .pfm-item-number {
     display: inline-flex !important;
-
-    min-height: 29px !important;
-
+    min-height: 30px !important;
     align-items: center !important;
     justify-content: center !important;
-
     padding: 4px 9px !important;
-
     color: var(--pfm-green-900) !important;
-
     font-size: 11px !important;
     font-weight: 800 !important;
-
     background: var(--pfm-green-50) !important;
-
     border: 1px solid #b8dfc3 !important;
     border-radius: 999px !important;
+    white-space: nowrap !important;
 }
 
 #purchase-form-modal .pfm-item-product {
     overflow: hidden !important;
-
     color: var(--pfm-text-2) !important;
-
     font-size: 14px !important;
-    font-weight: 750 !important;
-
+    font-weight: 800 !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
 }
 
 #purchase-form-modal .pfm-unit-badge {
     display: inline-flex !important;
-
     min-height: 27px !important;
-
     align-items: center !important;
     gap: 5px !important;
-
     padding: 3px 8px !important;
-
     color: var(--pfm-blue-800) !important;
-
     font-size: 10px !important;
     font-weight: 800 !important;
-
     background: var(--pfm-blue-50) !important;
-
     border: 1px solid var(--pfm-blue-100) !important;
     border-radius: 999px !important;
+    white-space: nowrap !important;
 }
 
-#purchase-form-modal .pfm-unit-badge svg {
-    width: 13px !important;
-    height: 13px !important;
+/* =========================================================
+   COLLAPSED PRODUCT SUMMARY
+   ========================================================= */
+
+#purchase-form-modal .pfm-collapsed-summary {
+    display: flex !important;
+    min-width: 0 !important;
+    align-items: center !important;
+    gap: 7px !important;
+    flex-wrap: wrap !important;
+    margin-left: 8px !important;
 }
+
+#purchase-form-modal .pfm-mini-summary {
+    display: inline-flex !important;
+    min-height: 28px !important;
+    align-items: center !important;
+    gap: 4px !important;
+    padding: 3px 8px !important;
+    color: var(--pfm-text-2) !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    background: #ffffff !important;
+    border: 1px solid #dde5df !important;
+    border-radius: 7px !important;
+    white-space: nowrap !important;
+}
+
+#purchase-form-modal .pfm-mini-summary strong {
+    color: var(--pfm-green-900) !important;
+    font-size: 11px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-form-modal .pfm-mini-summary.total {
+    color: var(--pfm-green-900) !important;
+    background: var(--pfm-green-50) !important;
+    border-color: #b8dfc3 !important;
+}
+
+/* =========================================================
+   ITEM HEADER ACTIONS
+   ========================================================= */
 
 #purchase-form-modal .pfm-item-header-actions {
     display: flex !important;
-
+    flex: 0 0 auto !important;
     align-items: center !important;
-    gap: 9px !important;
+    gap: 7px !important;
 }
 
 #purchase-form-modal .pfm-line-total {
     color: var(--pfm-green-900) !important;
-
     font-size: 13px !important;
-    font-weight: 800 !important;
-
+    font-weight: 850 !important;
     white-space: nowrap !important;
 }
 
+#purchase-form-modal .pfm-collapse-item,
 #purchase-form-modal .pfm-remove-item {
     display: inline-flex !important;
-
     min-height: 34px !important;
-
     align-items: center !important;
     justify-content: center !important;
     gap: 5px !important;
-
     padding: 5px 9px !important;
-
-    color: var(--pfm-red-800) !important;
-
     font-size: 11px !important;
     font-weight: 800 !important;
-
-    background: var(--pfm-red-50) !important;
-
-    border: 1px solid var(--pfm-red-100) !important;
     border-radius: 8px !important;
-
     cursor: pointer !important;
 }
 
+#purchase-form-modal .pfm-collapse-item {
+    color: var(--pfm-green-900) !important;
+    background: #ffffff !important;
+    border: 1px solid #b7c8bb !important;
+}
+
+#purchase-form-modal .pfm-collapse-item:hover {
+    background: var(--pfm-green-50) !important;
+    border-color: #8cbd99 !important;
+}
+
+#purchase-form-modal .pfm-remove-item {
+    color: var(--pfm-red-800) !important;
+    background: var(--pfm-red-50) !important;
+    border: 1px solid var(--pfm-red-100) !important;
+}
+
+#purchase-form-modal .pfm-collapse-item svg,
 #purchase-form-modal .pfm-remove-item svg {
     width: 14px !important;
     height: 14px !important;
 }
 
+/* =========================================================
+   ITEM BODY
+   ========================================================= */
+
 #purchase-form-modal .pfm-item-body {
     display: flex !important;
-
     flex-direction: column !important;
-    gap: 13px !important;
-
-    padding: 13px !important;
+    gap: 14px !important;
+    padding: 14px !important;
 }
 
+/*
+ * IMPORTANT FIX:
+ * These tracks stay fixed. Product selection no longer causes
+ * Quantity / Purchase Cost / Selling Price fields to jump up or down.
+ */
 #purchase-form-modal .pfm-item-main-grid {
     display: grid !important;
-
     grid-template-columns:
-        minmax(230px, 1.4fr)
-        minmax(110px, 0.55fr)
-        minmax(145px, 0.72fr)
-        minmax(145px, 0.72fr)
-        minmax(125px, 0.6fr) !important;
-
+        minmax(255px, 1.5fr)
+        minmax(120px, 0.55fr)
+        minmax(165px, 0.78fr)
+        minmax(165px, 0.78fr)
+        minmax(145px, 0.65fr) !important;
     gap: 11px !important;
+    align-items: start !important;
 }
 
-#purchase-form-modal .pfm-dual-unit-card {
+/*
+ * Every main label receives the same height, so long labels don't
+ * change the position of the input below them.
+ */
+#purchase-form-modal .pfm-item-main-grid > .pfm-field > .pfm-main-field-label {
     display: flex !important;
-
-    min-width: 0 !important;
-
-    flex-direction: column !important;
-    gap: 12px !important;
-
-    padding: 14px !important;
-
-    background:
-        linear-gradient(
-            135deg,
-            #f0fdf4,
-            #eff8ff
-        ) !important;
-
-    border: 1px solid #9fd4ae !important;
-    border-radius: 12px !important;
+    min-height: 38px !important;
+    align-items: flex-end !important;
+    line-height: 1.25 !important;
 }
 
-#purchase-form-modal .pfm-dual-header {
+#purchase-form-modal .pfm-main-field-feedback {
     display: flex !important;
-
+    min-height: 18px !important;
     align-items: flex-start !important;
-    justify-content: space-between !important;
-    gap: 14px !important;
 }
 
-#purchase-form-modal .pfm-dual-heading {
-    display: flex !important;
-
-    min-width: 0 !important;
-
-    align-items: flex-start !important;
-    gap: 10px !important;
-}
-
-#purchase-form-modal .pfm-dual-icon {
-    display: grid !important;
-
-    width: 39px !important;
-    height: 39px !important;
-    min-width: 39px !important;
-
-    place-items: center !important;
-
-    color: #ffffff !important;
-
-    background:
-        linear-gradient(
-            135deg,
-            var(--pfm-green-900),
-            var(--pfm-blue-800)
-        ) !important;
-
-    border-radius: 10px !important;
-}
-
-#purchase-form-modal .pfm-dual-icon svg {
-    width: 20px !important;
-    height: 20px !important;
-}
-
-#purchase-form-modal .pfm-dual-title {
-    color: var(--pfm-green-900) !important;
-
-    font-size: 15px !important;
-    font-weight: 850 !important;
-}
-
-#purchase-form-modal .pfm-dual-description {
-    margin-top: 3px !important;
-
-    color: var(--pfm-text-2) !important;
-
-    font-size: 11px !important;
-    line-height: 1.45 !important;
-}
-
-#purchase-form-modal .pfm-switch-label {
-    display: inline-flex !important;
-
-    min-height: 42px !important;
-
-    align-items: center !important;
-    gap: 8px !important;
-
-    padding: 7px 11px !important;
-
-    color: var(--pfm-text-2) !important;
-
-    font-size: 12px !important;
-    font-weight: 800 !important;
-
-    background: #ffffff !important;
-
-    border: 1px solid #9fd4ae !important;
-    border-radius: 10px !important;
-
-    cursor: pointer !important;
-}
-
-#purchase-form-modal .pfm-switch-label input {
-    width: 20px !important;
-    height: 20px !important;
-
-    margin: 0 !important;
-
-    accent-color: var(--pfm-green-700) !important;
-}
-
-#purchase-form-modal .pfm-dual-disabled-message {
-    display: flex !important;
-
-    align-items: flex-start !important;
-    gap: 8px !important;
-
-    padding: 11px 12px !important;
-
-    color: var(--pfm-muted) !important;
-
-    font-size: 12px !important;
-
-    background: rgba(255, 255, 255, 0.72) !important;
-
-    border: 1px dashed #9fd4ae !important;
-    border-radius: 10px !important;
-}
-
-#purchase-form-modal .pfm-dual-disabled-message svg {
-    width: 17px !important;
-    height: 17px !important;
-    min-width: 17px !important;
-}
-
-#purchase-form-modal .pfm-dual-grid {
-    display: grid !important;
-
-    grid-template-columns:
-        repeat(
-            3,
-            minmax(0, 1fr)
-        ) !important;
-
-    gap: 11px !important;
-}
-
-#purchase-form-modal .pfm-dual-note {
-    display: flex !important;
-
-    align-items: flex-start !important;
-    gap: 8px !important;
-
-    padding: 10px 12px !important;
-
-    color: var(--pfm-blue-800) !important;
-
-    font-size: 11px !important;
-    font-weight: 650 !important;
-
-    background: rgba(255, 255, 255, 0.78) !important;
-
-    border: 1px solid var(--pfm-blue-100) !important;
-    border-radius: 9px !important;
-}
-
-#purchase-form-modal .pfm-dual-note svg {
-    width: 16px !important;
-    height: 16px !important;
-    min-width: 16px !important;
-
-    margin-top: 1px !important;
-}
-
-#purchase-form-modal .pfm-preview-grid {
-    display: grid !important;
-
-    grid-template-columns:
-        repeat(
-            4,
-            minmax(0, 1fr)
-        ) !important;
-
-    gap: 9px !important;
-}
-
-#purchase-form-modal .pfm-preview-box {
-    display: flex !important;
-
-    min-width: 0 !important;
-    min-height: 76px !important;
-
-    flex-direction: column !important;
-    justify-content: center !important;
-    gap: 3px !important;
-
-    padding: 10px !important;
-
-    background: #ffffff !important;
-
-    border: 1px solid #c4ddcb !important;
-    border-radius: 9px !important;
-}
-
-#purchase-form-modal .pfm-preview-box span {
-    color: var(--pfm-muted) !important;
-
-    font-size: 9px !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.04em !important;
-
-    text-transform: uppercase !important;
-}
-
-#purchase-form-modal .pfm-preview-box strong {
-    overflow: hidden !important;
-
-    color: var(--pfm-text-2) !important;
-
-    font-size: 14px !important;
-    font-weight: 850 !important;
-
-    text-overflow: ellipsis !important;
-}
-
-#purchase-form-modal .pfm-preview-box.profit strong {
-    color: var(--pfm-green-800) !important;
-}
-
-#purchase-form-modal .pfm-batch-heading {
-    display: flex !important;
-
-    align-items: center !important;
-    gap: 7px !important;
-
-    padding-top: 3px !important;
-
-    color: var(--pfm-muted) !important;
-
-    font-size: 10px !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.04em !important;
-
-    text-transform: uppercase !important;
-}
-
-#purchase-form-modal .pfm-batch-heading svg {
-    width: 14px !important;
-    height: 14px !important;
-}
-
-#purchase-form-modal .pfm-item-batch-grid {
-    display: grid !important;
-
-    grid-template-columns:
-        minmax(160px, 0.8fr)
-        minmax(150px, 0.7fr)
-        minmax(150px, 0.7fr)
-        minmax(200px, 1.1fr) !important;
-
-    gap: 11px !important;
-}
-
-#purchase-form-modal .pfm-summary-column {
-    position: sticky !important;
-    top: 0 !important;
-
-    display: flex !important;
-
-    min-width: 0 !important;
-
-    flex-direction: column !important;
-    gap: 12px !important;
-}
-
-#purchase-form-modal .pfm-summary-card,
-#purchase-form-modal .pfm-receive-card {
-    overflow: hidden !important;
-
-    background: #ffffff !important;
-
-    border: 1px solid var(--pfm-border) !important;
-    border-radius: 12px !important;
-}
-
-#purchase-form-modal .pfm-summary-header {
-    display: flex !important;
-
-    align-items: center !important;
-    gap: 8px !important;
-
-    padding: 12px 13px !important;
-
-    color: var(--pfm-text-2) !important;
-
-    font-size: 14px !important;
-    font-weight: 800 !important;
-
-    background: #f8faf9 !important;
-
-    border-bottom: 1px solid #e3e9e4 !important;
-}
-
-#purchase-form-modal .pfm-summary-header svg {
-    width: 17px !important;
-    height: 17px !important;
-
-    color: var(--pfm-green-700) !important;
-}
-
-#purchase-form-modal .pfm-summary-lines {
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-#purchase-form-modal .pfm-summary-line {
-    display: flex !important;
-
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 12px !important;
-
-    padding: 10px 13px !important;
-
-    color: var(--pfm-muted) !important;
-
-    font-size: 12px !important;
-
-    border-bottom: 1px solid #edf1ee !important;
-}
-
-#purchase-form-modal .pfm-summary-line strong {
-    color: var(--pfm-text-2) !important;
-
-    font-size: 12px !important;
-    font-weight: 800 !important;
-
-    text-align: right !important;
-    white-space: nowrap !important;
-}
-
-#purchase-form-modal .pfm-summary-line.discount strong {
-    color: var(--pfm-red-800) !important;
-}
-
-#purchase-form-modal .pfm-summary-line.total {
-    padding: 14px 13px !important;
-
-    color: var(--pfm-green-900) !important;
-
-    font-size: 13px !important;
-    font-weight: 800 !important;
-
-    background: var(--pfm-green-50) !important;
-
-    border-bottom: 0 !important;
-}
-
-#purchase-form-modal .pfm-summary-line.total strong {
-    color: var(--pfm-green-900) !important;
-
-    font-size: 18px !important;
-    font-weight: 900 !important;
-}
-
-#purchase-form-modal .pfm-receive-option {
-    display: flex !important;
-
-    align-items: flex-start !important;
-    gap: 10px !important;
-
-    padding: 13px !important;
-
-    cursor: pointer !important;
-}
-
-#purchase-form-modal .pfm-receive-option input {
-    width: 20px !important;
-    height: 20px !important;
-    min-width: 20px !important;
-
-    margin: 1px 0 0 !important;
-
-    accent-color: var(--pfm-green-700) !important;
-}
-
-#purchase-form-modal .pfm-receive-title {
-    display: flex !important;
-
-    align-items: center !important;
-    gap: 6px !important;
-
-    color: var(--pfm-text-2) !important;
-
-    font-size: 13px !important;
-    font-weight: 800 !important;
-}
-
-#purchase-form-modal .pfm-receive-title svg {
-    width: 16px !important;
-    height: 16px !important;
-
-    color: var(--pfm-green-700) !important;
-}
-
-#purchase-form-modal .pfm-receive-description {
-    display: block !important;
-
-    margin-top: 4px !important;
-
-    color: var(--pfm-muted) !important;
-
-    font-size: 11px !important;
-    line-height: 1.5 !important;
-}
+/* =========================================================
+   FIELD
+   ========================================================= */
 
 #purchase-form-modal .pfm-field {
     display: grid !important;
-
     min-width: 0 !important;
-
+    align-content: start !important;
     gap: 6px !important;
 }
 
 #purchase-form-modal .pfm-field-header {
     display: flex !important;
-
     align-items: center !important;
     justify-content: space-between !important;
     gap: 8px !important;
@@ -1463,7 +1186,6 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-label {
     color: var(--pfm-text-2) !important;
-
     font-size: 12px !important;
     font-weight: 750 !important;
 }
@@ -1474,47 +1196,38 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-optional {
     display: inline-flex !important;
-
     margin-left: 5px !important;
     padding: 2px 5px !important;
-
     color: var(--pfm-muted) !important;
-
     font-size: 8px !important;
     font-weight: 700 !important;
-
     background: #f2f4f7 !important;
-
     border-radius: 999px !important;
 }
 
 #purchase-form-modal .pfm-counter {
     color: var(--pfm-muted) !important;
-
     font-size: 9px !important;
 }
 
 #purchase-form-modal .pfm-control-wrap {
     position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
 }
 
 #purchase-form-modal .pfm-control-icon {
     position: absolute !important;
-
     top: 50% !important;
     left: 11px !important;
-
+    z-index: 3 !important;
     display: grid !important;
-
     width: 16px !important;
     height: 16px !important;
-
     place-items: center !important;
-
     color: var(--pfm-muted) !important;
-
     transform: translateY(-50%) !important;
-
     pointer-events: none !important;
 }
 
@@ -1530,33 +1243,24 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-currency-prefix {
     position: absolute !important;
-
     top: 50% !important;
     left: 10px !important;
-
+    z-index: 2 !important;
     color: var(--pfm-muted) !important;
-
     font-size: 9px !important;
     font-weight: 800 !important;
-
     transform: translateY(-50%) !important;
-
     pointer-events: none !important;
 }
 
 #purchase-form-modal .pfm-suffix {
     position: absolute !important;
-
     top: 50% !important;
     right: 10px !important;
-
     color: var(--pfm-muted) !important;
-
     font-size: 10px !important;
     font-weight: 800 !important;
-
     transform: translateY(-50%) !important;
-
     pointer-events: none !important;
 }
 
@@ -1564,22 +1268,15 @@ const purchaseFormStyles = `
 #purchase-form-modal .pfm-select,
 #purchase-form-modal .pfm-textarea {
     display: block !important;
-
     width: 100% !important;
     min-width: 0 !important;
-
     color: var(--pfm-text) !important;
-
     font-size: 14px !important;
     font-weight: 550 !important;
-
     outline: none !important;
-
     background: #ffffff !important;
-
     border: 1px solid var(--pfm-border-strong) !important;
     border-radius: 9px !important;
-
     box-shadow: none !important;
 }
 
@@ -1595,7 +1292,6 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-select {
     padding: 0 10px !important;
-    cursor: pointer !important;
 }
 
 #purchase-form-modal .pfm-input.with-icon,
@@ -1613,11 +1309,8 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-textarea {
     min-height: 80px !important;
-
     padding: 10px 11px !important;
-
     line-height: 1.5 !important;
-
     resize: vertical !important;
 }
 
@@ -1636,12 +1329,8 @@ const purchaseFormStyles = `
 #purchase-form-modal .pfm-textarea:focus,
 #purchase-form-modal button:focus-visible {
     outline: none !important;
-
     border-color: var(--pfm-green-700) !important;
-
-    box-shadow:
-        0 0 0 4px
-        rgba(21, 128, 61, 0.14) !important;
+    box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.14) !important;
 }
 
 #purchase-form-modal .pfm-input:disabled,
@@ -1654,69 +1343,483 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-field-error {
     color: var(--pfm-red-800) !important;
-
     font-size: 11px !important;
     font-weight: 650 !important;
 }
 
-#purchase-form-modal .pfm-field-error::before {
-    content: "• " !important;
-    font-weight: 900 !important;
-}
-
 #purchase-form-modal .pfm-help {
     display: flex !important;
-
     align-items: flex-start !important;
     gap: 5px !important;
-
-    min-height: 15px !important;
-
     color: var(--pfm-muted) !important;
-
     font-size: 10px !important;
     line-height: 1.4 !important;
 }
 
-#purchase-form-modal .pfm-help svg {
-    width: 13px !important;
-    height: 13px !important;
-    min-width: 13px !important;
+/* =========================================================
+   SEARCHABLE DROPDOWN
+   ========================================================= */
 
-    margin-top: 1px !important;
+#purchase-form-modal .pfm-searchable-select {
+    position: relative !important;
+    width: 100% !important;
+    min-width: 0 !important;
 }
 
-#purchase-form-modal .pfm-actions {
+#purchase-form-modal .pfm-searchable-select.is-open {
+    z-index: 600 !important;
+}
+
+#purchase-form-modal .pfm-searchable-trigger {
     display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 44px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    padding: 0 10px !important;
+    color: var(--pfm-text) !important;
+    font-size: 14px !important;
+    font-weight: 550 !important;
+    text-align: left !important;
+    background: #ffffff !important;
+    border: 1px solid var(--pfm-border-strong) !important;
+    border-radius: 9px !important;
+    cursor: pointer !important;
+}
 
-    min-height: 72px !important;
-    flex: 0 0 auto !important;
+#purchase-form-modal .pfm-searchable-trigger.with-icon {
+    padding-left: 36px !important;
+}
 
+#purchase-form-modal .pfm-searchable-trigger.placeholder {
+    color: var(--pfm-muted) !important;
+}
+
+#purchase-form-modal .pfm-searchable-trigger.has-error {
+    border-color: var(--pfm-red-800) !important;
+}
+
+#purchase-form-modal .pfm-searchable-trigger-text {
+    min-width: 0 !important;
+    flex: 1 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#purchase-form-modal .pfm-searchable-chevron {
+    display: grid !important;
+    width: 20px !important;
+    height: 20px !important;
+    place-items: center !important;
+    color: var(--pfm-muted) !important;
+    transition: transform 0.15s ease !important;
+}
+
+#purchase-form-modal .pfm-searchable-chevron.open {
+    transform: rotate(180deg) !important;
+}
+
+#purchase-form-modal .pfm-searchable-chevron svg {
+    width: 17px !important;
+    height: 17px !important;
+}
+
+#purchase-form-modal .pfm-searchable-menu {
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    left: 0 !important;
+    z-index: 999 !important;
+    width: 100% !important;
+    min-width: min(360px, 85vw) !important;
+    padding: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #b7c4ba !important;
+    border-radius: 11px !important;
+    box-shadow: 0 18px 45px rgba(16, 24, 40, 0.18) !important;
+}
+
+#purchase-form-modal .pfm-searchable-search-wrap {
+    position: relative !important;
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid #edf1ee !important;
+}
+
+#purchase-form-modal .pfm-searchable-search-icon {
+    position: absolute !important;
+    top: 13px !important;
+    left: 11px !important;
+    display: grid !important;
+    width: 18px !important;
+    height: 18px !important;
+    place-items: center !important;
+    color: var(--pfm-muted) !important;
+    pointer-events: none !important;
+}
+
+#purchase-form-modal .pfm-searchable-search-input {
+    display: block !important;
+    width: 100% !important;
+    height: 42px !important;
+    padding: 0 12px 0 38px !important;
+    color: var(--pfm-text) !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    background: #f9fbfa !important;
+    border: 1px solid var(--pfm-border-strong) !important;
+    border-radius: 9px !important;
+    outline: none !important;
+}
+
+#purchase-form-modal .pfm-searchable-options {
+    max-height: 260px !important;
+    margin-top: 7px !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin !important;
+}
+
+#purchase-form-modal .pfm-searchable-option {
+    display: flex !important;
+    width: 100% !important;
+    min-height: 48px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    padding: 8px 10px !important;
+    color: var(--pfm-text-2) !important;
+    text-align: left !important;
+    background: #ffffff !important;
+    border: 1px solid transparent !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+}
+
+#purchase-form-modal .pfm-searchable-option.highlighted,
+#purchase-form-modal .pfm-searchable-option:hover {
+    background: var(--pfm-green-50) !important;
+    border-color: #b8dfc3 !important;
+}
+
+#purchase-form-modal .pfm-searchable-option.selected {
+    color: var(--pfm-green-900) !important;
+    background: #e9f8ee !important;
+    border-color: #8fc69e !important;
+}
+
+#purchase-form-modal .pfm-searchable-option-copy {
+    display: flex !important;
+    min-width: 0 !important;
+    flex: 1 !important;
+    flex-direction: column !important;
+}
+
+#purchase-form-modal .pfm-searchable-option-copy strong {
+    overflow: hidden !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#purchase-form-modal .pfm-searchable-option-copy small {
+    color: var(--pfm-muted) !important;
+    font-size: 10px !important;
+}
+
+#purchase-form-modal .pfm-searchable-option-check {
+    display: grid !important;
+    width: 25px !important;
+    height: 25px !important;
+    place-items: center !important;
+    color: #ffffff !important;
+    background: var(--pfm-green-700) !important;
+    border-radius: 50% !important;
+}
+
+#purchase-form-modal .pfm-searchable-option-check svg {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+#purchase-form-modal .pfm-searchable-empty {
+    display: flex !important;
+    min-height: 100px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    color: var(--pfm-muted) !important;
+    text-align: center !important;
+}
+
+#purchase-form-modal .pfm-searchable-empty svg {
+    width: 24px !important;
+    height: 24px !important;
+    color: var(--pfm-green-700) !important;
+}
+
+#purchase-form-modal .pfm-searchable-keyboard-help {
+    margin-top: 7px !important;
+    padding-top: 7px !important;
+    color: var(--pfm-muted) !important;
+    font-size: 9px !important;
+    font-weight: 650 !important;
+    text-align: center !important;
+    border-top: 1px solid #edf1ee !important;
+}
+
+/* =========================================================
+   DUAL UNIT
+   ========================================================= */
+
+#purchase-form-modal .pfm-dual-unit-card {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 14px !important;
+    background: linear-gradient(135deg, #f0fdf4, #eff8ff) !important;
+    border: 1px solid #9fd4ae !important;
+    border-radius: 12px !important;
+}
+
+#purchase-form-modal .pfm-dual-header {
+    display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     gap: 14px !important;
+}
 
-    padding: 12px 17px !important;
+#purchase-form-modal .pfm-dual-heading {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+}
 
+#purchase-form-modal .pfm-dual-icon {
+    display: grid !important;
+    width: 39px !important;
+    height: 39px !important;
+    place-items: center !important;
+    color: #ffffff !important;
+    background: linear-gradient(135deg, var(--pfm-green-900), var(--pfm-blue-800)) !important;
+    border-radius: 10px !important;
+}
+
+#purchase-form-modal .pfm-dual-title {
+    color: var(--pfm-green-900) !important;
+    font-size: 15px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-form-modal .pfm-switch-label {
+    display: inline-flex !important;
+    min-height: 42px !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 7px 11px !important;
+    color: var(--pfm-text-2) !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
     background: #ffffff !important;
+    border: 1px solid #9fd4ae !important;
+    border-radius: 10px !important;
+    cursor: pointer !important;
+}
 
+#purchase-form-modal .pfm-switch-label input {
+    width: 20px !important;
+    height: 20px !important;
+    accent-color: var(--pfm-green-700) !important;
+}
+
+#purchase-form-modal .pfm-dual-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 11px !important;
+}
+
+#purchase-form-modal .pfm-preview-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+}
+
+#purchase-form-modal .pfm-preview-box {
+    display: flex !important;
+    min-height: 76px !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 10px !important;
+    background: #ffffff !important;
+    border: 1px solid #c4ddcb !important;
+    border-radius: 9px !important;
+}
+
+#purchase-form-modal .pfm-preview-box span {
+    color: var(--pfm-muted) !important;
+    font-size: 9px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+}
+
+#purchase-form-modal .pfm-preview-box strong {
+    color: var(--pfm-text-2) !important;
+    font-size: 14px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-form-modal .pfm-preview-box.profit strong {
+    color: var(--pfm-green-800) !important;
+}
+
+/* =========================================================
+   BATCH
+   ========================================================= */
+
+#purchase-form-modal .pfm-batch-heading {
+    display: flex !important;
+    align-items: center !important;
+    gap: 7px !important;
+    color: var(--pfm-muted) !important;
+    font-size: 10px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+}
+
+#purchase-form-modal .pfm-item-batch-grid {
+    display: grid !important;
+    grid-template-columns:
+        minmax(160px, 0.8fr)
+        minmax(150px, 0.7fr)
+        minmax(150px, 0.7fr)
+        minmax(200px, 1.1fr) !important;
+    gap: 11px !important;
+}
+
+/* =========================================================
+   SUMMARY
+   ========================================================= */
+
+#purchase-form-modal .pfm-summary-column {
+    position: sticky !important;
+    top: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+}
+
+#purchase-form-modal .pfm-summary-card,
+#purchase-form-modal .pfm-receive-card {
+    overflow: hidden !important;
+    background: #ffffff !important;
+    border: 1px solid var(--pfm-border) !important;
+    border-radius: 12px !important;
+}
+
+#purchase-form-modal .pfm-summary-header {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 12px 13px !important;
+    color: var(--pfm-text-2) !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    background: #f8faf9 !important;
+    border-bottom: 1px solid #e3e9e4 !important;
+}
+
+#purchase-form-modal .pfm-summary-header svg {
+    width: 17px !important;
+    height: 17px !important;
+    color: var(--pfm-green-700) !important;
+}
+
+#purchase-form-modal .pfm-summary-line {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    padding: 10px 13px !important;
+    color: var(--pfm-muted) !important;
+    font-size: 12px !important;
+    border-bottom: 1px solid #edf1ee !important;
+}
+
+#purchase-form-modal .pfm-summary-line strong {
+    color: var(--pfm-text-2) !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+}
+
+#purchase-form-modal .pfm-summary-line.discount strong {
+    color: var(--pfm-red-800) !important;
+}
+
+#purchase-form-modal .pfm-summary-line.total {
+    padding: 14px !important;
+    color: var(--pfm-green-900) !important;
+    background: var(--pfm-green-50) !important;
+}
+
+#purchase-form-modal .pfm-summary-line.total strong {
+    color: var(--pfm-green-900) !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+}
+
+#purchase-form-modal .pfm-receive-option {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    padding: 13px !important;
+}
+
+#purchase-form-modal .pfm-receive-option input {
+    width: 20px !important;
+    height: 20px !important;
+    accent-color: var(--pfm-green-700) !important;
+}
+
+#purchase-form-modal .pfm-receive-title {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    color: var(--pfm-text-2) !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+}
+
+#purchase-form-modal .pfm-receive-description {
+    display: block !important;
+    margin-top: 4px !important;
+    color: var(--pfm-muted) !important;
+    font-size: 11px !important;
+}
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+#purchase-form-modal .pfm-actions {
+    display: flex !important;
+    min-height: 72px !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 14px !important;
+    padding: 12px 17px !important;
+    background: #ffffff !important;
     border-top: 1px solid var(--pfm-border) !important;
 }
 
 #purchase-form-modal .pfm-action-note {
     display: flex !important;
-
     align-items: center !important;
     gap: 7px !important;
-
     color: var(--pfm-muted) !important;
-
     font-size: 11px !important;
-}
-
-#purchase-form-modal .pfm-action-note svg {
-    width: 15px !important;
-    height: 15px !important;
 }
 
 #purchase-form-modal .pfm-action-buttons {
@@ -1727,49 +1830,27 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-button {
     display: inline-flex !important;
-
     min-height: 46px !important;
-
     align-items: center !important;
     justify-content: center !important;
     gap: 7px !important;
-
     padding: 8px 15px !important;
-
     font-size: 14px !important;
     font-weight: 800 !important;
-
     border-radius: 10px !important;
-
     cursor: pointer !important;
-}
-
-#purchase-form-modal .pfm-button svg {
-    width: 17px !important;
-    height: 17px !important;
 }
 
 #purchase-form-modal .pfm-cancel {
     color: var(--pfm-text-2) !important;
     background: #ffffff !important;
-
     border: 1px solid var(--pfm-border-strong) !important;
 }
 
 #purchase-form-modal .pfm-submit {
     color: #ffffff !important;
     background: var(--pfm-green-700) !important;
-
     border: 1px solid var(--pfm-green-700) !important;
-
-    box-shadow:
-        0 5px 14px
-        rgba(21, 128, 61, 0.2) !important;
-}
-
-#purchase-form-modal .pfm-submit:hover:not(:disabled) {
-    background: var(--pfm-green-800) !important;
-    border-color: var(--pfm-green-800) !important;
 }
 
 #purchase-form-modal button:disabled {
@@ -1780,14 +1861,9 @@ const purchaseFormStyles = `
 #purchase-form-modal .pfm-spinner {
     width: 16px !important;
     height: 16px !important;
-
-    border:
-        2px solid
-        rgba(255, 255, 255, 0.45) !important;
-
+    border: 2px solid rgba(255, 255, 255, 0.45) !important;
     border-top-color: #ffffff !important;
     border-radius: 50% !important;
-
     animation: pfm-spin 700ms linear infinite !important;
 }
 
@@ -1797,46 +1873,37 @@ const purchaseFormStyles = `
     }
 }
 
-@media (max-width: 1120px) {
-    #purchase-form-modal .pfm-header-grid {
-        grid-template-columns:
-            repeat(
-                2,
-                minmax(0, 1fr)
-            ) !important;
-    }
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
 
+@media (max-width: 1180px) {
     #purchase-form-modal .pfm-workspace {
         grid-template-columns: 1fr !important;
     }
 
     #purchase-form-modal .pfm-summary-column {
         position: static !important;
-
         display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
 
-        grid-template-columns:
-            repeat(
-                2,
-                minmax(0, 1fr)
-            ) !important;
+@media (max-width: 1050px) {
+    #purchase-form-modal .pfm-item-main-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 
-    #purchase-form-modal .pfm-item-main-grid {
-        grid-template-columns:
-            minmax(230px, 1.2fr)
-            repeat(
-                2,
-                minmax(130px, 0.7fr)
-            ) !important;
+    #purchase-form-modal .pfm-item-main-grid > .pfm-field > .pfm-main-field-label {
+        min-height: 22px !important;
+    }
+
+    #purchase-form-modal .pfm-header-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 
     #purchase-form-modal .pfm-preview-grid {
-        grid-template-columns:
-            repeat(
-                2,
-                minmax(0, 1fr)
-            ) !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 }
 
@@ -1849,16 +1916,7 @@ const purchaseFormStyles = `
     #purchase-form-modal .pfm-dialog {
         width: 100% !important;
         max-height: 97dvh !important;
-
-        border-right: 0 !important;
-        border-bottom: 0 !important;
-        border-left: 0 !important;
-
         border-radius: 18px 18px 0 0 !important;
-    }
-
-    #purchase-form-modal .pfm-title {
-        font-size: 20px !important;
     }
 
     #purchase-form-modal .pfm-body {
@@ -1878,44 +1936,42 @@ const purchaseFormStyles = `
         grid-column: auto !important;
     }
 
-    #purchase-form-modal .pfm-section-header,
-    #purchase-form-modal .pfm-item-header,
+    #purchase-form-modal .pfm-item-header {
+        align-items: stretch !important;
+        flex-direction: column !important;
+    }
+
+    #purchase-form-modal .pfm-item-heading {
+        flex-wrap: wrap !important;
+    }
+
+    #purchase-form-modal .pfm-collapsed-summary {
+        margin-left: 0 !important;
+    }
+
+    #purchase-form-modal .pfm-item-header-actions {
+        justify-content: flex-end !important;
+        flex-wrap: wrap !important;
+    }
+
     #purchase-form-modal .pfm-dual-header,
     #purchase-form-modal .pfm-actions {
         align-items: stretch !important;
         flex-direction: column !important;
     }
 
-    #purchase-form-modal .pfm-add-item,
-    #purchase-form-modal .pfm-remove-item,
-    #purchase-form-modal .pfm-switch-label {
-        width: 100% !important;
-    }
-
-    #purchase-form-modal .pfm-item-header-actions {
-        align-items: stretch !important;
-        flex-direction: column !important;
-    }
-
-    #purchase-form-modal .pfm-action-note {
-        justify-content: center !important;
-        text-align: center !important;
-    }
-
     #purchase-form-modal .pfm-action-buttons {
         display: grid !important;
-
         width: 100% !important;
-
-        grid-template-columns:
-            repeat(
-                2,
-                minmax(0, 1fr)
-            ) !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 
     #purchase-form-modal .pfm-button {
         width: 100% !important;
+    }
+
+    #purchase-form-modal .pfm-searchable-menu {
+        min-width: 100% !important;
     }
 }
 
@@ -1924,20 +1980,11 @@ const purchaseFormStyles = `
         grid-template-columns: 1fr !important;
     }
 }
-
-@media (prefers-reduced-motion: reduce) {
-    #purchase-form-modal *,
-    #purchase-form-modal *::before,
-    #purchase-form-modal *::after {
-        transition: none !important;
-        scroll-behavior: auto !important;
-    }
-
-    #purchase-form-modal .pfm-spinner {
-        animation-duration: 1.2s !important;
-    }
-}
 `;
+
+/* =========================================================
+   COMPONENT
+   ========================================================= */
 
 export default function PurchaseFormModal({
     isOpen,
@@ -1955,162 +2002,145 @@ export default function PurchaseFormModal({
     onClose,
     onSubmit,
 }: PurchaseFormModalProps) {
-    const supplierInputRef =
-        useRef<HTMLSelectElement | null>(
-            null,
-        );
+    const supplierInputRef = useRef<HTMLButtonElement | null>(null);
+    const onCloseRef = useRef(onClose);
+    const isSubmittingRef = useRef(isSubmitting);
 
-    const onCloseRef =
-        useRef(onClose);
+    /*
+     * Stores IDs from the previous render so we can detect when a
+     * brand-new product row has been added.
+     */
+    const previousItemIdsRef = useRef<string[]>([]);
 
-    const isSubmittingRef =
-        useRef(isSubmitting);
+    /*
+     * Only one purchase item stays expanded.
+     */
+    const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+
+    const supplierSearchOptions = useMemo<SearchableSelectOption[]>(
+        () =>
+            suppliers.map((supplier) => ({
+                value: String(supplier.id),
+                label: supplier.name,
+                searchText: `${supplier.name} ${supplier.id}`,
+            })),
+        [suppliers],
+    );
+
+    const productSearchOptions = useMemo<SearchableSelectOption[]>(
+        () =>
+            products.map((product) => ({
+                value: String(product.id),
+                label: product.name,
+                secondary: `${product.category.name} • ${product.unit}`,
+                searchText: `${product.name} ${product.category.name} ${product.unit} ${product.id}`,
+            })),
+        [products],
+    );
 
     useEffect(() => {
-        onCloseRef.current =
-            onClose;
+        onCloseRef.current = onClose;
     }, [onClose]);
 
     useEffect(() => {
-        isSubmittingRef.current =
-            isSubmitting;
+        isSubmittingRef.current = isSubmitting;
     }, [isSubmitting]);
+
+    /*
+     * Accordion management.
+     *
+     * When a new product row is added:
+     * - old product automatically collapses
+     * - new product automatically expands
+     */
+    useEffect(() => {
+        if (!isOpen) {
+            previousItemIdsRef.current = [];
+            setExpandedRowId(null);
+            return;
+        }
+
+        const currentIds = values.items.map((item) => String(item.row_id));
+        const previousIds = previousItemIdsRef.current;
+        const addedId = currentIds.find((id) => !previousIds.includes(id));
+
+        if (addedId) {
+            setExpandedRowId(addedId);
+        } else if (
+            currentIds.length > 0
+            && (!expandedRowId || !currentIds.includes(expandedRowId))
+        ) {
+            setExpandedRowId(currentIds[0]);
+        }
+
+        previousItemIdsRef.current = currentIds;
+    }, [isOpen, values.items, expandedRowId]);
 
     useEffect(() => {
         if (!isOpen) {
             return;
         }
 
-        const previousOverflow =
-            document.body.style.overflow;
-
+        const previousOverflow = document.body.style.overflow;
         const previouslyFocused =
-            document.activeElement
-                instanceof HTMLElement
-                ? document.activeElement
-                : null;
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
-        document.body.style.overflow =
-            'hidden';
+        document.body.style.overflow = 'hidden';
 
-        const focusTimer =
-            window.setTimeout(
-                () => {
-                    supplierInputRef.current
-                        ?.focus();
-                },
-                80,
-            );
+        const focusTimer = window.setTimeout(() => {
+            supplierInputRef.current?.focus();
+        }, 80);
 
-        const handleKeyDown = (
-            event: KeyboardEvent,
-        ): void => {
-            if (
-                event.key === 'Escape'
-                && !isSubmittingRef.current
-            ) {
+        const handleKeyDown = (event: KeyboardEvent): void => {
+            if (event.key === 'Escape' && !isSubmittingRef.current) {
                 onCloseRef.current();
             }
         };
 
-        window.addEventListener(
-            'keydown',
-            handleKeyDown,
-        );
+        window.addEventListener('keydown', handleKeyDown);
 
         return () => {
-            window.clearTimeout(
-                focusTimer,
-            );
-
-            document.body.style.overflow =
-                previousOverflow;
-
-            window.removeEventListener(
-                'keydown',
-                handleKeyDown,
-            );
-
+            window.clearTimeout(focusTimer);
+            document.body.style.overflow = previousOverflow;
+            window.removeEventListener('keydown', handleKeyDown);
             previouslyFocused?.focus();
         };
     }, [isOpen]);
 
-    if (
-        !isOpen
-        || typeof document === 'undefined'
-    ) {
+    if (!isOpen || typeof document === 'undefined') {
         return null;
     }
 
-    const itemSubtotal =
-        values.items.reduce(
-            (
-                total,
-                item,
-            ) =>
-                total
-                + (
-                    numberValue(
-                        item.quantity,
-                    )
-                    * numberValue(
-                        item.unit_cost,
-                    )
-                ),
-            0,
-        );
+    /* =====================================================
+       TOTALS
+       ===================================================== */
 
-    const itemDiscount =
-        values.items.reduce(
-            (
-                total,
-                item,
-            ) =>
-                total
-                + numberValue(
-                    item.discount,
-                ),
-            0,
-        );
+    const itemSubtotal = values.items.reduce(
+        (total, item) => total + numberValue(item.quantity) * numberValue(item.unit_cost),
+        0,
+    );
 
-    const purchaseDiscount =
-        numberValue(
-            values.discount,
-        );
+    const itemDiscount = values.items.reduce(
+        (total, item) => total + numberValue(item.discount),
+        0,
+    );
 
-    const additionalCost =
-        numberValue(
-            values.additional_cost,
-        );
+    const purchaseDiscount = numberValue(values.discount);
+    const additionalCost = numberValue(values.additional_cost);
+    const grandTotal = itemSubtotal - itemDiscount - purchaseDiscount + additionalCost;
 
-    const grandTotal =
-        itemSubtotal
-        - itemDiscount
-        - purchaseDiscount
-        + additionalCost;
+    /* =====================================================
+       HELPERS
+       ===================================================== */
 
-    const getFieldError = (
-        field: string,
-    ): string | undefined =>
-        fieldErrors[field]?.[0];
+    const getFieldError = (field: string): string | undefined => fieldErrors[field]?.[0];
 
-    /**
-     * Allows the new dual-unit fields to pass
-     * through the existing onItemChange callback.
-     *
-     * The parent state updater normally uses:
-     * { ...item, [field]: value }
-     */
     const changeExtendedItemField = (
         index: number,
         field: DualUnitItemField,
         value: string,
     ): void => {
-        onItemChange(
-            index,
-            field as keyof PurchaseItemFormValues,
-            value,
-        );
+        onItemChange(index, field as keyof PurchaseItemFormValues, value);
     };
 
     const handleProductChange = (
@@ -2118,62 +2148,20 @@ export default function PurchaseFormModal({
         currentItem: PurchaseItemFormValues,
         productId: string,
     ): void => {
-        onItemChange(
-            index,
-            'product_id',
-            productId,
-        );
+        onItemChange(index, 'product_id', productId);
 
-        const nextProduct =
-            products.find(
-                (product) =>
-                    String(product.id)
-                    === productId,
-            );
+        const nextProduct = products.find((product) => String(product.id) === productId);
 
-        if (
-            !isBagUnit(
-                nextProduct?.unit,
-            )
-        ) {
-            changeExtendedItemField(
-                index,
-                'is_dual_unit',
-                '0',
-            );
-
-            changeExtendedItemField(
-                index,
-                'conversion_factor',
-                '',
-            );
-
-            changeExtendedItemField(
-                index,
-                'secondary_unit',
-                '',
-            );
-
-            changeExtendedItemField(
-                index,
-                'secondary_selling_price',
-                '',
-            );
-
+        if (!isBagUnit(nextProduct?.unit)) {
+            changeExtendedItemField(index, 'is_dual_unit', '0');
+            changeExtendedItemField(index, 'conversion_factor', '');
+            changeExtendedItemField(index, 'secondary_unit', '');
+            changeExtendedItemField(index, 'secondary_selling_price', '');
             return;
         }
 
-        if (
-            !getExtendedItemValue(
-                currentItem,
-                'secondary_unit',
-            )
-        ) {
-            changeExtendedItemField(
-                index,
-                'secondary_unit',
-                'Kg',
-            );
+        if (!getExtendedItemValue(currentItem, 'secondary_unit')) {
+            changeExtendedItemField(index, 'secondary_unit', 'Kg');
         }
     };
 
@@ -2182,70 +2170,46 @@ export default function PurchaseFormModal({
         item: PurchaseItemFormValues,
         enabled: boolean,
     ): void => {
-        changeExtendedItemField(
-            index,
-            'is_dual_unit',
-            enabled
-                ? '1'
-                : '0',
-        );
+        changeExtendedItemField(index, 'is_dual_unit', enabled ? '1' : '0');
 
         if (!enabled) {
             return;
         }
 
-        if (
-            !getExtendedItemValue(
-                item,
-                'secondary_unit',
-            )
-        ) {
-            changeExtendedItemField(
-                index,
-                'secondary_unit',
-                'Kg',
-            );
+        if (!getExtendedItemValue(item, 'secondary_unit')) {
+            changeExtendedItemField(index, 'secondary_unit', 'Kg');
         }
 
-        if (
-            !getExtendedItemValue(
-                item,
-                'conversion_factor',
-            )
-        ) {
-            changeExtendedItemField(
-                index,
-                'conversion_factor',
-                '50',
-            );
+        if (!getExtendedItemValue(item, 'conversion_factor')) {
+            changeExtendedItemField(index, 'conversion_factor', '50');
         }
     };
 
-    const supplierError =
-        getFieldError(
-            'supplier_id',
-        );
+    const handleAddProduct = (): void => {
+        /*
+         * Visually collapse the current row immediately. When the
+         * parent creates the new row, the effect above expands it.
+         */
+        setExpandedRowId(null);
+        onAddItem();
+    };
 
-    const purchaseDateError =
-        getFieldError(
-            'purchase_date',
-        );
+    const supplierError = getFieldError('supplier_id');
+    const purchaseDateError = getFieldError('purchase_date');
+
+    /* =====================================================
+       RENDER
+       ===================================================== */
 
     return createPortal(
         <div id="purchase-form-modal">
-            <style>
-                {purchaseFormStyles}
-            </style>
+            <style>{purchaseFormStyles}</style>
 
             <div
                 className="pfm-backdrop"
                 role="presentation"
                 onMouseDown={(event) => {
-                    if (
-                        event.target
-                        === event.currentTarget
-                        && !isSubmitting
-                    ) {
+                    if (event.target === event.currentTarget && !isSubmitting) {
                         onClose();
                     }
                 }}
@@ -2255,8 +2219,9 @@ export default function PurchaseFormModal({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="purchase-form-title"
-                    aria-describedby="purchase-form-description"
                 >
+                    {/* HEADER */}
+
                     <header className="pfm-header">
                         <div className="pfm-header-main">
                             <span className="pfm-header-icon">
@@ -2264,17 +2229,9 @@ export default function PurchaseFormModal({
                             </span>
 
                             <div>
-                                <span className="pfm-kicker">
-                                    Purchase Management
-                                </span>
-
-                                <h2
-                                    id="purchase-form-title"
-                                    className="pfm-title"
-                                >
-                                    {isEditing
-                                        ? 'Edit Draft Purchase'
-                                        : 'Add New Purchase'}
+                                <span className="pfm-kicker">Purchase Management</span>
+                                <h2 id="purchase-form-title" className="pfm-title">
+                                    {isEditing ? 'Edit Draft Purchase' : 'Add New Purchase'}
                                 </h2>
                             </div>
                         </div>
@@ -2290,40 +2247,16 @@ export default function PurchaseFormModal({
                         </button>
                     </header>
 
-                    <form
-                        className="pfm-form"
-                        noValidate
-                        onSubmit={onSubmit}
-                    >
+                    <form className="pfm-form" noValidate onSubmit={onSubmit}>
                         <div className="pfm-body">
-                            <p
-                                id="purchase-form-description"
-                                className="pfm-intro"
-                            >
-                                <Icon name="info" />
-
-                                <span>
-                                    Enter the supplier and purchased products.
-                                    Products using the unit
-                                    {' '}
-                                    <strong>Bag</strong>
-                                    {' '}
-                                    can also be configured for loose Kg sales.
-                                </span>
-                            </p>
-
                             {errorMessage && (
-                                <div
-                                    className="pfm-alert"
-                                    role="alert"
-                                >
+                                <div className="pfm-alert" role="alert">
                                     <Icon name="alert" />
-
-                                    <span>
-                                        {errorMessage}
-                                    </span>
+                                    <span>{errorMessage}</span>
                                 </div>
                             )}
+
+                            {/* PURCHASE INFORMATION */}
 
                             <section className="pfm-section">
                                 <header className="pfm-section-header">
@@ -2332,27 +2265,19 @@ export default function PurchaseFormModal({
                                             <Icon name="supplier" />
                                         </span>
 
-                                        <div>
-                                            <h3 className="pfm-section-title">
-                                                Purchase Information
-                                            </h3>
-
-                                            <p className="pfm-section-description">
-                                                Select the supplier and enter
-                                                the invoice information.
-                                            </p>
-                                        </div>
+                                        <h3 className="pfm-section-title">
+                                            Purchase Information
+                                        </h3>
                                     </div>
                                 </header>
 
                                 <div className="pfm-header-grid">
-                                    <label className="pfm-field">
+                                    {/* SUPPLIER */}
+
+                                    <div className="pfm-field">
                                         <span className="pfm-label">
                                             Supplier
-
-                                            <span className="pfm-required">
-                                                {' '}*
-                                            </span>
+                                            <span className="pfm-required"> *</span>
                                         </span>
 
                                         <span className="pfm-control-wrap">
@@ -2360,59 +2285,34 @@ export default function PurchaseFormModal({
                                                 <Icon name="supplier" />
                                             </span>
 
-                                            <select
-                                                ref={supplierInputRef}
-                                                className={
-                                                    supplierError
-                                                        ? 'pfm-select with-icon has-error'
-                                                        : 'pfm-select with-icon'
-                                                }
+                                            <SearchableSelect
+                                                triggerRef={supplierInputRef}
                                                 value={values.supplier_id}
+                                                options={supplierSearchOptions}
+                                                placeholder="Select a supplier"
+                                                searchPlaceholder="Search supplier..."
+                                                emptyMessage="No supplier matches your search."
                                                 disabled={isSubmitting}
-                                                required
-                                                aria-invalid={
-                                                    Boolean(
-                                                        supplierError,
-                                                    )
-                                                }
-                                                onChange={(event) => {
-                                                    onHeaderChange(
-                                                        'supplier_id',
-                                                        event.target.value,
-                                                    );
+                                                hasError={Boolean(supplierError)}
+                                                withIcon
+                                                ariaLabel="Select supplier"
+                                                onChange={(supplierId) => {
+                                                    onHeaderChange('supplier_id', supplierId);
                                                 }}
-                                            >
-                                                <option value="">
-                                                    Select a supplier
-                                                </option>
-
-                                                {suppliers.map(
-                                                    (supplier) => (
-                                                        <option
-                                                            key={supplier.id}
-                                                            value={supplier.id}
-                                                        >
-                                                            {supplier.name}
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
+                                            />
                                         </span>
 
                                         {supplierError && (
-                                            <p className="pfm-field-error">
-                                                {supplierError}
-                                            </p>
+                                            <p className="pfm-field-error">{supplierError}</p>
                                         )}
-                                    </label>
+                                    </div>
+
+                                    {/* PURCHASE DATE */}
 
                                     <label className="pfm-field">
                                         <span className="pfm-label">
                                             Purchase Date
-
-                                            <span className="pfm-required">
-                                                {' '}*
-                                            </span>
+                                            <span className="pfm-required"> *</span>
                                         </span>
 
                                         <span className="pfm-control-wrap">
@@ -2431,38 +2331,26 @@ export default function PurchaseFormModal({
                                                 disabled={isSubmitting}
                                                 required
                                                 onChange={(event) => {
-                                                    onHeaderChange(
-                                                        'purchase_date',
-                                                        event.target.value,
-                                                    );
+                                                    onHeaderChange('purchase_date', event.target.value);
                                                 }}
                                             />
                                         </span>
 
                                         {purchaseDateError && (
-                                            <p className="pfm-field-error">
-                                                {purchaseDateError}
-                                            </p>
+                                            <p className="pfm-field-error">{purchaseDateError}</p>
                                         )}
                                     </label>
+
+                                    {/* INVOICE */}
 
                                     <label className="pfm-field">
                                         <span className="pfm-field-header">
                                             <span className="pfm-label">
                                                 Supplier Invoice
-
-                                                <span className="pfm-optional">
-                                                    Optional
-                                                </span>
+                                                <span className="pfm-optional">Optional</span>
                                             </span>
-
                                             <span className="pfm-counter">
-                                                {
-                                                    values
-                                                        .supplier_invoice_number
-                                                        .length
-                                                }
-                                                /120
+                                                {values.supplier_invoice_number.length}/120
                                             </span>
                                         </span>
 
@@ -2474,10 +2362,7 @@ export default function PurchaseFormModal({
                                             <input
                                                 type="text"
                                                 className="pfm-input with-icon"
-                                                value={
-                                                    values
-                                                        .supplier_invoice_number
-                                                }
+                                                value={values.supplier_invoice_number}
                                                 maxLength={120}
                                                 disabled={isSubmitting}
                                                 placeholder="Invoice or reference number"
@@ -2491,20 +2376,16 @@ export default function PurchaseFormModal({
                                         </span>
                                     </label>
 
-                                    <label className="pfm-field">
+                                    {/* DISCOUNT */}
+
+                                    {/* <label className="pfm-field">
                                         <span className="pfm-label">
                                             Purchase Discount
-
-                                            <span className="pfm-optional">
-                                                Optional
-                                            </span>
+                                            <span className="pfm-optional">Optional</span>
                                         </span>
 
                                         <span className="pfm-control-wrap">
-                                            <span className="pfm-currency-prefix">
-                                                LKR
-                                            </span>
-
+                                            <span className="pfm-currency-prefix">LKR</span>
                                             <input
                                                 type="number"
                                                 inputMode="decimal"
@@ -2514,29 +2395,22 @@ export default function PurchaseFormModal({
                                                 value={values.discount}
                                                 disabled={isSubmitting}
                                                 onChange={(event) => {
-                                                    onHeaderChange(
-                                                        'discount',
-                                                        event.target.value,
-                                                    );
+                                                    onHeaderChange('discount', event.target.value);
                                                 }}
                                             />
                                         </span>
-                                    </label>
+                                    </label> */}
 
-                                    <label className="pfm-field">
+                                    {/* ADDITIONAL COST */}
+
+                                    {/* <label className="pfm-field">
                                         <span className="pfm-label">
                                             Additional Cost
-
-                                            <span className="pfm-optional">
-                                                Optional
-                                            </span>
+                                            <span className="pfm-optional">Optional</span>
                                         </span>
 
                                         <span className="pfm-control-wrap">
-                                            <span className="pfm-currency-prefix">
-                                                LKR
-                                            </span>
-
+                                            <span className="pfm-currency-prefix">LKR</span>
                                             <input
                                                 type="number"
                                                 inputMode="decimal"
@@ -2546,25 +2420,20 @@ export default function PurchaseFormModal({
                                                 value={values.additional_cost}
                                                 disabled={isSubmitting}
                                                 onChange={(event) => {
-                                                    onHeaderChange(
-                                                        'additional_cost',
-                                                        event.target.value,
-                                                    );
+                                                    onHeaderChange('additional_cost', event.target.value);
                                                 }}
                                             />
                                         </span>
-                                    </label>
+                                    </label> */}
+
+                                    {/* NOTES */}
 
                                     <label className="pfm-field pfm-notes-field">
                                         <span className="pfm-field-header">
                                             <span className="pfm-label">
                                                 Purchase Notes
-
-                                                <span className="pfm-optional">
-                                                    Optional
-                                                </span>
+                                                <span className="pfm-optional">Optional</span>
                                             </span>
-
                                             <span className="pfm-counter">
                                                 {values.notes.length}/2000
                                             </span>
@@ -2583,16 +2452,15 @@ export default function PurchaseFormModal({
                                                 disabled={isSubmitting}
                                                 placeholder="Payment terms, delivery notes or internal comments"
                                                 onChange={(event) => {
-                                                    onHeaderChange(
-                                                        'notes',
-                                                        event.target.value,
-                                                    );
+                                                    onHeaderChange('notes', event.target.value);
                                                 }}
                                             />
                                         </span>
                                     </label>
                                 </div>
                             </section>
+
+                            {/* PRODUCT WORKSPACE */}
 
                             <div className="pfm-workspace">
                                 <section className="pfm-section">
@@ -2602,349 +2470,254 @@ export default function PurchaseFormModal({
                                                 <Icon name="package" />
                                             </span>
 
-                                            <div>
-                                                <h3 className="pfm-section-title">
-                                                    Purchased Products
-                                                </h3>
-
-                                                <p className="pfm-section-description">
-                                                    Enter quantity, purchase
-                                                    cost, selling prices and
-                                                    stock batch details.
-                                                </p>
-                                            </div>
+                                            <h3 className="pfm-section-title">
+                                                Purchased Products
+                                            </h3>
                                         </div>
 
                                         <button
                                             type="button"
                                             className="pfm-add-item"
                                             disabled={isSubmitting}
-                                            onClick={onAddItem}
+                                            onClick={handleAddProduct}
                                         >
                                             <Icon name="plus" />
-
                                             Add Product
                                         </button>
                                     </header>
 
                                     <div className="pfm-items-list">
-                                        {values.items.map(
-                                            (
-                                                item,
-                                                index,
-                                            ) => {
-                                                const selectedProduct =
-                                                    products.find(
-                                                        (product) =>
-                                                            String(
-                                                                product.id,
-                                                            )
-                                                            === item.product_id,
-                                                    );
+                                        {values.items.map((item, index) => {
+                                            const rowId = String(item.row_id);
+                                            const isExpanded = expandedRowId === rowId;
 
-                                                const productUnit =
-                                                    selectedProduct
-                                                        ?.unit
-                                                    ?? '';
+                                            const selectedProduct = products.find(
+                                                (product) => String(product.id) === item.product_id,
+                                            );
 
-                                                const productCategory =
-                                                    selectedProduct
-                                                        ?.category
-                                                        ?.name
-                                                    ?? 'No category';
+                                            const productUnit = selectedProduct?.unit ?? '';
+                                            const productCategory =
+                                                selectedProduct?.category?.name ?? 'No category';
+                                            const isBagProduct = isBagUnit(productUnit);
 
-                                                const isBagProduct =
-                                                    isBagUnit(
-                                                        productUnit,
-                                                    );
+                                            const dualUnitEnabled = isEnabledFlag(
+                                                getExtendedItemValue(item, 'is_dual_unit', '0'),
+                                            );
 
-                                                const dualUnitEnabled =
-                                                    isEnabledFlag(
-                                                        getExtendedItemValue(
-                                                            item,
-                                                            'is_dual_unit',
-                                                            '0',
-                                                        ),
-                                                    );
+                                            const conversionFactor = numberValue(
+                                                getExtendedItemValue(item, 'conversion_factor'),
+                                            );
 
-                                                const conversionFactor =
-                                                    numberValue(
-                                                        getExtendedItemValue(
-                                                            item,
-                                                            'conversion_factor',
-                                                        ),
-                                                    );
+                                            const secondaryUnit =
+                                                getExtendedItemValue(item, 'secondary_unit', 'Kg') || 'Kg';
 
-                                                const secondaryUnit =
-                                                    getExtendedItemValue(
-                                                        item,
-                                                        'secondary_unit',
-                                                        'Kg',
-                                                    )
-                                                    || 'Kg';
+                                            const secondarySellingPrice = numberValue(
+                                                getExtendedItemValue(item, 'secondary_selling_price'),
+                                            );
 
-                                                const secondarySellingPrice =
-                                                    numberValue(
-                                                        getExtendedItemValue(
-                                                            item,
-                                                            'secondary_selling_price',
-                                                        ),
-                                                    );
+                                            const quantity = numberValue(item.quantity);
+                                            const unitCost = numberValue(item.unit_cost);
+                                            const sellingPrice = numberValue(item.selling_price);
+                                            const itemDiscountValue = numberValue(item.discount);
+                                            const lineTotal = quantity * unitCost - itemDiscountValue;
 
-                                                const quantity =
-                                                    numberValue(
-                                                        item.quantity,
-                                                    );
+                                            const totalBaseStock =
+                                                dualUnitEnabled && conversionFactor > 0
+                                                    ? quantity * conversionFactor
+                                                    : quantity;
 
-                                                const unitCost =
-                                                    numberValue(
-                                                        item.unit_cost,
-                                                    );
+                                            const costPerKg =
+                                                dualUnitEnabled && conversionFactor > 0
+                                                    ? unitCost / conversionFactor
+                                                    : 0;
 
-                                                const fullSellingPrice =
-                                                    numberValue(
-                                                        item.selling_price,
-                                                    );
+                                            const fullBagProfit = sellingPrice - unitCost;
+                                            const looseKgProfit = secondarySellingPrice - costPerKg;
 
-                                                const lineTotal =
-                                                    (
-                                                        quantity
-                                                        * unitCost
-                                                    )
-                                                    - numberValue(
-                                                        item.discount,
-                                                    );
+                                            const productError = getFieldError(
+                                                `items.${index}.product_id`,
+                                            );
+                                            const quantityError = getFieldError(
+                                                `items.${index}.quantity`,
+                                            );
+                                            const unitCostError = getFieldError(
+                                                `items.${index}.unit_cost`,
+                                            );
+                                            const sellingPriceError = getFieldError(
+                                                `items.${index}.selling_price`,
+                                            );
+                                            const conversionError = getFieldError(
+                                                `items.${index}.conversion_factor`,
+                                            );
+                                            const secondarySellingPriceError = getFieldError(
+                                                `items.${index}.secondary_selling_price`,
+                                            );
+                                            const expiryError = getFieldError(
+                                                `items.${index}.expiry_date`,
+                                            );
 
-                                                const totalBaseStock =
-                                                    dualUnitEnabled
-                                                        && conversionFactor > 0
-                                                        ? quantity
-                                                        * conversionFactor
-                                                        : quantity;
+                                            return (
+                                                <article
+                                                    key={item.row_id}
+                                                    className={
+                                                        isExpanded
+                                                            ? 'pfm-item-card expanded'
+                                                            : 'pfm-item-card collapsed'
+                                                    }
+                                                >
+                                                    {/* PRODUCT CARD HEADER */}
 
-                                                const costPerKg =
-                                                    dualUnitEnabled
-                                                        && conversionFactor > 0
-                                                        ? unitCost
-                                                        / conversionFactor
-                                                        : 0;
+                                                    <header className="pfm-item-header">
+                                                        <div className="pfm-item-heading">
+                                                            <span className="pfm-item-number">
+                                                                Item {index + 1}
+                                                            </span>
 
-                                                const fullBagProfit =
-                                                    fullSellingPrice
-                                                    - unitCost;
+                                                            <strong
+                                                                className="pfm-item-product"
+                                                                title={
+                                                                    selectedProduct?.name ??
+                                                                    'Product not selected'
+                                                                }
+                                                            >
+                                                                {selectedProduct?.name ?? 'Select a product'}
+                                                            </strong>
 
-                                                const looseKgProfit =
-                                                    secondarySellingPrice
-                                                    - costPerKg;
-
-                                                const productError =
-                                                    getFieldError(
-                                                        `items.${index}.product_id`,
-                                                    );
-
-                                                const quantityError =
-                                                    getFieldError(
-                                                        `items.${index}.quantity`,
-                                                    );
-
-                                                const unitCostError =
-                                                    getFieldError(
-                                                        `items.${index}.unit_cost`,
-                                                    );
-
-                                                const sellingPriceError =
-                                                    getFieldError(
-                                                        `items.${index}.selling_price`,
-                                                    );
-
-                                                const conversionError =
-                                                    getFieldError(
-                                                        `items.${index}.conversion_factor`,
-                                                    );
-
-                                                const secondarySellingPriceError =
-                                                    getFieldError(
-                                                        `items.${index}.secondary_selling_price`,
-                                                    );
-
-                                                const expiryError =
-                                                    getFieldError(
-                                                        `items.${index}.expiry_date`,
-                                                    );
-
-                                                return (
-                                                    <article
-                                                        key={item.row_id}
-                                                        className="pfm-item-card"
-                                                    >
-                                                        <header className="pfm-item-header">
-                                                            <div className="pfm-item-heading">
-                                                                <span className="pfm-item-number">
-                                                                    Item
-                                                                    {' '}
-                                                                    {index + 1}
+                                                            {selectedProduct && (
+                                                                <span className="pfm-unit-badge">
+                                                                    <Icon
+                                                                        name={isBagProduct ? 'bag' : 'package'}
+                                                                    />
+                                                                    {productUnit || 'Unit'}
                                                                 </span>
+                                                            )}
 
-                                                                <strong
-                                                                    className="pfm-item-product"
-                                                                    title={
-                                                                        selectedProduct
-                                                                            ?.name
-                                                                        ?? 'Product not selected'
-                                                                    }
-                                                                >
-                                                                    {
-                                                                        selectedProduct
-                                                                            ?.name
-                                                                        ?? 'Select a product'
-                                                                    }
-                                                                </strong>
-
-                                                                {selectedProduct && (
-                                                                    <span className="pfm-unit-badge">
-                                                                        <Icon
-                                                                            name={
-                                                                                isBagProduct
-                                                                                    ? 'bag'
-                                                                                    : 'package'
-                                                                            }
-                                                                        />
-
-                                                                        {
-                                                                            productUnit
-                                                                            || 'No unit'
-                                                                        }
+                                                            {!isExpanded && selectedProduct && (
+                                                                <div className="pfm-collapsed-summary">
+                                                                    <span className="pfm-mini-summary">
+                                                                        Qty:
+                                                                        <strong>
+                                                                            {formatQuantity(quantity)} {productUnit}
+                                                                        </strong>
                                                                     </span>
-                                                                )}
-                                                            </div>
 
-                                                            <div className="pfm-item-header-actions">
+                                                                    <span className="pfm-mini-summary">
+                                                                        Cost:
+                                                                        <strong>
+                                                                            {currencyFormatter.format(unitCost)}
+                                                                        </strong>
+                                                                    </span>
+
+                                                                    <span className="pfm-mini-summary">
+                                                                        Sell:
+                                                                        <strong>
+                                                                            {currencyFormatter.format(sellingPrice)}
+                                                                        </strong>
+                                                                    </span>
+
+                                                                    <span className="pfm-mini-summary total">
+                                                                        Total:
+                                                                        <strong>
+                                                                            {currencyFormatter.format(
+                                                                                Math.max(0, lineTotal),
+                                                                            )}
+                                                                        </strong>
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="pfm-item-header-actions">
+                                                            {isExpanded && (
                                                                 <span className="pfm-line-total">
-                                                                    Purchase Total:
-                                                                    {' '}
-
+                                                                    Purchase Total:{' '}
                                                                     {currencyFormatter.format(
-                                                                        Math.max(
-                                                                            0,
-                                                                            lineTotal,
-                                                                        ),
+                                                                        Math.max(0, lineTotal),
                                                                     )}
                                                                 </span>
+                                                            )}
 
-                                                                <button
-                                                                    type="button"
-                                                                    className="pfm-remove-item"
-                                                                    disabled={
-                                                                        isSubmitting
-                                                                        || values.items.length
-                                                                        === 1
-                                                                    }
-                                                                    onClick={() => {
-                                                                        onRemoveItem(
-                                                                            index,
-                                                                        );
-                                                                    }}
-                                                                >
-                                                                    <Icon name="trash" />
+                                                            <button
+                                                                type="button"
+                                                                className="pfm-collapse-item"
+                                                                disabled={isSubmitting}
+                                                                onClick={() => {
+                                                                    setExpandedRowId(
+                                                                        isExpanded ? null : rowId,
+                                                                    );
+                                                                }}
+                                                            >
+                                                                <Icon name={isExpanded ? 'collapse' : 'edit'} />
+                                                                {isExpanded ? 'Minimize' : 'Open'}
+                                                            </button>
 
-                                                                    Remove
-                                                                </button>
-                                                            </div>
-                                                        </header>
+                                                            <button
+                                                                type="button"
+                                                                className="pfm-remove-item"
+                                                                disabled={
+                                                                    isSubmitting || values.items.length === 1
+                                                                }
+                                                                onClick={() => onRemoveItem(index)}
+                                                            >
+                                                                <Icon name="trash" />
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                    </header>
 
+                                                    {/* PRODUCT BODY */}
+
+                                                    {isExpanded && (
                                                         <div className="pfm-item-body">
                                                             <div className="pfm-item-main-grid">
-                                                                <label className="pfm-field">
-                                                                    <span className="pfm-label">
-                                                                        Product
+                                                                {/* PRODUCT */}
 
-                                                                        <span className="pfm-required">
-                                                                            {' '}*
-                                                                        </span>
+                                                                <div className="pfm-field">
+                                                                    <span className="pfm-label pfm-main-field-label">
+                                                                        Product
+                                                                        <span className="pfm-required"> *</span>
                                                                     </span>
 
-                                                                    <select
-                                                                        className={
-                                                                            productError
-                                                                                ? 'pfm-select has-error'
-                                                                                : 'pfm-select'
-                                                                        }
+                                                                    <SearchableSelect
                                                                         value={item.product_id}
+                                                                        options={productSearchOptions}
+                                                                        placeholder="Select a product"
+                                                                        searchPlaceholder="Search product, category or unit..."
+                                                                        emptyMessage="No product matches your search."
                                                                         disabled={isSubmitting}
-                                                                        required
-                                                                        onChange={(event) => {
+                                                                        hasError={Boolean(productError)}
+                                                                        ariaLabel={`Select product for item ${index + 1}`}
+                                                                        onChange={(productId) => {
                                                                             handleProductChange(
                                                                                 index,
                                                                                 item,
-                                                                                event.target.value,
+                                                                                productId,
                                                                             );
                                                                         }}
-                                                                    >
-                                                                        <option value="">
-                                                                            Select a product
-                                                                        </option>
+                                                                    />
 
-                                                                        {products.map(
-                                                                            (product) => (
-                                                                                <option
-                                                                                    key={product.id}
-                                                                                    value={product.id}
-                                                                                >
-                                                                                    {product.name}
-                                                                                    {' — '}
-                                                                                    {
-                                                                                        product
-                                                                                            .category
-                                                                                            .name
-                                                                                    }
-                                                                                    {' — '}
-                                                                                    {product.unit}
-                                                                                </option>
-                                                                            ),
-                                                                        )}
-                                                                    </select>
+                                                                    <div className="pfm-main-field-feedback">
+                                                                        {productError ? (
+                                                                            <p className="pfm-field-error">
+                                                                                {productError}
+                                                                            </p>
+                                                                        ) : selectedProduct ? (
+                                                                            <span className="pfm-help">
+                                                                                {productCategory} • {productUnit}
+                                                                            </span>
+                                                                        ) : null}
+                                                                    </div>
+                                                                </div>
 
-                                                                    {productError ? (
-                                                                        <p className="pfm-field-error">
-                                                                            {productError}
-                                                                        </p>
-                                                                    ) : selectedProduct ? (
-                                                                        <span className="pfm-help">
-                                                                            <Icon name="info" />
-
-                                                                            Category:
-                                                                            {' '}
-                                                                            {productCategory}
-                                                                            {' · '}
-                                                                            Purchase unit:
-                                                                            {' '}
-                                                                            {productUnit}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="pfm-help">
-                                                                            Select the product
-                                                                            before entering
-                                                                            quantities and prices.
-                                                                        </span>
-                                                                    )}
-                                                                </label>
+                                                                {/* QUANTITY */}
 
                                                                 <label className="pfm-field">
-                                                                    <span className="pfm-label">
+                                                                    <span className="pfm-label pfm-main-field-label">
                                                                         Quantity
-                                                                        {' '}
-
                                                                         {productUnit && (
-                                                                            <>
-                                                                                (
-                                                                                {productUnit}
-                                                                                )
-                                                                            </>
+                                                                            <> ({productUnit})</>
                                                                         )}
-
-                                                                        <span className="pfm-required">
-                                                                            {' '}*
-                                                                        </span>
+                                                                        <span className="pfm-required"> *</span>
                                                                     </span>
 
                                                                     <input
@@ -2970,35 +2743,27 @@ export default function PurchaseFormModal({
                                                                         }}
                                                                     />
 
-                                                                    {quantityError ? (
-                                                                        <p className="pfm-field-error">
-                                                                            {quantityError}
-                                                                        </p>
-                                                                    ) : (
-                                                                        <span className="pfm-help">
-                                                                            Purchased quantity in
-                                                                            {' '}
-                                                                            {productUnit || 'product units'}.
-                                                                        </span>
-                                                                    )}
+                                                                    <div className="pfm-main-field-feedback">
+                                                                        {quantityError && (
+                                                                            <p className="pfm-field-error">
+                                                                                {quantityError}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
                                                                 </label>
 
-                                                                <label className="pfm-field">
-                                                                    <span className="pfm-label">
-                                                                        Purchase Cost per
-                                                                        {' '}
-                                                                        {productUnit || 'Unit'}
+                                                                {/* PURCHASE COST */}
 
-                                                                        <span className="pfm-required">
-                                                                            {' '}*
-                                                                        </span>
+                                                                <label className="pfm-field">
+                                                                    <span className="pfm-label pfm-main-field-label">
+                                                                        Purchase Cost per {productUnit || 'Unit'}
+                                                                        <span className="pfm-required"> *</span>
                                                                     </span>
 
                                                                     <span className="pfm-control-wrap">
                                                                         <span className="pfm-currency-prefix">
                                                                             LKR
                                                                         </span>
-
                                                                         <input
                                                                             type="number"
                                                                             inputMode="decimal"
@@ -3023,29 +2788,27 @@ export default function PurchaseFormModal({
                                                                         />
                                                                     </span>
 
-                                                                    {unitCostError && (
-                                                                        <p className="pfm-field-error">
-                                                                            {unitCostError}
-                                                                        </p>
-                                                                    )}
+                                                                    <div className="pfm-main-field-feedback">
+                                                                        {unitCostError && (
+                                                                            <p className="pfm-field-error">
+                                                                                {unitCostError}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
                                                                 </label>
 
-                                                                <label className="pfm-field">
-                                                                    <span className="pfm-label">
-                                                                        Selling Price per
-                                                                        {' '}
-                                                                        {productUnit || 'Unit'}
+                                                                {/* SELLING PRICE */}
 
-                                                                        <span className="pfm-required">
-                                                                            {' '}*
-                                                                        </span>
+                                                                <label className="pfm-field">
+                                                                    <span className="pfm-label pfm-main-field-label">
+                                                                        Selling Price per {productUnit || 'Unit'}
+                                                                        <span className="pfm-required"> *</span>
                                                                     </span>
 
                                                                     <span className="pfm-control-wrap">
                                                                         <span className="pfm-currency-prefix">
                                                                             LKR
                                                                         </span>
-
                                                                         <input
                                                                             type="number"
                                                                             inputMode="decimal"
@@ -3070,27 +2833,26 @@ export default function PurchaseFormModal({
                                                                         />
                                                                     </span>
 
-                                                                    {sellingPriceError && (
-                                                                        <p className="pfm-field-error">
-                                                                            {sellingPriceError}
-                                                                        </p>
-                                                                    )}
+                                                                    <div className="pfm-main-field-feedback">
+                                                                        {sellingPriceError && (
+                                                                            <p className="pfm-field-error">
+                                                                                {sellingPriceError}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
                                                                 </label>
 
-                                                                <label className="pfm-field">
-                                                                    <span className="pfm-label">
-                                                                        Item Discount
+                                                                {/* ITEM DISCOUNT */}
 
-                                                                        <span className="pfm-optional">
-                                                                            Optional
-                                                                        </span>
+                                                                <label className="pfm-field">
+                                                                    <span className="pfm-label pfm-main-field-label">
+                                                                        Item Discount
                                                                     </span>
 
                                                                     <span className="pfm-control-wrap">
                                                                         <span className="pfm-currency-prefix">
                                                                             LKR
                                                                         </span>
-
                                                                         <input
                                                                             type="number"
                                                                             inputMode="decimal"
@@ -3109,8 +2871,12 @@ export default function PurchaseFormModal({
                                                                             }}
                                                                         />
                                                                     </span>
+
+                                                                    <div className="pfm-main-field-feedback" />
                                                                 </label>
                                                             </div>
+
+                                                            {/* DUAL UNIT */}
 
                                                             {isBagProduct && (
                                                                 <section className="pfm-dual-unit-card">
@@ -3120,26 +2886,15 @@ export default function PurchaseFormModal({
                                                                                 <Icon name="scale" />
                                                                             </span>
 
-                                                                            <div>
-                                                                                <h4 className="pfm-dual-title">
-                                                                                    Full Bag + Loose Kg Selling
-                                                                                </h4>
-
-                                                                                <p className="pfm-dual-description">
-                                                                                    Enable this when the product
-                                                                                    can be sold as a complete bag
-                                                                                    or as loose kilograms from the
-                                                                                    same physical stock.
-                                                                                </p>
-                                                                            </div>
+                                                                            <h4 className="pfm-dual-title">
+                                                                                Full Bag + Loose Kg Selling
+                                                                            </h4>
                                                                         </div>
 
                                                                         <label className="pfm-switch-label">
                                                                             <input
                                                                                 type="checkbox"
-                                                                                checked={
-                                                                                    dualUnitEnabled
-                                                                                }
+                                                                                checked={dualUnitEnabled}
                                                                                 disabled={isSubmitting}
                                                                                 onChange={(event) => {
                                                                                     handleDualUnitToggle(
@@ -3149,30 +2904,16 @@ export default function PurchaseFormModal({
                                                                                     );
                                                                                 }}
                                                                             />
-
                                                                             Enable Loose Kg Sales
                                                                         </label>
                                                                     </header>
 
-                                                                    {!dualUnitEnabled ? (
-                                                                        <div className="pfm-dual-disabled-message">
-                                                                            <Icon name="info" />
-
-                                                                            <span>
-                                                                                The product will currently be
-                                                                                purchased and sold only as full
-                                                                                bags. Enable loose Kg sales to
-                                                                                configure the bag weight and
-                                                                                price per 1 Kg.
-                                                                            </span>
-                                                                        </div>
-                                                                    ) : (
+                                                                    {dualUnitEnabled && (
                                                                         <>
                                                                             <div className="pfm-dual-grid">
                                                                                 <label className="pfm-field">
                                                                                     <span className="pfm-label">
                                                                                         Weight in One Bag
-
                                                                                         <span className="pfm-required">
                                                                                             {' '}*
                                                                                         </span>
@@ -3189,12 +2930,10 @@ export default function PurchaseFormModal({
                                                                                             }
                                                                                             min="0.001"
                                                                                             step="0.001"
-                                                                                            value={
-                                                                                                getExtendedItemValue(
-                                                                                                    item,
-                                                                                                    'conversion_factor',
-                                                                                                )
-                                                                                            }
+                                                                                            value={getExtendedItemValue(
+                                                                                                item,
+                                                                                                'conversion_factor',
+                                                                                            )}
                                                                                             disabled={isSubmitting}
                                                                                             required
                                                                                             placeholder="Example: 50"
@@ -3206,22 +2945,15 @@ export default function PurchaseFormModal({
                                                                                                 );
                                                                                             }}
                                                                                         />
-
                                                                                         <span className="pfm-suffix">
                                                                                             Kg
                                                                                         </span>
                                                                                     </span>
 
-                                                                                    {conversionError ? (
+                                                                                    {conversionError && (
                                                                                         <p className="pfm-field-error">
                                                                                             {conversionError}
                                                                                         </p>
-                                                                                    ) : (
-                                                                                        <span className="pfm-help">
-                                                                                            Example:
-                                                                                            {' '}
-                                                                                            1 Bag = 50 Kg.
-                                                                                        </span>
                                                                                     )}
                                                                                 </label>
 
@@ -3239,17 +2971,11 @@ export default function PurchaseFormModal({
                                                                                             Kilogram — Kg
                                                                                         </option>
                                                                                     </select>
-
-                                                                                    <span className="pfm-help">
-                                                                                        Loose quantities are entered
-                                                                                        in kilograms at the POS.
-                                                                                    </span>
                                                                                 </label>
 
                                                                                 <label className="pfm-field">
                                                                                     <span className="pfm-label">
                                                                                         Selling Price for 1 Kg
-
                                                                                         <span className="pfm-required">
                                                                                             {' '}*
                                                                                         </span>
@@ -3259,7 +2985,6 @@ export default function PurchaseFormModal({
                                                                                         <span className="pfm-currency-prefix">
                                                                                             LKR
                                                                                         </span>
-
                                                                                         <input
                                                                                             type="number"
                                                                                             inputMode="decimal"
@@ -3270,12 +2995,10 @@ export default function PurchaseFormModal({
                                                                                             }
                                                                                             min="0"
                                                                                             step="0.01"
-                                                                                            value={
-                                                                                                getExtendedItemValue(
-                                                                                                    item,
-                                                                                                    'secondary_selling_price',
-                                                                                                )
-                                                                                            }
+                                                                                            value={getExtendedItemValue(
+                                                                                                item,
+                                                                                                'secondary_selling_price',
+                                                                                            )}
                                                                                             disabled={isSubmitting}
                                                                                             required
                                                                                             placeholder="Price per 1 Kg"
@@ -3289,37 +3012,12 @@ export default function PurchaseFormModal({
                                                                                         />
                                                                                     </span>
 
-                                                                                    {secondarySellingPriceError ? (
+                                                                                    {secondarySellingPriceError && (
                                                                                         <p className="pfm-field-error">
-                                                                                            {
-                                                                                                secondarySellingPriceError
-                                                                                            }
+                                                                                            {secondarySellingPriceError}
                                                                                         </p>
-                                                                                    ) : (
-                                                                                        <span className="pfm-help">
-                                                                                            Example:
-                                                                                            {' '}
-                                                                                            Rs. 180 for 1 Kg.
-                                                                                        </span>
                                                                                     )}
                                                                                 </label>
-                                                                            </div>
-
-                                                                            <div className="pfm-dual-note">
-                                                                                <Icon name="info" />
-
-                                                                                <span>
-                                                                                    The POS will show two options:
-                                                                                    {' '}
-                                                                                    <strong>Full Bag</strong>
-                                                                                    {' '}
-                                                                                    and
-                                                                                    {' '}
-                                                                                    <strong>Loose Kg</strong>.
-                                                                                    For 500 g, the cashier enters
-                                                                                    {' '}
-                                                                                    <strong>0.5 Kg</strong>.
-                                                                                </span>
                                                                             </div>
 
                                                                             <div className="pfm-preview-grid">
@@ -3327,36 +3025,23 @@ export default function PurchaseFormModal({
                                                                                     <span>
                                                                                         Stock After Receiving
                                                                                     </span>
-
                                                                                     <strong>
-                                                                                        {formatQuantity(
-                                                                                            totalBaseStock,
-                                                                                        )}
-                                                                                        {' '}
+                                                                                        {formatQuantity(totalBaseStock)}{' '}
                                                                                         Kg
                                                                                     </strong>
                                                                                 </div>
 
                                                                                 <div className="pfm-preview-box">
-                                                                                    <span>
-                                                                                        Purchase Cost per Kg
-                                                                                    </span>
-
+                                                                                    <span>Purchase Cost per Kg</span>
                                                                                     <strong>
                                                                                         {currencyFormatter.format(
-                                                                                            Math.max(
-                                                                                                0,
-                                                                                                costPerKg,
-                                                                                            ),
+                                                                                            Math.max(0, costPerKg),
                                                                                         )}
                                                                                     </strong>
                                                                                 </div>
 
                                                                                 <div className="pfm-preview-box profit">
-                                                                                    <span>
-                                                                                        Profit per Full Bag
-                                                                                    </span>
-
+                                                                                    <span>Profit per Full Bag</span>
                                                                                     <strong>
                                                                                         {currencyFormatter.format(
                                                                                             fullBagProfit,
@@ -3365,10 +3050,7 @@ export default function PurchaseFormModal({
                                                                                 </div>
 
                                                                                 <div className="pfm-preview-box profit">
-                                                                                    <span>
-                                                                                        Profit per Loose Kg
-                                                                                    </span>
-
+                                                                                    <span>Profit per Loose Kg</span>
                                                                                     <strong>
                                                                                         {currencyFormatter.format(
                                                                                             looseKgProfit,
@@ -3381,9 +3063,10 @@ export default function PurchaseFormModal({
                                                                 </section>
                                                             )}
 
+                                                            {/* BATCH DETAILS */}
+
                                                             <div className="pfm-batch-heading">
                                                                 <Icon name="batch" />
-
                                                                 Optional Stock Batch Details
                                                             </div>
 
@@ -3393,14 +3076,8 @@ export default function PurchaseFormModal({
                                                                         <span className="pfm-label">
                                                                             Batch Number
                                                                         </span>
-
                                                                         <span className="pfm-counter">
-                                                                            {
-                                                                                item
-                                                                                    .batch_number
-                                                                                    .length
-                                                                            }
-                                                                            /120
+                                                                            {item.batch_number.length}/120
                                                                         </span>
                                                                     </span>
 
@@ -3429,10 +3106,7 @@ export default function PurchaseFormModal({
                                                                     <input
                                                                         type="date"
                                                                         className="pfm-input"
-                                                                        value={
-                                                                            item
-                                                                                .manufactured_date
-                                                                        }
+                                                                        value={item.manufactured_date}
                                                                         disabled={isSubmitting}
                                                                         onChange={(event) => {
                                                                             onItemChange(
@@ -3445,9 +3119,7 @@ export default function PurchaseFormModal({
                                                                 </label>
 
                                                                 <label className="pfm-field">
-                                                                    <span className="pfm-label">
-                                                                        Expiry Date
-                                                                    </span>
+                                                                    <span className="pfm-label">Expiry Date</span>
 
                                                                     <input
                                                                         type="date"
@@ -3479,7 +3151,6 @@ export default function PurchaseFormModal({
                                                                         <span className="pfm-label">
                                                                             Item Notes
                                                                         </span>
-
                                                                         <span className="pfm-counter">
                                                                             {item.notes.length}/1000
                                                                         </span>
@@ -3503,94 +3174,56 @@ export default function PurchaseFormModal({
                                                                 </label>
                                                             </div>
                                                         </div>
-                                                    </article>
-                                                );
-                                            },
-                                        )}
+                                                    )}
+                                                </article>
+                                            );
+                                        })}
                                     </div>
                                 </section>
+
+                                {/* SUMMARY */}
 
                                 <aside className="pfm-summary-column">
                                     <section className="pfm-summary-card">
                                         <header className="pfm-summary-header">
                                             <Icon name="money" />
-
                                             Purchase Summary
                                         </header>
 
-                                        <div className="pfm-summary-lines">
+                                        <div>
                                             <div className="pfm-summary-line">
-                                                <span>
-                                                    Product Subtotal
-                                                </span>
-
-                                                <strong>
-                                                    {currencyFormatter.format(
-                                                        itemSubtotal,
-                                                    )}
-                                                </strong>
+                                                <span>Product Subtotal</span>
+                                                <strong>{currencyFormatter.format(itemSubtotal)}</strong>
                                             </div>
 
                                             <div className="pfm-summary-line discount">
-                                                <span>
-                                                    Item Discounts
-                                                </span>
-
-                                                <strong>
-                                                    -
-                                                    {currencyFormatter.format(
-                                                        itemDiscount,
-                                                    )}
-                                                </strong>
+                                                <span>Item Discounts</span>
+                                                <strong>-{currencyFormatter.format(itemDiscount)}</strong>
                                             </div>
 
                                             <div className="pfm-summary-line discount">
-                                                <span>
-                                                    Purchase Discount
-                                                </span>
-
+                                                <span>Purchase Discount</span>
                                                 <strong>
-                                                    -
-                                                    {currencyFormatter.format(
-                                                        purchaseDiscount,
-                                                    )}
+                                                    -{currencyFormatter.format(purchaseDiscount)}
                                                 </strong>
                                             </div>
 
                                             <div className="pfm-summary-line">
-                                                <span>
-                                                    Additional Cost
-                                                </span>
-
+                                                <span>Additional Cost</span>
                                                 <strong>
-                                                    {currencyFormatter.format(
-                                                        additionalCost,
-                                                    )}
+                                                    {currencyFormatter.format(additionalCost)}
                                                 </strong>
                                             </div>
 
                                             <div className="pfm-summary-line">
-                                                <span>
-                                                    Product Lines
-                                                </span>
-
-                                                <strong>
-                                                    {values.items.length}
-                                                </strong>
+                                                <span>Product Lines</span>
+                                                <strong>{values.items.length}</strong>
                                             </div>
 
                                             <div className="pfm-summary-line total">
-                                                <span>
-                                                    Grand Total
-                                                </span>
-
+                                                <span>Grand Total</span>
                                                 <strong>
-                                                    {currencyFormatter.format(
-                                                        Math.max(
-                                                            0,
-                                                            grandTotal,
-                                                        ),
-                                                    )}
+                                                    {currencyFormatter.format(Math.max(0, grandTotal))}
                                                 </strong>
                                             </div>
                                         </div>
@@ -3613,16 +3246,13 @@ export default function PurchaseFormModal({
                                             <span>
                                                 <strong className="pfm-receive-title">
                                                     <Icon name="truck" />
-
                                                     Receive Stock Now
                                                 </strong>
 
                                                 <span className="pfm-receive-description">
-                                                    Creates stock batches and
-                                                    makes the quantities
-                                                    available immediately.
-                                                    Dual-unit Bag stock will
-                                                    be converted into Kg.
+                                                    Creates stock batches and makes quantities available
+                                                    immediately. Dual-unit Bag stock will be converted
+                                                    into Kg.
                                                 </span>
                                             </span>
                                         </label>
@@ -3631,12 +3261,13 @@ export default function PurchaseFormModal({
                             </div>
                         </div>
 
+                        {/* FOOTER */}
+
                         <footer className="pfm-actions">
                             <span className="pfm-action-note">
                                 <Icon name="info" />
-
-                                Required fields are marked
-                                with an asterisk.
+                                Completed product rows automatically minimize when a new product is
+                                added.
                             </span>
 
                             <div className="pfm-action-buttons">

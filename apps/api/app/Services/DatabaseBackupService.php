@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DatabaseBackup;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -14,6 +15,14 @@ use Throwable;
 
 class DatabaseBackupService
 {
+    /*
+     * Maximum uploaded SQL backup size.
+     *
+     * 500 MB.
+     */
+    private const MAX_UPLOAD_BYTES =
+    500 * 1024 * 1024;
+
     public function create(
         ?User $user = null,
         ?string $notes = null,
@@ -37,10 +46,11 @@ class DatabaseBackupService
                 '/',
             );
 
-        Storage::disk($disk)
-            ->makeDirectory(
-                $directory,
-            );
+        Storage::disk(
+            $disk,
+        )->makeDirectory(
+            $directory,
+        );
 
         $databaseName =
             (string) $connection['database'];
@@ -138,7 +148,8 @@ class DatabaseBackupService
                 );
             }
 
-            $errorOutput = '';
+            $errorOutput =
+                '';
 
             $process =
                 new Process(
@@ -185,10 +196,14 @@ class DatabaseBackupService
                     },
                 );
             } finally {
-                fclose($handle);
+                fclose(
+                    $handle,
+                );
             }
 
-            if (! $process->isSuccessful()) {
+            if (
+                ! $process->isSuccessful()
+            ) {
                 throw new RuntimeException(
                     trim(
                         $errorOutput,
@@ -219,7 +234,11 @@ class DatabaseBackupService
                     $absolutePath,
                 );
 
-            if (! is_string($checksum)) {
+            if (
+                ! is_string(
+                    $checksum,
+                )
+            ) {
                 throw new RuntimeException(
                     'Unable to calculate the backup checksum.',
                 );
@@ -245,13 +264,13 @@ class DatabaseBackupService
             $backup->save();
 
             /*
-             * Mirror the completed backup file to off-site
-             * cloud storage (Cloudflare R2), so it survives
-             * even if this machine's disk is lost or damaged.
-             * A failure here must never fail the backup itself
-             * — the local file is already safely created and
-             * recorded; cloud upload is a best-effort addition
-             * on top of that.
+             * Upload completed local backup
+             * to Cloudflare R2.
+             *
+             * R2 remains best-effort.
+             *
+             * A temporary cloud problem must not
+             * make a valid local backup fail.
              */
             $this->uploadToCloud(
                 $disk,
@@ -263,11 +282,17 @@ class DatabaseBackupService
             ]);
         } catch (Throwable $exception) {
             if (
-                Storage::disk($disk)
-                ->exists($path)
+                Storage::disk(
+                    $disk,
+                )->exists(
+                    $path,
+                )
             ) {
-                Storage::disk($disk)
-                    ->delete($path);
+                Storage::disk(
+                    $disk,
+                )->delete(
+                    $path,
+                );
             }
 
             $backup->forceFill([
@@ -288,6 +313,383 @@ class DatabaseBackupService
         }
     }
 
+    /*
+     * =====================================================
+     * UPLOAD EXTERNAL SQL BACKUP
+     * =====================================================
+     */
+
+    /**
+     * Save an uploaded SQL backup as a managed
+     * database backup.
+     *
+     * The uploaded file:
+     *
+     * 1. Must be .sql
+     * 2. Must not be empty
+     * 3. Must be <= 500 MB
+     * 4. Is copied into private backup storage
+     * 5. Receives a SHA-256 checksum
+     * 6. Is also copied to R2 when enabled
+     */
+    public function importUploadedBackup(
+        UploadedFile $uploadedFile,
+        User $user,
+    ): DatabaseBackup {
+        if (
+            ! $uploadedFile->isValid()
+        ) {
+            throw new RuntimeException(
+                'The uploaded database backup file is invalid.',
+            );
+        }
+
+        $originalExtension =
+            strtolower(
+                $uploadedFile
+                    ->getClientOriginalExtension(),
+            );
+
+        if (
+            $originalExtension
+            !== 'sql'
+        ) {
+            throw new RuntimeException(
+                'Only .sql database backup files can be uploaded.',
+            );
+        }
+
+        $uploadedSize =
+            $uploadedFile->getSize();
+
+        if (
+            ! is_int(
+                $uploadedSize,
+            )
+            || $uploadedSize <= 0
+        ) {
+            throw new RuntimeException(
+                'The uploaded database backup file is empty.',
+            );
+        }
+
+        if (
+            $uploadedSize
+            > self::MAX_UPLOAD_BYTES
+        ) {
+            throw new RuntimeException(
+                'The uploaded database backup exceeds the 500 MB maximum size.',
+            );
+        }
+
+        $connection =
+            $this->databaseConnection();
+
+        $disk =
+            (string) config(
+                'backup.disk',
+                'local',
+            );
+
+        $directory =
+            trim(
+                (string) config(
+                    'backup.directory',
+                    'database-backups',
+                ),
+                '/',
+            );
+
+        Storage::disk(
+            $disk,
+        )->makeDirectory(
+            $directory,
+        );
+
+        $databaseName =
+            (string) $connection['database'];
+
+        /*
+         * Keep the original filename only for
+         * notes/display.
+         *
+         * Never use an uploaded client filename
+         * directly as our physical storage path.
+         */
+        $originalFilename =
+            basename(
+                $uploadedFile
+                    ->getClientOriginalName(),
+            );
+
+        $timestamp =
+            now()->format(
+                'Ymd_His',
+            );
+
+        $random =
+            Str::lower(
+                Str::random(8),
+            );
+
+        $filename =
+            "uploaded_{$timestamp}_{$random}.sql";
+
+        $path =
+            "{$directory}/{$filename}";
+
+        $backup =
+            DatabaseBackup::query()
+            ->create([
+                'backup_number' =>
+                sprintf(
+                    'BKP-UP-%s-%s',
+                    now()->format(
+                        'YmdHis',
+                    ),
+                    Str::upper(
+                        Str::random(6),
+                    ),
+                ),
+
+                'filename' =>
+                $filename,
+
+                'disk' =>
+                $disk,
+
+                'path' =>
+                $path,
+
+                'database_name' =>
+                $databaseName,
+
+                'status' =>
+                DatabaseBackup::STATUS_PROCESSING,
+
+                'file_size' =>
+                null,
+
+                'checksum' =>
+                null,
+
+                'is_scheduled' =>
+                false,
+
+                'notes' =>
+                Str::limit(
+                    "Uploaded database backup: {$originalFilename}",
+                    1000,
+                ),
+
+                'error_message' =>
+                null,
+
+                'created_by' =>
+                $user->id,
+
+                'completed_at' =>
+                null,
+            ]);
+
+        try {
+            $storedPath =
+                $uploadedFile->storeAs(
+                    $directory,
+                    $filename,
+                    $disk,
+                );
+
+            if (
+                ! is_string(
+                    $storedPath,
+                )
+                || $storedPath === ''
+            ) {
+                throw new RuntimeException(
+                    'Unable to save the uploaded database backup.',
+                );
+            }
+
+            if (
+                ! Storage::disk(
+                    $disk,
+                )->exists(
+                    $path,
+                )
+            ) {
+                throw new RuntimeException(
+                    'The uploaded backup file could not be found after saving.',
+                );
+            }
+
+            $absolutePath =
+                Storage::disk(
+                    $disk,
+                )->path(
+                    $path,
+                );
+
+            /*
+             * Perform a basic SQL sanity check
+             * before adding the backup as usable.
+             */
+            $this->validateSqlBackupFile(
+                $absolutePath,
+            );
+
+            $fileSize =
+                Storage::disk(
+                    $disk,
+                )->size(
+                    $path,
+                );
+
+            if ($fileSize <= 0) {
+                throw new RuntimeException(
+                    'The uploaded database backup file is empty.',
+                );
+            }
+
+            $checksum =
+                hash_file(
+                    'sha256',
+                    $absolutePath,
+                );
+
+            if (
+                ! is_string(
+                    $checksum,
+                )
+            ) {
+                throw new RuntimeException(
+                    'Unable to calculate the uploaded backup checksum.',
+                );
+            }
+
+            $backup->forceFill([
+                'status' =>
+                DatabaseBackup::STATUS_COMPLETED,
+
+                'file_size' =>
+                $fileSize,
+
+                'checksum' =>
+                $checksum,
+
+                'completed_at' =>
+                now(),
+
+                'error_message' =>
+                null,
+            ]);
+
+            $backup->save();
+
+            /*
+             * Also preserve the uploaded recovery
+             * backup off-site in R2.
+             */
+            $this->uploadToCloud(
+                $disk,
+                $path,
+            );
+
+            return $backup->fresh([
+                'createdBy:id,name,username',
+            ]);
+        } catch (Throwable $exception) {
+            if (
+                Storage::disk(
+                    $disk,
+                )->exists(
+                    $path,
+                )
+            ) {
+                Storage::disk(
+                    $disk,
+                )->delete(
+                    $path,
+                );
+            }
+
+            $backup->forceFill([
+                'status' =>
+                DatabaseBackup::STATUS_FAILED,
+
+                'error_message' =>
+                Str::limit(
+                    $exception
+                        ->getMessage(),
+                    2000,
+                ),
+            ]);
+
+            $backup->save();
+
+            throw $exception;
+        }
+    }
+
+    /*
+     * =====================================================
+     * UPLOAD + RESTORE
+     * =====================================================
+     */
+
+    /**
+     * Upload an SQL file and restore it.
+     *
+     * restore() itself creates the automatic
+     * current-database safety backup before
+     * importing the selected SQL.
+     *
+     * @return array{
+     *     uploaded_backup_number: string,
+     *     uploaded_filename: string,
+     *     restored_backup_number: string,
+     *     safety_backup_number: string
+     * }
+     */
+    public function uploadAndRestore(
+        UploadedFile $uploadedFile,
+        User $user,
+    ): array {
+        $uploadedBackup =
+            $this->importUploadedBackup(
+                $uploadedFile,
+                $user,
+            );
+
+        $result =
+            $this->restore(
+                $uploadedBackup,
+                $user,
+            );
+
+        return [
+            'uploaded_backup_number' =>
+            $uploadedBackup
+                ->backup_number,
+
+            'uploaded_filename' =>
+            $uploadedBackup
+                ->filename,
+
+            'restored_backup_number' =>
+            $result['restored_backup_number'],
+
+            'safety_backup_number' =>
+            $result['safety_backup_number'],
+        ];
+    }
+
+    /*
+     * =====================================================
+     * RESTORE
+     * =====================================================
+     */
+
     /**
      * @return array{
      *     restored_backup_number: string,
@@ -298,7 +700,9 @@ class DatabaseBackupService
         DatabaseBackup $backup,
         User $user,
     ): array {
-        if (! $backup->isDownloadable()) {
+        if (
+            ! $backup->isDownloadable()
+        ) {
             throw new RuntimeException(
                 'Only completed backups can be restored.',
             );
@@ -311,8 +715,11 @@ class DatabaseBackupService
             $backup->path;
 
         if (
-            ! Storage::disk($disk)
-                ->exists($path)
+            ! Storage::disk(
+                $disk,
+            )->exists(
+                $path,
+            )
         ) {
             throw new RuntimeException(
                 'The selected backup file does not exist.',
@@ -320,10 +727,23 @@ class DatabaseBackupService
         }
 
         $absolutePath =
-            Storage::disk($disk)
-            ->path($path);
+            Storage::disk(
+                $disk,
+            )->path(
+                $path,
+            );
 
-        if ($backup->checksum) {
+        /*
+         * Validate the file again immediately
+         * before running mysql.
+         */
+        $this->validateSqlBackupFile(
+            $absolutePath,
+        );
+
+        if (
+            $backup->checksum
+        ) {
             $currentChecksum =
                 hash_file(
                     'sha256',
@@ -346,72 +766,43 @@ class DatabaseBackupService
         }
 
         /*
-         * Always create a safety backup before
-         * changing the current database.
+         * Save selected backup metadata before
+         * restoring.
+         *
+         * The selected SQL may replace the
+         * database_backups table with an older
+         * version that does not contain this
+         * record.
+         */
+        $restoredBackupNumber =
+            $backup
+            ->backup_number;
+
+        $selectedBackupData =
+            $this->backupHistoryPayload(
+                $backup,
+            );
+
+        /*
+         * CRITICAL SAFETY STEP.
+         *
+         * Create a new backup of the CURRENT
+         * active database before replacing it.
+         *
+         * create() also performs the configured
+         * Cloudflare R2 upload.
          */
         $safetyBackup =
             $this->create(
                 $user,
-                "Automatic safety backup before restoring {$backup->backup_number}.",
+                "Automatic safety backup before restoring {$restoredBackupNumber}.",
                 false,
             );
 
-        $restoredBackupNumber =
-            $backup->backup_number;
-
-        $safetyBackupData = [
-            'backup_number' =>
-            $safetyBackup
-                ->backup_number,
-
-            'filename' =>
-            $safetyBackup
-                ->filename,
-
-            'disk' =>
-            $safetyBackup->disk,
-
-            'path' =>
-            $safetyBackup->path,
-
-            'database_name' =>
-            $safetyBackup
-                ->database_name,
-
-            'status' =>
-            DatabaseBackup::STATUS_COMPLETED,
-
-            'file_size' =>
-            $safetyBackup
-                ->file_size,
-
-            'checksum' =>
-            $safetyBackup
-                ->checksum,
-
-            'is_scheduled' =>
-            false,
-
-            'notes' =>
-            $safetyBackup->notes,
-
-            'error_message' =>
-            null,
-
-            'created_by' =>
-            null,
-
-            'completed_at' =>
-            $safetyBackup
-                ->completed_at,
-
-            'created_at' =>
-            $safetyBackup
-                ->created_at,
-
-            'updated_at' =>
-            now(),
-        ];
+        $safetyBackupData =
+            $this->backupHistoryPayload(
+                $safetyBackup,
+            );
 
         $backup->forceFill([
             'status' =>
@@ -432,7 +823,14 @@ class DatabaseBackupService
                 'rb',
             );
 
-        if ($stream === false) {
+        if (
+            $stream === false
+        ) {
+            $this->markRestoreFailure(
+                $restoredBackupNumber,
+                'Unable to open the selected backup file.',
+            );
+
             throw new RuntimeException(
                 'Unable to open the selected backup file.',
             );
@@ -461,58 +859,47 @@ class DatabaseBackupService
             $this->timeout(),
         );
 
-
         try {
             $process->run();
         } finally {
-            fclose($stream);
+            fclose(
+                $stream,
+            );
         }
 
-        if (! $process->isSuccessful()) {
-            try {
-                DatabaseBackup::query()
-                    ->where(
-                        'backup_number',
-                        $restoredBackupNumber,
-                    )
-                    ->update([
-                        'status' =>
-                        DatabaseBackup::STATUS_COMPLETED,
-
-                        'error_message' =>
-                        Str::limit(
-                            $process
-                                ->getErrorOutput()
-                                ?: 'The database restoration command failed.',
-                            2000,
-                        ),
-
-                        'updated_at' =>
-                        now(),
-                    ]);
-            } catch (Throwable) {
-                // The restored database may not contain
-                // the backup table yet.
-            }
-
-            throw new RuntimeException(
+        if (
+            ! $process->isSuccessful()
+        ) {
+            $errorOutput =
                 trim(
                     $process
                         ->getErrorOutput(),
-                ) !== ''
-                    ? trim(
-                        $process
-                            ->getErrorOutput(),
-                    )
-                    : 'The database restoration command failed.',
+                );
+
+            $errorMessage =
+                $errorOutput !== ''
+                ? $errorOutput
+                : 'The database restoration command failed.';
+
+            $this->markRestoreFailure(
+                $restoredBackupNumber,
+                $errorMessage,
+            );
+
+            throw new RuntimeException(
+                $errorMessage,
             );
         }
 
         /*
-         * The restored backup may contain an older
-         * version of the database_backups table.
-         * Reinsert the safety backup record when
-         * the table is available.
+         * The database has now been successfully
+         * imported.
+         *
+         * The imported SQL may contain an older
+         * backup-history table. Reinsert both:
+         *
+         * 1. Current safety backup
+         * 2. Backup that was just restored
          */
         try {
             if (
@@ -520,6 +907,44 @@ class DatabaseBackupService
                     'database_backups',
                 )
             ) {
+                $restoredUserId =
+                    null;
+
+                if (
+                    Schema::hasTable(
+                        'users',
+                    )
+                    && User::query()
+                    ->whereKey(
+                        $user->id,
+                    )
+                    ->exists()
+                ) {
+                    $restoredUserId =
+                        $user->id;
+                }
+
+                /*
+                 * Reinsert the safety backup.
+                 */
+                $safetyBackupData['status'] =
+                    DatabaseBackup::STATUS_COMPLETED;
+
+                $safetyBackupData['error_message'] =
+                    null;
+
+                $safetyBackupData['created_by'] =
+                    $restoredUserId;
+
+                $safetyBackupData['restored_by'] =
+                    null;
+
+                $safetyBackupData['restored_at'] =
+                    null;
+
+                $safetyBackupData['updated_at'] =
+                    now();
+
                 DatabaseBackup::query()
                     ->updateOrCreate(
                         [
@@ -529,41 +954,68 @@ class DatabaseBackupService
                         $safetyBackupData,
                     );
 
+                /*
+                 * Reinsert/update the backup that
+                 * has just been restored.
+                 *
+                 * This is especially important for
+                 * uploaded backups because that
+                 * backup record did not exist in
+                 * the older restored database.
+                 */
+                $selectedBackupData['status'] =
+                    DatabaseBackup::STATUS_RESTORED;
+
+                $selectedBackupData['error_message'] =
+                    null;
+
+                $selectedBackupData['created_by'] =
+                    $restoredUserId;
+
+                $selectedBackupData['restored_by'] =
+                    $restoredUserId;
+
+                $selectedBackupData['restored_at'] =
+                    now();
+
+                $selectedBackupData['updated_at'] =
+                    now();
+
                 DatabaseBackup::query()
-                    ->where(
-                        'backup_number',
-                        $restoredBackupNumber,
-                    )
-                    ->update([
-                        'status' =>
-                        DatabaseBackup::STATUS_RESTORED,
-
-                        'restored_by' =>
-                        User::query()
-                            ->whereKey(
-                                $user->id,
-                            )
-                            ->exists()
-                            ? $user->id
-                            : null,
-
-                        'restored_at' =>
-                        now(),
-
-                        'error_message' =>
-                        null,
-
-                        'updated_at' =>
-                        now(),
-                    ]);
+                    ->updateOrCreate(
+                        [
+                            'backup_number' =>
+                            $selectedBackupData['backup_number'],
+                        ],
+                        $selectedBackupData,
+                    );
             }
-        } catch (Throwable) {
+        } catch (
+            Throwable $metadataException
+        ) {
             /*
-             * Restoration itself was successful.
-             * Do not report failure only because
-             * backup-history metadata could not be
-             * updated.
+             * The actual MySQL restore already
+             * succeeded.
+             *
+             * Do not report the entire restore as
+             * failed merely because backup-history
+             * metadata could not be recreated.
              */
+            Log::warning(
+                'Database restored successfully, but backup history metadata could not be updated.',
+                [
+                    'restored_backup_number' =>
+                    $restoredBackupNumber,
+
+                    'safety_backup_number' =>
+                    $safetyBackup
+                        ->backup_number,
+
+                    'message' =>
+                    $metadataException
+                        ->getMessage(),
+                ],
+            );
         }
 
         return [
@@ -576,6 +1028,12 @@ class DatabaseBackupService
         ];
     }
 
+    /*
+     * =====================================================
+     * DELETE
+     * =====================================================
+     */
+
     public function delete(
         DatabaseBackup $backup,
     ): void {
@@ -584,7 +1042,6 @@ class DatabaseBackupService
                 $backup->status,
                 [
                     DatabaseBackup::STATUS_PROCESSING,
-
                     DatabaseBackup::STATUS_RESTORING,
                 ],
                 true,
@@ -594,7 +1051,6 @@ class DatabaseBackupService
                 'A backup currently being processed cannot be deleted.',
             );
         }
-
 
         if (
             Storage::disk(
@@ -610,12 +1066,21 @@ class DatabaseBackupService
             );
         }
 
+        /*
+         * Delete matching R2 object too.
+         */
         $this->deleteFromCloud(
             $backup->path,
         );
 
         $backup->delete();
     }
+
+    /*
+     * =====================================================
+     * PRUNE
+     * =====================================================
+     */
 
     public function pruneExpired(): int
     {
@@ -634,9 +1099,7 @@ class DatabaseBackupService
                 'status',
                 [
                     DatabaseBackup::STATUS_COMPLETED,
-
                     DatabaseBackup::STATUS_RESTORED,
-
                     DatabaseBackup::STATUS_FAILED,
                 ],
             )
@@ -649,22 +1112,325 @@ class DatabaseBackupService
             )
             ->get();
 
-        $deletedCount = 0;
+        $deletedCount =
+            0;
 
-        foreach ($backups as $backup) {
+        foreach (
+            $backups as $backup
+        ) {
             try {
                 $this->delete(
                     $backup,
                 );
 
                 $deletedCount++;
-            } catch (Throwable) {
-                // Continue pruning other backup files.
+            } catch (
+                Throwable $exception
+            ) {
+                /*
+                 * Continue pruning other backups.
+                 */
+                Log::warning(
+                    'Unable to prune database backup.',
+                    [
+                        'backup_number' =>
+                        $backup
+                            ->backup_number,
+
+                        'message' =>
+                        $exception
+                            ->getMessage(),
+                    ],
+                );
             }
         }
 
         return $deletedCount;
     }
+
+    /*
+     * =====================================================
+     * BACKUP HISTORY PAYLOAD
+     * =====================================================
+     */
+
+    /**
+     * Store enough backup metadata in memory so
+     * that the record can be recreated after a
+     * full database restore.
+     *
+     * @return array<string, mixed>
+     */
+    private function backupHistoryPayload(
+        DatabaseBackup $backup,
+    ): array {
+        return [
+            'backup_number' =>
+            $backup
+                ->backup_number,
+
+            'filename' =>
+            $backup
+                ->filename,
+
+            'disk' =>
+            $backup
+                ->disk,
+
+            'path' =>
+            $backup
+                ->path,
+
+            'database_name' =>
+            $backup
+                ->database_name,
+
+            'status' =>
+            $backup
+                ->status,
+
+            'file_size' =>
+            $backup
+                ->file_size,
+
+            'checksum' =>
+            $backup
+                ->checksum,
+
+            'is_scheduled' =>
+            (bool) $backup
+                ->is_scheduled,
+
+            'notes' =>
+            $backup
+                ->notes,
+
+            'error_message' =>
+            $backup
+                ->error_message,
+
+            'created_by' =>
+            null,
+
+            'restored_by' =>
+            null,
+
+            'completed_at' =>
+            $backup
+                ->completed_at,
+
+            'restored_at' =>
+            $backup
+                ->restored_at,
+
+            'created_at' =>
+            $backup
+                ->created_at
+                ?? now(),
+
+            'updated_at' =>
+            now(),
+        ];
+    }
+
+    /*
+     * =====================================================
+     * RESTORE FAILURE METADATA
+     * =====================================================
+     */
+
+    private function markRestoreFailure(
+        string $backupNumber,
+        string $errorMessage,
+    ): void {
+        try {
+            if (
+                ! Schema::hasTable(
+                    'database_backups',
+                )
+            ) {
+                return;
+            }
+
+            DatabaseBackup::query()
+                ->where(
+                    'backup_number',
+                    $backupNumber,
+                )
+                ->update([
+                    'status' =>
+                    DatabaseBackup::STATUS_COMPLETED,
+
+                    'error_message' =>
+                    Str::limit(
+                        $errorMessage,
+                        2000,
+                    ),
+
+                    'updated_at' =>
+                    now(),
+                ]);
+        } catch (
+            Throwable $exception
+        ) {
+            Log::warning(
+                'Unable to update database backup status after restore failure.',
+                [
+                    'backup_number' =>
+                    $backupNumber,
+
+                    'message' =>
+                    $exception
+                        ->getMessage(),
+                ],
+            );
+        }
+    }
+
+    /*
+     * =====================================================
+     * SQL FILE VALIDATION
+     * =====================================================
+     */
+
+    private function validateSqlBackupFile(
+        string $absolutePath,
+    ): void {
+        if (
+            ! is_file(
+                $absolutePath,
+            )
+            || ! is_readable(
+                $absolutePath,
+            )
+        ) {
+            throw new RuntimeException(
+                'The database backup file cannot be read.',
+            );
+        }
+
+        $fileSize =
+            filesize(
+                $absolutePath,
+            );
+
+        if (
+            $fileSize === false
+            || $fileSize <= 0
+        ) {
+            throw new RuntimeException(
+                'The database backup file is empty.',
+            );
+        }
+
+        if (
+            $fileSize
+            > self::MAX_UPLOAD_BYTES
+        ) {
+            throw new RuntimeException(
+                'The database backup file exceeds the 500 MB maximum size.',
+            );
+        }
+
+        $handle =
+            fopen(
+                $absolutePath,
+                'rb',
+            );
+
+        if (
+            $handle === false
+        ) {
+            throw new RuntimeException(
+                'Unable to inspect the database backup file.',
+            );
+        }
+
+        try {
+            /*
+             * Inspect the first 256 KB.
+             */
+            $sample =
+                fread(
+                    $handle,
+                    262144,
+                );
+        } finally {
+            fclose(
+                $handle,
+            );
+        }
+
+        if (
+            ! is_string(
+                $sample,
+            )
+            || trim(
+                $sample,
+            ) === ''
+        ) {
+            throw new RuntimeException(
+                'The database backup file does not contain SQL data.',
+            );
+        }
+
+        /*
+         * Normal mysqldump output should not
+         * contain raw NUL bytes.
+         */
+        if (
+            str_contains(
+                $sample,
+                "\0",
+            )
+        ) {
+            throw new RuntimeException(
+                'The selected file does not appear to be a valid SQL database backup.',
+            );
+        }
+
+        $upperSample =
+            strtoupper(
+                $sample,
+            );
+
+        /*
+         * Typical MySQL / MariaDB dump markers.
+         */
+        $sqlMarkers = [
+            'CREATE TABLE',
+            'DROP TABLE',
+            'INSERT INTO',
+            'LOCK TABLES',
+            'UNLOCK TABLES',
+            'SET ',
+            '-- MYSQL',
+            '-- MARIADB',
+        ];
+
+        foreach (
+            $sqlMarkers as $marker
+        ) {
+            if (
+                str_contains(
+                    $upperSample,
+                    $marker,
+                )
+            ) {
+                return;
+            }
+        }
+
+        throw new RuntimeException(
+            'The selected file does not appear to be a MySQL or MariaDB SQL backup.',
+        );
+    }
+
+    /*
+     * =====================================================
+     * DATABASE CONNECTION
+     * =====================================================
+     */
 
     /**
      * @return array<string, mixed>
@@ -681,7 +1447,11 @@ class DatabaseBackupService
                 "database.connections.{$connectionName}",
             );
 
-        if (! is_array($connection)) {
+        if (
+            ! is_array(
+                $connection,
+            )
+        ) {
             throw new RuntimeException(
                 'The active database connection could not be loaded.',
             );
@@ -719,6 +1489,12 @@ class DatabaseBackupService
         return $connection;
     }
 
+    /*
+     * =====================================================
+     * MYSQLDUMP COMMAND
+     * =====================================================
+     */
+
     /**
      * @param array<string, mixed> $connection
      *
@@ -735,7 +1511,8 @@ class DatabaseBackupService
 
             '--user='
                 . (string) (
-                    $connection['username'] ?? ''
+                    $connection['username']
+                    ?? ''
                 ),
 
             '--single-transaction',
@@ -757,6 +1534,12 @@ class DatabaseBackupService
         return $command;
     }
 
+    /*
+     * =====================================================
+     * MYSQL RESTORE COMMAND
+     * =====================================================
+     */
+
     /**
      * @param array<string, mixed> $connection
      *
@@ -773,7 +1556,8 @@ class DatabaseBackupService
 
             '--user='
                 . (string) (
-                    $connection['username'] ?? ''
+                    $connection['username']
+                    ?? ''
                 ),
 
             '--default-character-set=utf8mb4',
@@ -790,6 +1574,12 @@ class DatabaseBackupService
         return $command;
     }
 
+    /*
+     * =====================================================
+     * DATABASE HOST / SOCKET
+     * =====================================================
+     */
+
     /**
      * @param array<int, string> $command
      * @param array<string, mixed> $connection
@@ -800,10 +1590,13 @@ class DatabaseBackupService
     ): void {
         $socket =
             (string) (
-                $connection['unix_socket'] ?? ''
+                $connection['unix_socket']
+                ?? ''
             );
 
-        if ($socket !== '') {
+        if (
+            $socket !== ''
+        ) {
             $command[] =
                 "--socket={$socket}";
 
@@ -829,6 +1622,12 @@ class DatabaseBackupService
             "--port={$port}";
     }
 
+    /*
+     * =====================================================
+     * MYSQL PASSWORD ENVIRONMENT
+     * =====================================================
+     */
+
     /**
      * @param array<string, mixed> $connection
      *
@@ -843,7 +1642,9 @@ class DatabaseBackupService
                 ?? ''
             );
 
-        if ($password === '') {
+        if (
+            $password === ''
+        ) {
             return [];
         }
 
@@ -852,6 +1653,12 @@ class DatabaseBackupService
             $password,
         ];
     }
+
+    /*
+     * =====================================================
+     * PROCESS TIMEOUT
+     * =====================================================
+     */
 
     private function timeout(): float
     {
@@ -863,6 +1670,12 @@ class DatabaseBackupService
             ),
         );
     }
+
+    /*
+     * =====================================================
+     * CLOUD BACKUP SETTINGS
+     * =====================================================
+     */
 
     private function cloudUploadEnabled(): bool
     {
@@ -883,26 +1696,35 @@ class DatabaseBackupService
         );
     }
 
+    /*
+     * =====================================================
+     * R2 UPLOAD
+     * =====================================================
+     */
+
     /**
-     * Uploads a locally-created backup file to the configured
-     * off-site cloud disk (Cloudflare R2), using the exact same
-     * relative path as the local disk so the two stay easy to
-     * correlate. Any failure here is logged but never thrown —
-     * a cloud upload problem must not cause the local backup
-     * (which already succeeded) to be reported as failed.
+     * Upload a local backup to the configured
+     * off-site cloud disk.
+     *
+     * Cloud upload remains best-effort.
      */
     private function uploadToCloud(
         string $sourceDisk,
         string $path,
     ): void {
-        if (! $this->cloudUploadEnabled()) {
+        if (
+            ! $this->cloudUploadEnabled()
+        ) {
             return;
         }
 
         $cloudDisk =
             $this->cloudDisk();
 
-        if ($cloudDisk === $sourceDisk) {
+        if (
+            $cloudDisk
+            === $sourceDisk
+        ) {
             return;
         }
 
@@ -914,25 +1736,53 @@ class DatabaseBackupService
                     $path,
                 );
 
-            if ($stream === null) {
+            if (
+                ! is_resource(
+                    $stream,
+                )
+            ) {
                 throw new RuntimeException(
                     'Unable to read the local backup file for cloud upload.',
                 );
             }
 
             try {
-                Storage::disk(
-                    $cloudDisk,
-                )->put(
-                    $path,
-                    $stream,
-                );
+                /*
+                 * filesystems.php currently uses
+                 * throw=false for R2.
+                 *
+                 * Therefore put() returning false
+                 * must be checked manually.
+                 */
+                $uploaded =
+                    Storage::disk(
+                        $cloudDisk,
+                    )->put(
+                        $path,
+                        $stream,
+                    );
+
+                if (
+                    ! $uploaded
+                ) {
+                    throw new RuntimeException(
+                        'Cloud storage rejected the database backup upload.',
+                    );
+                }
             } finally {
-                if (is_resource($stream)) {
-                    fclose($stream);
+                if (
+                    is_resource(
+                        $stream,
+                    )
+                ) {
+                    fclose(
+                        $stream,
+                    );
                 }
             }
-        } catch (Throwable $exception) {
+        } catch (
+            Throwable $exception
+        ) {
             Log::warning(
                 'Database backup cloud upload failed.',
                 [
@@ -950,17 +1800,18 @@ class DatabaseBackupService
         }
     }
 
-    /**
-     * Removes the matching backup file from the off-site cloud
-     * disk when a backup is deleted or pruned locally, so the
-     * two storage locations stay in sync. Failures are logged
-     * only — a cloud deletion problem must not block deletion
-     * of the local backup record.
+    /*
+     * =====================================================
+     * R2 DELETE
+     * =====================================================
      */
+
     private function deleteFromCloud(
         string $path,
     ): void {
-        if (! $this->cloudUploadEnabled()) {
+        if (
+            ! $this->cloudUploadEnabled()
+        ) {
             return;
         }
 
@@ -981,7 +1832,9 @@ class DatabaseBackupService
                     $path,
                 );
             }
-        } catch (Throwable $exception) {
+        } catch (
+            Throwable $exception
+        ) {
             Log::warning(
                 'Database backup cloud deletion failed.',
                 [

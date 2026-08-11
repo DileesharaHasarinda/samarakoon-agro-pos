@@ -1,8 +1,17 @@
 import {
     useCallback,
     useEffect,
+    useRef,
     useState,
 } from 'react';
+
+import type {
+    ChangeEvent,
+} from 'react';
+
+import {
+    createPortal,
+} from 'react-dom';
 
 import {
     useAuth,
@@ -18,6 +27,7 @@ import {
     downloadDatabaseBackup,
     getDatabaseBackups,
     restoreDatabaseBackup,
+    uploadAndRestoreDatabaseBackup,
 } from '../../services/databaseBackupService';
 
 import type {
@@ -30,7 +40,11 @@ import type {
     PosPaginationMeta,
 } from '../../types/sale';
 
-const emptySummary: DatabaseBackupSummary = {
+const MAX_UPLOAD_SIZE =
+    500 * 1024 * 1024;
+
+const emptySummary:
+    DatabaseBackupSummary = {
     total_backups: 0,
     completed_backups: 0,
     failed_backups: 0,
@@ -38,13 +52,15 @@ const emptySummary: DatabaseBackupSummary = {
     latest_completed_at: null,
 };
 
-const emptySettings: DatabaseBackupSettings = {
+const emptySettings:
+    DatabaseBackupSettings = {
     automatic_enabled: false,
     automatic_time: '02:00',
     retention_days: 30,
 };
 
-const emptyPagination: PosPaginationMeta = {
+const emptyPagination:
+    PosPaginationMeta = {
     current_page: 1,
     last_page: 1,
     per_page: 20,
@@ -53,11 +69,34 @@ const emptyPagination: PosPaginationMeta = {
     to: null,
 };
 
+type RestoreTarget =
+    | {
+        mode: 'existing';
+        backup: DatabaseBackup;
+    }
+    | {
+        mode: 'upload';
+        file: File;
+    };
+
 function formatDateTime(
     value: string | null,
 ): string {
     if (!value) {
         return 'Not available';
+    }
+
+    const date =
+        new Date(
+            value,
+        );
+
+    if (
+        Number.isNaN(
+            date.getTime(),
+        )
+    ) {
+        return value;
     }
 
     return new Intl.DateTimeFormat(
@@ -70,7 +109,7 @@ function formatDateTime(
             minute: '2-digit',
         },
     ).format(
-        new Date(value),
+        date,
     );
 }
 
@@ -94,7 +133,8 @@ function formatBytes(
     let value =
         bytes;
 
-    let unitIndex = 0;
+    let unitIndex =
+        0;
 
     while (
         value >= 1024
@@ -136,25 +176,50 @@ function statusName(
     }
 }
 
+function errorMessage(
+    error: unknown,
+    fallback: string,
+): string {
+    if (
+        error instanceof ApiError
+        || error instanceof Error
+    ) {
+        return error.message;
+    }
+
+    return fallback;
+}
+
 const backupPageStyles = `
     #sapo-backup-page,
     #sapo-backup-page *,
     #sapo-backup-page *::before,
-    #sapo-backup-page *::after {
+    #sapo-backup-page *::after,
+    #sapo-backup-restore-confirmation,
+    #sapo-backup-restore-confirmation *,
+    #sapo-backup-restore-confirmation *::before,
+    #sapo-backup-restore-confirmation *::after {
         box-sizing: border-box !important;
     }
 
     #sapo-backup-page {
+        --bkp-green-900: #14532d;
         --bkp-green-800: #166534;
         --bkp-green-700: #15803d;
         --bkp-green-100: #dcfce7;
         --bkp-green-50: #f0fdf4;
+
+        --bkp-red-800: #991b1b;
+        --bkp-red-700: #b91c1c;
         --bkp-red: #dc2626;
         --bkp-red-light: #fef2f2;
+
         --bkp-amber: #b45309;
         --bkp-amber-light: #fffbeb;
+
         --bkp-blue: #2563eb;
         --bkp-blue-light: #eff6ff;
+
         --bkp-text: #111827;
         --bkp-text-secondary: #1f2937;
         --bkp-muted: #6b7280;
@@ -162,19 +227,32 @@ const backupPageStyles = `
         --bkp-border-strong: #d1d5db;
         --bkp-bg: #f9fafb;
         --bkp-white: #ffffff;
-        --bkp-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+        --bkp-font:
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Roboto,
+            Helvetica,
+            Arial,
+            sans-serif;
 
         display: flex !important;
-        flex-direction: column !important;
         width: 100% !important;
+        min-width: 0 !important;
+        flex-direction: column !important;
         gap: 20px !important;
+
         margin: 0 !important;
         padding: 0 !important;
+
         color: var(--bkp-text-secondary) !important;
         font-family: var(--bkp-font) !important;
-        font-size: 14px !important;
+        font-size: 15px !important;
         line-height: 1.5 !important;
+
         background: transparent !important;
+
         isolation: isolate !important;
     }
 
@@ -191,7 +269,8 @@ const backupPageStyles = `
     #sapo-backup-page textarea,
     #sapo-backup-page table,
     #sapo-backup-page th,
-    #sapo-backup-page td {
+    #sapo-backup-page td,
+    #sapo-backup-restore-confirmation * {
         font-family: var(--bkp-font) !important;
         letter-spacing: normal !important;
     }
@@ -200,59 +279,85 @@ const backupPageStyles = `
     #sapo-backup-page h3,
     #sapo-backup-page p {
         margin: 0 !important;
-        padding: 0 !important;
     }
 
-    /* ---------- Header ---------- */
+    /* =====================================================
+       HEADER
+       ===================================================== */
+
     #sapo-backup-page .bkp-header {
         display: flex !important;
         flex-wrap: wrap !important;
         align-items: flex-start !important;
         justify-content: space-between !important;
-        gap: 16px !important;
-        padding: 20px 24px !important;
-        background: var(--bkp-white) !important;
+        gap: 18px !important;
+
+        padding: 22px 24px !important;
+
+        background: #ffffff !important;
+
         border: 1px solid var(--bkp-border) !important;
-        border-radius: 10px !important;
+        border-radius: 12px !important;
     }
 
     #sapo-backup-page .bkp-kicker {
         display: inline-block !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.04em !important;
-        text-transform: uppercase !important;
-        color: var(--bkp-green-700) !important;
+
         margin-bottom: 6px !important;
+
+        color: var(--bkp-green-700) !important;
+
+        font-size: 12px !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+
         background: transparent !important;
     }
 
     #sapo-backup-page .bkp-header h2 {
-        font-size: 22px !important;
-        font-weight: 700 !important;
+        margin-bottom: 5px !important;
+
         color: var(--bkp-text) !important;
-        margin-bottom: 4px !important;
+
+        font-size: 24px !important;
+        font-weight: 800 !important;
     }
 
     #sapo-backup-page .bkp-header p {
-        font-size: 13.5px !important;
+        max-width: 760px !important;
+
         color: var(--bkp-muted) !important;
+
+        font-size: 14px !important;
     }
 
-    /* ---------- Buttons ---------- */
+    /* =====================================================
+       BUTTONS
+       ===================================================== */
+
+    #sapo-backup-page button,
+    #sapo-backup-restore-confirmation button {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+    }
+
     #sapo-backup-page .bkp-primary-button,
-    #sapo-backup-page .bkp-secondary-button {
+    #sapo-backup-page .bkp-secondary-button,
+    #sapo-backup-page .bkp-upload-button {
         display: inline-flex !important;
+        min-height: 44px !important;
         align-items: center !important;
         justify-content: center !important;
-        height: 38px !important;
-        padding: 0 16px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        border-radius: 8px !important;
+
+        padding: 0 18px !important;
+
+        border-radius: 9px !important;
+
+        font-size: 14px !important;
+        font-weight: 750 !important;
+
         cursor: pointer !important;
-        white-space: nowrap !important;
-        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
     }
 
     #sapo-backup-page .bkp-primary-button {
@@ -267,236 +372,457 @@ const backupPageStyles = `
 
     #sapo-backup-page .bkp-secondary-button {
         color: #374151 !important;
-        background: var(--bkp-white) !important;
+        background: #ffffff !important;
         border: 1px solid var(--bkp-border-strong) !important;
     }
 
     #sapo-backup-page .bkp-secondary-button:hover:not(:disabled) {
-        background: var(--bkp-bg) !important;
-        border-color: #9ca3af !important;
+        background: #f9fafb !important;
     }
 
-    #sapo-backup-page button:disabled {
+    #sapo-backup-page .bkp-upload-button {
+        color: #ffffff !important;
+        background: #b45309 !important;
+        border: 1px solid #b45309 !important;
+    }
+
+    #sapo-backup-page .bkp-upload-button:hover:not(:disabled) {
+        background: #92400e !important;
+    }
+
+    #sapo-backup-page button:disabled,
+    #sapo-backup-restore-confirmation button:disabled {
         opacity: 0.55 !important;
         cursor: not-allowed !important;
     }
 
-    /* ---------- Summary cards ---------- */
+    /* =====================================================
+       SUMMARY
+       ===================================================== */
+
     #sapo-backup-page .bkp-summary-grid {
         display: grid !important;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
-        gap: 16px !important;
+        grid-template-columns:
+            repeat(
+                auto-fit,
+                minmax(180px, 1fr)
+            ) !important;
+        gap: 14px !important;
     }
 
     #sapo-backup-page .bkp-summary-grid article {
         display: flex !important;
         flex-direction: column !important;
-        gap: 6px !important;
+        gap: 5px !important;
+
+        min-width: 0 !important;
+
         padding: 18px 20px !important;
-        background: var(--bkp-white) !important;
+
+        background: #ffffff !important;
+
         border: 1px solid var(--bkp-border) !important;
-        border-radius: 10px !important;
+        border-radius: 11px !important;
     }
 
     #sapo-backup-page .bkp-summary-grid span {
-        font-size: 12px !important;
-        font-weight: 500 !important;
         color: var(--bkp-muted) !important;
+
+        font-size: 12px !important;
+        font-weight: 700 !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.03em !important;
+
         background: transparent !important;
     }
 
     #sapo-backup-page .bkp-summary-grid strong {
-        font-size: 22px !important;
-        font-weight: 700 !important;
         color: var(--bkp-text) !important;
+
+        font-size: 22px !important;
+        font-weight: 800 !important;
+
         background: transparent !important;
     }
 
-    #sapo-backup-page .bkp-failed-value {
+    #sapo-backup-page .bkp-summary-grid .bkp-failed-value {
         color: var(--bkp-red) !important;
     }
 
-    #sapo-backup-page .bkp-date-value {
+    #sapo-backup-page .bkp-summary-grid .bkp-date-value {
         font-size: 15px !important;
     }
 
-    /* ---------- Settings banner ---------- */
+    /* =====================================================
+       SETTINGS
+       ===================================================== */
+
     #sapo-backup-page .bkp-settings-banner {
         display: grid !important;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
-        gap: 16px !important;
+        grid-template-columns:
+            repeat(
+                3,
+                minmax(0, 1fr)
+            ) !important;
+        gap: 14px !important;
+
         padding: 16px 20px !important;
+
         background: var(--bkp-blue-light) !important;
+
         border: 1px solid #bfdbfe !important;
-        border-radius: 10px !important;
+        border-radius: 11px !important;
     }
 
     #sapo-backup-page .bkp-settings-banner > div {
         display: flex !important;
+        min-width: 0 !important;
         flex-direction: column !important;
         gap: 3px !important;
     }
 
     #sapo-backup-page .bkp-settings-banner span {
-        font-size: 11.5px !important;
-        font-weight: 600 !important;
         color: var(--bkp-blue) !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.03em !important;
+
+        font-size: 12px !important;
+        font-weight: 750 !important;
+
         background: transparent !important;
     }
 
     #sapo-backup-page .bkp-settings-banner strong {
-        font-size: 15px !important;
-        font-weight: 700 !important;
         color: var(--bkp-text) !important;
+
+        font-size: 15px !important;
+        font-weight: 800 !important;
+
         background: transparent !important;
     }
 
-    /* ---------- Alerts ---------- */
-    #sapo-backup-page .bkp-success-alert {
+    /* =====================================================
+       ALERTS
+       ===================================================== */
+
+    #sapo-backup-page .bkp-success-alert,
+    #sapo-backup-page .bkp-form-alert {
         display: flex !important;
-        align-items: center !important;
+        align-items: flex-start !important;
         gap: 10px !important;
-        padding: 12px 16px !important;
-        border-radius: 8px !important;
+
+        padding: 14px 16px !important;
+
+        border-radius: 9px !important;
+
+        font-size: 14px !important;
+        font-weight: 650 !important;
+    }
+
+    #sapo-backup-page .bkp-success-alert {
+        color: #166534 !important;
         background: var(--bkp-green-50) !important;
-        border: 1px solid var(--bkp-green-100) !important;
-    }
-
-    #sapo-backup-page .bkp-success-alert span:first-child {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 20px !important;
-        height: 20px !important;
-        flex-shrink: 0 !important;
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        color: #ffffff !important;
-        background: var(--bkp-green-700) !important;
-        border-radius: 999px !important;
-    }
-
-    #sapo-backup-page .bkp-success-alert p {
-        flex: 1 !important;
-        font-size: 13.5px !important;
-        font-weight: 500 !important;
-        color: #15803d !important;
-    }
-
-    #sapo-backup-page .bkp-success-alert button {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 24px !important;
-        height: 24px !important;
-        flex-shrink: 0 !important;
-        font-size: 16px !important;
-        line-height: 1 !important;
-        color: #15803d !important;
-        background: transparent !important;
-        border: none !important;
-        border-radius: 6px !important;
-        cursor: pointer !important;
-    }
-
-    #sapo-backup-page .bkp-success-alert button:hover {
-        background: rgba(21, 128, 61, 0.1) !important;
+        border: 1px solid #bbf7d0 !important;
     }
 
     #sapo-backup-page .bkp-form-alert {
-        padding: 12px 16px !important;
-        border-radius: 8px !important;
-        font-size: 13.5px !important;
-        font-weight: 500 !important;
+        color: #b91c1c !important;
         background: var(--bkp-red-light) !important;
         border: 1px solid #fecaca !important;
-        color: #b91c1c !important;
     }
 
-    /* ---------- Content card ---------- */
+    #sapo-backup-page .bkp-success-alert p {
+        flex: 1 1 auto !important;
+
+        color: inherit !important;
+    }
+
+    #sapo-backup-page .bkp-success-alert button {
+        width: 30px !important;
+        height: 30px !important;
+
+        padding: 0 !important;
+
+        color: #166534 !important;
+        background: transparent !important;
+        border: 0 !important;
+        border-radius: 6px !important;
+
+        font-size: 20px !important;
+        cursor: pointer !important;
+    }
+
+    /* =====================================================
+       PANELS
+       ===================================================== */
+
+    #sapo-backup-page .bkp-panel-grid {
+        display: grid !important;
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(0, 1fr)
+            ) !important;
+        gap: 16px !important;
+        align-items: stretch !important;
+    }
+
     #sapo-backup-page .bkp-content-card {
-        background: var(--bkp-white) !important;
-        border: 1px solid var(--bkp-border) !important;
-        border-radius: 10px !important;
-        padding: 20px !important;
         display: flex !important;
+        min-width: 0 !important;
         flex-direction: column !important;
         gap: 16px !important;
+
+        padding: 20px !important;
+
+        background: #ffffff !important;
+
+        border: 1px solid var(--bkp-border) !important;
+        border-radius: 11px !important;
     }
 
-    /* ---------- Create backup panel ---------- */
-    #sapo-backup-page .bkp-create-panel header {
+    #sapo-backup-page .bkp-panel-header {
         display: flex !important;
         flex-direction: column !important;
         gap: 4px !important;
-        margin-bottom: 4px !important;
     }
 
-    #sapo-backup-page .bkp-create-panel h3 {
-        font-size: 17px !important;
-        font-weight: 700 !important;
+    #sapo-backup-page .bkp-panel-header h3 {
         color: var(--bkp-text) !important;
+
+        font-size: 18px !important;
+        font-weight: 800 !important;
     }
 
-    #sapo-backup-page .bkp-create-panel > header > p {
-        font-size: 13px !important;
+    #sapo-backup-page .bkp-panel-header p {
         color: var(--bkp-muted) !important;
+
+        font-size: 14px !important;
+        line-height: 1.55 !important;
     }
+
+    /* =====================================================
+       CREATE BACKUP
+       ===================================================== */
 
     #sapo-backup-page .bkp-create-form {
         display: flex !important;
         flex-direction: column !important;
-        gap: 14px !important;
-        max-width: 520px !important;
+        gap: 12px !important;
+
+        flex: 1 1 auto !important;
     }
 
     #sapo-backup-page .bkp-create-form label {
         display: flex !important;
         flex-direction: column !important;
-        gap: 6px !important;
+        gap: 7px !important;
+
+        flex: 1 1 auto !important;
     }
 
-    #sapo-backup-page .bkp-create-form label span {
-        font-size: 12.5px !important;
-        font-weight: 600 !important;
+    #sapo-backup-page .bkp-field-label {
         color: var(--bkp-text-secondary) !important;
+
+        font-size: 13px !important;
+        font-weight: 750 !important;
+
         background: transparent !important;
     }
 
     #sapo-backup-page .bkp-create-form textarea {
+        display: block !important;
         width: 100% !important;
-        padding: 10px 12px !important;
-        font-size: 13.5px !important;
-        color: var(--bkp-text-secondary) !important;
-        background: var(--bkp-white) !important;
+        min-height: 100px !important;
+
+        padding: 12px 13px !important;
+
+        color: var(--bkp-text) !important;
+        background: #ffffff !important;
+
         border: 1px solid var(--bkp-border-strong) !important;
-        border-radius: 8px !important;
-        outline: none !important;
+        border-radius: 9px !important;
+
+        outline: 0 !important;
+
         resize: vertical !important;
-        min-height: 72px !important;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+
+        font-size: 14px !important;
     }
 
     #sapo-backup-page .bkp-create-form textarea:focus {
         border-color: var(--bkp-green-700) !important;
-        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important;
-    }
-
-    #sapo-backup-page .bkp-create-form textarea:disabled {
-        background: var(--bkp-bg) !important;
-        color: var(--bkp-muted) !important;
-        cursor: not-allowed !important;
+        box-shadow:
+            0 0 0 3px
+            rgba(21, 128, 61, 0.12) !important;
     }
 
     #sapo-backup-page .bkp-create-form .bkp-primary-button {
         align-self: flex-start !important;
     }
 
-    /* ---------- Toolbar ---------- */
+    /* =====================================================
+       UPLOAD RESTORE
+       ===================================================== */
+
+    #sapo-backup-page .bkp-upload-card {
+        border-color: #fde68a !important;
+        background:
+            linear-gradient(
+                180deg,
+                #ffffff 0%,
+                #fffdf7 100%
+            ) !important;
+    }
+
+    #sapo-backup-page .bkp-upload-warning {
+        display: flex !important;
+        gap: 10px !important;
+        align-items: flex-start !important;
+
+        padding: 12px 14px !important;
+
+        color: #92400e !important;
+        background: #fffbeb !important;
+
+        border: 1px solid #fde68a !important;
+        border-radius: 9px !important;
+
+        font-size: 13px !important;
+        line-height: 1.55 !important;
+    }
+
+    #sapo-backup-page .bkp-upload-warning strong {
+        color: #78350f !important;
+    }
+
+    #sapo-backup-page .bkp-file-input {
+        position: absolute !important;
+
+        width: 1px !important;
+        height: 1px !important;
+
+        overflow: hidden !important;
+
+        clip: rect(0 0 0 0) !important;
+
+        white-space: nowrap !important;
+    }
+
+    #sapo-backup-page .bkp-file-picker {
+        display: flex !important;
+        min-height: 92px !important;
+        align-items: center !important;
+        justify-content: center !important;
+
+        padding: 18px !important;
+
+        color: var(--bkp-text-secondary) !important;
+        background: #ffffff !important;
+
+        border: 2px dashed #d6b66b !important;
+        border-radius: 10px !important;
+
+        text-align: center !important;
+
+        cursor: pointer !important;
+    }
+
+    #sapo-backup-page .bkp-file-picker:hover {
+        background: #fffbeb !important;
+        border-color: #b45309 !important;
+    }
+
+    #sapo-backup-page .bkp-file-picker strong {
+        display: block !important;
+
+        margin-bottom: 3px !important;
+
+        color: #92400e !important;
+
+        font-size: 14px !important;
+    }
+
+    #sapo-backup-page .bkp-file-picker span {
+        color: var(--bkp-muted) !important;
+
+        font-size: 12px !important;
+
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-selected-file {
+        display: grid !important;
+        grid-template-columns:
+            minmax(0, 1fr)
+            auto !important;
+        gap: 12px !important;
+        align-items: center !important;
+
+        padding: 12px 14px !important;
+
+        background: #ffffff !important;
+
+        border: 1px solid #fde68a !important;
+        border-radius: 9px !important;
+    }
+
+    #sapo-backup-page .bkp-selected-file-copy {
+        min-width: 0 !important;
+    }
+
+    #sapo-backup-page .bkp-selected-file-copy strong {
+        display: block !important;
+
+        overflow: hidden !important;
+
+        color: var(--bkp-text) !important;
+
+        font-size: 14px !important;
+        font-weight: 800 !important;
+
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+
+    #sapo-backup-page .bkp-selected-file-copy span {
+        display: block !important;
+
+        margin-top: 2px !important;
+
+        color: var(--bkp-muted) !important;
+
+        font-size: 12px !important;
+
+        background: transparent !important;
+    }
+
+    #sapo-backup-page .bkp-clear-file {
+        min-height: 36px !important;
+
+        padding: 0 12px !important;
+
+        color: #b91c1c !important;
+        background: #ffffff !important;
+
+        border: 1px solid #fecaca !important;
+        border-radius: 7px !important;
+
+        font-size: 12px !important;
+        font-weight: 750 !important;
+
+        cursor: pointer !important;
+    }
+
+    #sapo-backup-page .bkp-upload-actions {
+        margin-top: auto !important;
+    }
+
+    /* =====================================================
+       HISTORY
+       ===================================================== */
+
+    #sapo-backup-page .bkp-history-card {
+        padding: 20px !important;
+    }
+
     #sapo-backup-page .bkp-toolbar {
         display: flex !important;
         flex-wrap: wrap !important;
@@ -504,299 +830,587 @@ const backupPageStyles = `
     }
 
     #sapo-backup-page .bkp-toolbar input[type="search"] {
-        flex: 1 1 240px !important;
-        height: 38px !important;
-        padding: 0 14px !important;
-        font-size: 13.5px !important;
-        color: var(--bkp-text-secondary) !important;
+        flex: 1 1 280px !important;
+
+        min-height: 42px !important;
+
+        padding: 0 13px !important;
+
+        color: var(--bkp-text) !important;
+        background: #f9fafb !important;
+
         border: 1px solid var(--bkp-border-strong) !important;
         border-radius: 8px !important;
-        outline: none !important;
-        background: var(--bkp-bg) !important;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
-    }
 
-    #sapo-backup-page .bkp-toolbar input[type="search"]::placeholder {
-        color: #9ca3af !important;
+        outline: 0 !important;
+
+        font-size: 14px !important;
     }
 
     #sapo-backup-page .bkp-toolbar select {
-        height: 38px !important;
+        min-width: 150px !important;
+        min-height: 42px !important;
+
         padding: 0 12px !important;
-        font-size: 13px !important;
+
+        color: var(--bkp-text-secondary) !important;
+        background: #f9fafb !important;
+
         border: 1px solid var(--bkp-border-strong) !important;
         border-radius: 8px !important;
-        background: var(--bkp-bg) !important;
-        color: var(--bkp-text-secondary) !important;
-        outline: none !important;
-        cursor: pointer !important;
-        min-width: 150px !important;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+
+        outline: 0 !important;
+
+        font-size: 14px !important;
     }
 
     #sapo-backup-page .bkp-toolbar input:focus,
     #sapo-backup-page .bkp-toolbar select:focus {
+        background: #ffffff !important;
         border-color: var(--bkp-green-700) !important;
-        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important;
-        background: var(--bkp-white) !important;
+
+        box-shadow:
+            0 0 0 3px
+            rgba(21, 128, 61, 0.12) !important;
     }
 
-    /* ---------- Scrollable table ---------- */
+    /* =====================================================
+       TABLE
+       ===================================================== */
+
     #sapo-backup-page .bkp-table-container {
+        width: 100% !important;
         max-height: 560px !important;
-        overflow-y: auto !important;
+
         overflow-x: auto !important;
+        overflow-y: auto !important;
+
+        background: #ffffff !important;
+
         border: 1px solid var(--bkp-border) !important;
-        border-radius: 8px !important;
-        background: var(--bkp-white) !important;
+        border-radius: 9px !important;
+
         scrollbar-width: thin !important;
-        scrollbar-color: var(--bkp-border-strong) transparent !important;
-    }
-
-    #sapo-backup-page .bkp-table-container::-webkit-scrollbar {
-        width: 8px !important;
-        height: 8px !important;
-    }
-
-    #sapo-backup-page .bkp-table-container::-webkit-scrollbar-track {
-        background: transparent !important;
-    }
-
-    #sapo-backup-page .bkp-table-container::-webkit-scrollbar-thumb {
-        background: var(--bkp-border-strong) !important;
-        border-radius: 8px !important;
     }
 
     #sapo-backup-page .bkp-table {
         width: 100% !important;
-        min-width: 1080px !important;
+        min-width: 1120px !important;
+
         border-collapse: collapse !important;
-        font-size: 13.5px !important;
-        background: var(--bkp-white) !important;
+
+        background: #ffffff !important;
     }
 
     #sapo-backup-page .bkp-table thead {
         position: sticky !important;
         top: 0 !important;
-        z-index: 1 !important;
+
+        z-index: 2 !important;
     }
 
-    #sapo-backup-page .bkp-table thead th {
-        background: #f9fafb !important;
+    #sapo-backup-page .bkp-table th {
+        padding: 13px 14px !important;
+
         color: var(--bkp-muted) !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.03em !important;
-        text-align: left !important;
-        padding: 12px 16px !important;
+        background: #f9fafb !important;
+
         border-bottom: 1px solid var(--bkp-border) !important;
+
+        text-align: left !important;
         white-space: nowrap !important;
+
+        font-size: 12px !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
     }
 
-    #sapo-backup-page .bkp-table tbody td {
-        padding: 14px 16px !important;
-        border-bottom: 1px solid #f1f5f9 !important;
-        vertical-align: middle !important;
+    #sapo-backup-page .bkp-table td {
+        padding: 14px !important;
+
         color: var(--bkp-text-secondary) !important;
-        background: var(--bkp-white) !important;
-    }
+        background: #ffffff !important;
 
-    #sapo-backup-page .bkp-table tbody tr:last-child td {
-        border-bottom: none !important;
+        border-bottom: 1px solid #f1f5f9 !important;
+
+        vertical-align: middle !important;
+
+        font-size: 14px !important;
     }
 
     #sapo-backup-page .bkp-table tbody tr:hover td {
-        background: #f9fafb !important;
+        background: #fafafa !important;
     }
 
     #sapo-backup-page .bkp-table td strong {
-        font-weight: 600 !important;
-        color: var(--bkp-text) !important;
         display: block !important;
+
+        color: var(--bkp-text) !important;
+
+        font-weight: 800 !important;
+
         background: transparent !important;
     }
 
     #sapo-backup-page .bkp-table td small {
         display: block !important;
-        margin-top: 2px !important;
+
+        margin-top: 3px !important;
+
+        color: #8b95a3 !important;
+
         font-size: 12px !important;
-        color: #9ca3af !important;
+        line-height: 1.45 !important;
+
         background: transparent !important;
-        white-space: normal !important;
     }
 
-    #sapo-backup-page .bkp-error-message {
-        color: var(--bkp-red) !important;
+    #sapo-backup-page .bkp-table td .bkp-error-message {
+        color: #b91c1c !important;
     }
 
     #sapo-backup-page .bkp-table-state {
-        text-align: center !important;
         padding: 44px 16px !important;
-        color: #9ca3af !important;
-        font-size: 13.5px !important;
-        background: var(--bkp-white) !important;
-        white-space: normal !important;
+
+        color: var(--bkp-muted) !important;
+
+        text-align: center !important;
     }
 
-    /* ---------- Status badges ---------- */
+    /* =====================================================
+       STATUS
+       ===================================================== */
+
     #sapo-backup-page .bkp-status {
-        display: inline-block !important;
-        padding: 4px 10px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+
+        padding: 5px 10px !important;
+
         border-radius: 999px !important;
-        font-size: 11.5px !important;
-        font-weight: 600 !important;
+
+        font-size: 12px !important;
+        font-weight: 750 !important;
+
         white-space: nowrap !important;
     }
 
     #sapo-backup-page .bkp-status-completed {
-        background: var(--bkp-green-100) !important;
-        color: var(--bkp-green-800) !important;
+        color: #166534 !important;
+        background: #dcfce7 !important;
     }
 
     #sapo-backup-page .bkp-status-restored {
-        background: var(--bkp-blue-light) !important;
-        color: var(--bkp-blue) !important;
+        color: #1d4ed8 !important;
+        background: #dbeafe !important;
     }
 
     #sapo-backup-page .bkp-status-failed {
-        background: var(--bkp-red-light) !important;
         color: #b91c1c !important;
+        background: #fee2e2 !important;
     }
 
     #sapo-backup-page .bkp-status-processing,
     #sapo-backup-page .bkp-status-restoring {
-        background: var(--bkp-amber-light) !important;
-        color: var(--bkp-amber) !important;
+        color: #92400e !important;
+        background: #fef3c7 !important;
     }
 
-    /* ---------- Row actions ---------- */
+    /* =====================================================
+       ACTIONS
+       ===================================================== */
+
     #sapo-backup-page .bkp-actions {
         display: flex !important;
         flex-wrap: wrap !important;
-        align-items: center !important;
-        gap: 6px !important;
+        gap: 7px !important;
     }
 
     #sapo-backup-page .bkp-download-button,
     #sapo-backup-page .bkp-restore-button,
     #sapo-backup-page .bkp-delete-button {
-        padding: 6px 12px !important;
-        font-size: 12.5px !important;
-        font-weight: 600 !important;
-        border-radius: 6px !important;
+        min-height: 36px !important;
+
+        padding: 0 11px !important;
+
+        border-radius: 7px !important;
+
+        font-size: 12px !important;
+        font-weight: 750 !important;
+
         cursor: pointer !important;
-        white-space: nowrap !important;
-        transition: background 0.15s ease, color 0.15s ease !important;
     }
 
     #sapo-backup-page .bkp-download-button {
-        color: var(--bkp-blue) !important;
-        background: var(--bkp-blue-light) !important;
+        color: #1d4ed8 !important;
+        background: #eff6ff !important;
         border: 1px solid #bfdbfe !important;
     }
 
-    #sapo-backup-page .bkp-download-button:hover:not(:disabled) {
-        background: var(--bkp-blue) !important;
-        color: #ffffff !important;
-        border-color: var(--bkp-blue) !important;
-    }
-
     #sapo-backup-page .bkp-restore-button {
-        color: var(--bkp-amber) !important;
-        background: var(--bkp-amber-light) !important;
+        color: #92400e !important;
+        background: #fffbeb !important;
         border: 1px solid #fde68a !important;
     }
 
-    #sapo-backup-page .bkp-restore-button:hover:not(:disabled) {
-        background: var(--bkp-amber) !important;
-        color: #ffffff !important;
-        border-color: var(--bkp-amber) !important;
-    }
-
     #sapo-backup-page .bkp-delete-button {
-        color: var(--bkp-red) !important;
-        background: var(--bkp-red-light) !important;
+        color: #b91c1c !important;
+        background: #fef2f2 !important;
         border: 1px solid #fecaca !important;
     }
 
-    #sapo-backup-page .bkp-delete-button:hover:not(:disabled) {
-        background: var(--bkp-red) !important;
+    #sapo-backup-page .bkp-download-button:hover:not(:disabled) {
         color: #ffffff !important;
-        border-color: var(--bkp-red) !important;
+        background: #2563eb !important;
     }
 
-    /* ---------- Pagination ---------- */
+    #sapo-backup-page .bkp-restore-button:hover:not(:disabled) {
+        color: #ffffff !important;
+        background: #b45309 !important;
+    }
+
+    #sapo-backup-page .bkp-delete-button:hover:not(:disabled) {
+        color: #ffffff !important;
+        background: #dc2626 !important;
+    }
+
+    /* =====================================================
+       PAGINATION
+       ===================================================== */
+
     #sapo-backup-page .bkp-pagination {
         display: flex !important;
         flex-wrap: wrap !important;
         align-items: center !important;
         justify-content: space-between !important;
         gap: 12px !important;
-        padding-top: 4px !important;
     }
 
-    #sapo-backup-page .bkp-pagination p {
-        font-size: 13px !important;
+    #sapo-backup-page .bkp-pagination p,
+    #sapo-backup-page .bkp-pagination-controls span {
         color: var(--bkp-muted) !important;
-        font-weight: 500 !important;
-        background: transparent !important;
+
+        font-size: 13px !important;
     }
 
-    #sapo-backup-page .bkp-pagination p strong {
+    #sapo-backup-page .bkp-pagination strong {
         color: var(--bkp-text) !important;
-        font-weight: 600 !important;
+
         background: transparent !important;
     }
 
     #sapo-backup-page .bkp-pagination-controls {
         display: flex !important;
         align-items: center !important;
-        gap: 16px !important;
-    }
-
-    #sapo-backup-page .bkp-pagination-controls span {
-        font-size: 13px !important;
-        color: var(--bkp-muted) !important;
-        font-weight: 500 !important;
-        background: transparent !important;
-    }
-
-    #sapo-backup-page .bkp-pagination-controls span strong {
-        color: var(--bkp-text) !important;
-        font-weight: 600 !important;
-        background: transparent !important;
+        gap: 12px !important;
     }
 
     #sapo-backup-page .bkp-pagination-button {
-        padding: 7px 16px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
+        min-height: 38px !important;
+
+        padding: 0 14px !important;
+
         color: #374151 !important;
-        background: var(--bkp-white) !important;
+        background: #ffffff !important;
+
         border: 1px solid var(--bkp-border-strong) !important;
-        border-radius: 6px !important;
+        border-radius: 7px !important;
+
+        font-size: 13px !important;
+        font-weight: 700 !important;
+
         cursor: pointer !important;
-        transition: background 0.15s ease, border-color 0.15s ease !important;
     }
 
-    #sapo-backup-page .bkp-pagination-button:hover:not(:disabled) {
+    /* =====================================================
+       RESTORE MODAL
+       ===================================================== */
+
+    #sapo-backup-restore-confirmation {
+        position: fixed !important;
+        inset: 0 !important;
+
+        z-index: 999999 !important;
+
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+
+        padding: 24px !important;
+
+        background:
+            rgba(
+                15,
+                23,
+                42,
+                0.68
+            ) !important;
+
+        backdrop-filter:
+            blur(4px) !important;
+
+        font-family:
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Roboto,
+            Helvetica,
+            Arial,
+            sans-serif !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal {
+        display: flex !important;
+        width: min(620px, 100%) !important;
+        max-height:
+            calc(100dvh - 48px) !important;
+        flex-direction: column !important;
+
+        overflow: hidden !important;
+
+        background: #ffffff !important;
+
+        border: 1px solid #d1d5db !important;
+        border-radius: 16px !important;
+
+        box-shadow:
+            0 30px 90px
+            rgba(15, 23, 42, 0.38) !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-header {
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        gap: 14px !important;
+
+        padding: 20px 22px !important;
+
+        border-bottom: 1px solid #e5e7eb !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-header h3 {
+        margin: 0 0 3px !important;
+
+        color: #991b1b !important;
+
+        font-size: 20px !important;
+        font-weight: 850 !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-header p {
+        margin: 0 !important;
+
+        color: #6b7280 !important;
+
+        font-size: 13px !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-close {
+        width: 38px !important;
+        height: 38px !important;
+        flex: 0 0 38px !important;
+
+        padding: 0 !important;
+
+        color: #4b5563 !important;
+        background: #f3f4f6 !important;
+
+        border: 0 !important;
+        border-radius: 9px !important;
+
+        font-size: 24px !important;
+        line-height: 1 !important;
+
+        cursor: pointer !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-body {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 16px !important;
+
+        padding: 20px 22px !important;
+
+        overflow-y: auto !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-danger-box {
+        padding: 14px 16px !important;
+
+        color: #991b1b !important;
+        background: #fef2f2 !important;
+
+        border: 1px solid #fecaca !important;
+        border-radius: 10px !important;
+
+        font-size: 14px !important;
+        line-height: 1.6 !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-danger-box strong {
+        display: block !important;
+
+        margin-bottom: 3px !important;
+
+        color: #7f1d1d !important;
+
+        font-size: 15px !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-target-box {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+
+        padding: 14px 16px !important;
+
         background: #f9fafb !important;
-        border-color: #9ca3af !important;
+
+        border: 1px solid #e5e7eb !important;
+        border-radius: 10px !important;
     }
 
-    /* ---------- Responsive ---------- */
+    #sapo-backup-restore-confirmation .bkp-target-box span {
+        color: #6b7280 !important;
+
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-target-box strong {
+        overflow-wrap: anywhere !important;
+
+        color: #111827 !important;
+
+        font-size: 14px !important;
+        font-weight: 800 !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-restore-process {
+        margin: 0 !important;
+        padding-left: 22px !important;
+
+        color: #374151 !important;
+
+        font-size: 14px !important;
+        line-height: 1.75 !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-confirm-field {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 7px !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-confirm-field span {
+        color: #374151 !important;
+
+        font-size: 13px !important;
+        font-weight: 750 !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-confirm-field strong {
+        color: #991b1b !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-confirm-field input {
+        display: block !important;
+        width: 100% !important;
+        min-height: 46px !important;
+
+        padding: 0 13px !important;
+
+        color: #111827 !important;
+        background: #ffffff !important;
+
+        border: 1px solid #d1d5db !important;
+        border-radius: 9px !important;
+
+        outline: 0 !important;
+
+        font-size: 15px !important;
+        font-weight: 750 !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-confirm-field input:focus {
+        border-color: #dc2626 !important;
+
+        box-shadow:
+            0 0 0 3px
+            rgba(220, 38, 38, 0.12) !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-footer {
+        display: flex !important;
+        justify-content: flex-end !important;
+        gap: 10px !important;
+
+        padding: 16px 22px !important;
+
+        background: #f9fafb !important;
+
+        border-top: 1px solid #e5e7eb !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-cancel,
+    #sapo-backup-restore-confirmation .bkp-modal-restore {
+        min-height: 44px !important;
+
+        padding: 0 18px !important;
+
+        border-radius: 9px !important;
+
+        font-size: 14px !important;
+        font-weight: 800 !important;
+
+        cursor: pointer !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-cancel {
+        color: #374151 !important;
+        background: #ffffff !important;
+
+        border: 1px solid #d1d5db !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-restore {
+        color: #ffffff !important;
+        background: #dc2626 !important;
+
+        border: 1px solid #dc2626 !important;
+    }
+
+    #sapo-backup-restore-confirmation .bkp-modal-restore:hover:not(:disabled) {
+        background: #b91c1c !important;
+    }
+
+    /* =====================================================
+       RESPONSIVE
+       ===================================================== */
+
+    @media (max-width: 980px) {
+        #sapo-backup-page .bkp-panel-grid {
+            grid-template-columns: 1fr !important;
+        }
+    }
+
     @media (max-width: 760px) {
         #sapo-backup-page .bkp-header {
             flex-direction: column !important;
             align-items: stretch !important;
         }
 
-        #sapo-backup-page .bkp-toolbar {
-            flex-direction: column !important;
-            align-items: stretch !important;
+        #sapo-backup-page .bkp-settings-banner {
+            grid-template-columns: 1fr !important;
         }
 
+        #sapo-backup-page .bkp-toolbar {
+            flex-direction: column !important;
+        }
+
+        #sapo-backup-page .bkp-toolbar input,
         #sapo-backup-page .bkp-toolbar select {
             width: 100% !important;
         }
@@ -804,6 +1418,41 @@ const backupPageStyles = `
         #sapo-backup-page .bkp-pagination {
             flex-direction: column !important;
             align-items: stretch !important;
+        }
+
+        #sapo-backup-page .bkp-pagination-controls {
+            justify-content: space-between !important;
+        }
+
+        #sapo-backup-restore-confirmation {
+            align-items: flex-end !important;
+
+            padding: 0 !important;
+        }
+
+        #sapo-backup-restore-confirmation .bkp-modal {
+            width: 100% !important;
+            max-height: 96dvh !important;
+
+            border-right: 0 !important;
+            border-bottom: 0 !important;
+            border-left: 0 !important;
+
+            border-radius:
+                16px 16px 0 0 !important;
+        }
+
+        #sapo-backup-restore-confirmation .bkp-modal-footer {
+            display: grid !important;
+            grid-template-columns:
+                repeat(
+                    2,
+                    minmax(0, 1fr)
+                ) !important;
+        }
+
+        #sapo-backup-restore-confirmation .bkp-modal-footer button {
+            width: 100% !important;
         }
     }
 `;
@@ -813,90 +1462,185 @@ export default function BackupRestorePage() {
         token,
     } = useAuth();
 
+    const uploadInputRef =
+        useRef<HTMLInputElement | null>(
+            null,
+        );
+
     const [
         backups,
         setBackups,
-    ] = useState<DatabaseBackup[]>([]);
+    ] =
+        useState<DatabaseBackup[]>(
+            [],
+        );
 
     const [
         summary,
         setSummary,
-    ] = useState(emptySummary);
+    ] =
+        useState(
+            emptySummary,
+        );
 
     const [
         settings,
         setSettings,
-    ] = useState(emptySettings);
+    ] =
+        useState(
+            emptySettings,
+        );
 
     const [
         pagination,
         setPagination,
-    ] = useState(emptyPagination);
+    ] =
+        useState(
+            emptyPagination,
+        );
 
     const [
         notes,
         setNotes,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
+
+    const [
+        selectedUpload,
+        setSelectedUpload,
+    ] =
+        useState<File | null>(
+            null,
+        );
 
     const [
         searchInput,
         setSearchInput,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         search,
         setSearch,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         status,
         setStatus,
-    ] = useState('all');
+    ] =
+        useState(
+            'all',
+        );
 
     const [
         page,
         setPage,
-    ] = useState(1);
+    ] =
+        useState(
+            1,
+        );
 
     const [
         perPage,
         setPerPage,
-    ] = useState(20);
+    ] =
+        useState(
+            20,
+        );
 
     const [
         isLoading,
         setIsLoading,
-    ] = useState(true);
+    ] =
+        useState(
+            true,
+        );
 
     const [
         isCreating,
         setIsCreating,
-    ] = useState(false);
+    ] =
+        useState(
+            false,
+        );
 
     const [
         busyBackupId,
         setBusyBackupId,
-    ] = useState<number | null>(null);
+    ] =
+        useState<
+            number | null
+        >(
+            null,
+        );
+
+    const [
+        restoreTarget,
+        setRestoreTarget,
+    ] =
+        useState<
+            RestoreTarget | null
+        >(
+            null,
+        );
+
+    const [
+        restoreConfirmation,
+        setRestoreConfirmation,
+    ] =
+        useState(
+            '',
+        );
+
+    const [
+        isRestoring,
+        setIsRestoring,
+    ] =
+        useState(
+            false,
+        );
 
     const [
         pageError,
         setPageError,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         successMessage,
         setSuccessMessage,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const loadBackups =
         useCallback(
             async (): Promise<void> => {
                 if (!token) {
+                    setIsLoading(
+                        false,
+                    );
+
                     return;
                 }
 
-                setIsLoading(true);
-                setPageError('');
+                setIsLoading(
+                    true,
+                );
+
+                setPageError(
+                    '',
+                );
 
                 try {
                     const response =
@@ -927,12 +1671,15 @@ export default function BackupRestorePage() {
                     );
                 } catch (error) {
                     setPageError(
-                        error instanceof ApiError
-                            ? error.message
-                            : 'Unable to load database backups.',
+                        errorMessage(
+                            error,
+                            'Unable to load database backups.',
+                        ),
                     );
                 } finally {
-                    setIsLoading(false);
+                    setIsLoading(
+                        false,
+                    );
                 }
             },
             [
@@ -944,42 +1691,64 @@ export default function BackupRestorePage() {
             ],
         );
 
-    useEffect(() => {
-        void loadBackups();
-    }, [loadBackups]);
+    useEffect(
+        () => {
+            void loadBackups();
+        },
+        [
+            loadBackups,
+        ],
+    );
 
-    useEffect(() => {
-        const timeout =
-            window.setTimeout(
-                () => {
-                    setSearch(
-                        searchInput.trim(),
-                    );
+    useEffect(
+        () => {
+            const timeout =
+                window.setTimeout(
+                    () => {
+                        setSearch(
+                            searchInput
+                                .trim(),
+                        );
 
-                    setPage(1);
-                },
-                300,
-            );
+                        setPage(
+                            1,
+                        );
+                    },
+                    300,
+                );
 
-        return () => {
-            window.clearTimeout(
-                timeout,
-            );
-        };
-    }, [searchInput]);
+            return () => {
+                window.clearTimeout(
+                    timeout,
+                );
+            };
+        },
+        [
+            searchInput,
+        ],
+    );
 
     const handleCreate =
         async (): Promise<void> => {
             if (
                 !token
                 || isCreating
+                || isRestoring
             ) {
                 return;
             }
 
-            setIsCreating(true);
-            setPageError('');
-            setSuccessMessage('');
+            setIsCreating(
+                true,
+            );
+
+            setPageError(
+                '',
+            );
+
+            setSuccessMessage(
+                '',
+            );
 
             try {
                 const response =
@@ -992,19 +1761,22 @@ export default function BackupRestorePage() {
                     response.message,
                 );
 
-                setNotes('');
+                setNotes(
+                    '',
+                );
 
                 await loadBackups();
             } catch (error) {
                 setPageError(
-                    error instanceof ApiError
-                        ? error.message
-                        : error instanceof Error
-                            ? error.message
-                            : 'Unable to create the database backup.',
+                    errorMessage(
+                        error,
+                        'Unable to create the database backup.',
+                    ),
                 );
             } finally {
-                setIsCreating(false);
+                setIsCreating(
+                    false,
+                );
             }
         };
 
@@ -1012,7 +1784,10 @@ export default function BackupRestorePage() {
         async (
             backup: DatabaseBackup,
         ): Promise<void> => {
-            if (!token) {
+            if (
+                !token
+                || isRestoring
+            ) {
                 return;
             }
 
@@ -1020,7 +1795,9 @@ export default function BackupRestorePage() {
                 backup.id,
             );
 
-            setPageError('');
+            setPageError(
+                '',
+            );
 
             try {
                 await downloadDatabaseBackup(
@@ -1030,66 +1807,332 @@ export default function BackupRestorePage() {
                 );
             } catch (error) {
                 setPageError(
-                    error instanceof Error
-                        ? error.message
-                        : 'Unable to download the database backup.',
+                    errorMessage(
+                        error,
+                        'Unable to download the database backup.',
+                    ),
                 );
             } finally {
-                setBusyBackupId(null);
+                setBusyBackupId(
+                    null,
+                );
             }
         };
 
-    const handleRestore =
-        async (
-            backup: DatabaseBackup,
-        ): Promise<void> => {
-            if (!token) {
+    const handleUploadSelection = (
+        event:
+            ChangeEvent<HTMLInputElement>,
+    ): void => {
+        setPageError(
+            '',
+        );
+
+        setSuccessMessage(
+            '',
+        );
+
+        const file =
+            event.target
+                .files?.[0]
+            ?? null;
+
+        if (!file) {
+            setSelectedUpload(
+                null,
+            );
+
+            return;
+        }
+
+        if (
+            !file.name
+                .toLowerCase()
+                .endsWith(
+                    '.sql',
+                )
+        ) {
+            setSelectedUpload(
+                null,
+            );
+
+            setPageError(
+                'Only .sql database backup files can be selected.',
+            );
+
+            event.target.value =
+                '';
+
+            return;
+        }
+
+        if (
+            file.size <= 0
+        ) {
+            setSelectedUpload(
+                null,
+            );
+
+            setPageError(
+                'The selected database backup file is empty.',
+            );
+
+            event.target.value =
+                '';
+
+            return;
+        }
+
+        if (
+            file.size
+            > MAX_UPLOAD_SIZE
+        ) {
+            setSelectedUpload(
+                null,
+            );
+
+            setPageError(
+                'The selected backup is larger than the 500 MB upload limit.',
+            );
+
+            event.target.value =
+                '';
+
+            return;
+        }
+
+        setSelectedUpload(
+            file,
+        );
+    };
+
+    const clearSelectedUpload =
+        (): void => {
+            if (
+                isRestoring
+            ) {
                 return;
             }
 
-            const confirmation =
-                window.prompt(
-                    `Restoring ${backup.backup_number} will replace the current database.\n\nA safety backup will be created automatically.\n\nType RESTORE to continue.`,
-                );
+            setSelectedUpload(
+                null,
+            );
 
             if (
-                confirmation
-                    ?.trim()
+                uploadInputRef.current
+            ) {
+                uploadInputRef.current.value =
+                    '';
+            }
+        };
+
+    const openExistingRestore = (
+        backup: DatabaseBackup,
+    ): void => {
+        if (
+            isRestoring
+        ) {
+            return;
+        }
+
+        setPageError(
+            '',
+        );
+
+        setSuccessMessage(
+            '',
+        );
+
+        setRestoreConfirmation(
+            '',
+        );
+
+        setRestoreTarget({
+            mode:
+                'existing',
+
+            backup,
+        });
+    };
+
+    const openUploadRestore =
+        (): void => {
+            if (
+                !selectedUpload
+                || isRestoring
+            ) {
+                return;
+            }
+
+            setPageError(
+                '',
+            );
+
+            setSuccessMessage(
+                '',
+            );
+
+            setRestoreConfirmation(
+                '',
+            );
+
+            setRestoreTarget({
+                mode:
+                    'upload',
+
+                file:
+                    selectedUpload,
+            });
+        };
+
+    const closeRestoreModal =
+        (): void => {
+            if (
+                isRestoring
+            ) {
+                return;
+            }
+
+            setRestoreTarget(
+                null,
+            );
+
+            setRestoreConfirmation(
+                '',
+            );
+        };
+
+    const handleConfirmedRestore =
+        async (): Promise<void> => {
+            if (
+                !token
+                || !restoreTarget
+                || isRestoring
+            ) {
+                return;
+            }
+
+            if (
+                restoreConfirmation
+                    .trim()
                     .toUpperCase()
                 !== 'RESTORE'
             ) {
                 return;
             }
 
-            setBusyBackupId(
-                backup.id,
+            setIsRestoring(
+                true,
             );
 
-            setPageError('');
-            setSuccessMessage('');
+            setPageError(
+                '',
+            );
+
+            setSuccessMessage(
+                '',
+            );
+
+            if (
+                restoreTarget.mode
+                === 'existing'
+            ) {
+                setBusyBackupId(
+                    restoreTarget
+                        .backup
+                        .id,
+                );
+            }
 
             try {
                 const response =
-                    await restoreDatabaseBackup(
-                        token,
-                        backup.id,
-                    );
+                    restoreTarget.mode
+                        === 'existing'
+                        ? await restoreDatabaseBackup(
+                            token,
+                            restoreTarget
+                                .backup
+                                .id,
+                        )
+                        : await uploadAndRestoreDatabaseBackup(
+                            token,
+                            restoreTarget
+                                .file,
+                        );
+
+                const safetyBackup =
+                    response
+                        .data
+                        .safety_backup_number;
 
                 setSuccessMessage(
-                    `${response.message} Safety backup: ${response.data.safety_backup_number}`,
+                    `${response.message} Safety backup: ${safetyBackup}. The application will now reload.`,
                 );
 
-                await loadBackups();
+                setRestoreTarget(
+                    null,
+                );
+
+                setRestoreConfirmation(
+                    '',
+                );
+
+                if (
+                    restoreTarget.mode
+                    === 'upload'
+                ) {
+                    setSelectedUpload(
+                        null,
+                    );
+
+                    if (
+                        uploadInputRef
+                            .current
+                    ) {
+                        uploadInputRef
+                            .current
+                            .value =
+                            '';
+                    }
+                }
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * Do not call loadBackups() here.
+                 *
+                 * The restored database may contain
+                 * an older personal_access_tokens
+                 * table, so the currently-used
+                 * Sanctum token can disappear.
+                 *
+                 * Reload the application instead so
+                 * authentication is checked again.
+                 */
+                window.setTimeout(
+                    () => {
+                        window.location
+                            .reload();
+                    },
+                    1800,
+                );
             } catch (error) {
                 setPageError(
-                    error instanceof ApiError
-                        ? error.message
-                        : error instanceof Error
-                            ? error.message
+                    errorMessage(
+                        error,
+                        restoreTarget.mode
+                            === 'upload'
+                            ? 'Unable to restore the uploaded database backup.'
                             : 'Unable to restore the database backup.',
+                    ),
                 );
-            } finally {
-                setBusyBackupId(null);
+
+                setIsRestoring(
+                    false,
+                );
+
+                setBusyBackupId(
+                    null,
+                );
             }
         };
 
@@ -1097,7 +2140,10 @@ export default function BackupRestorePage() {
         async (
             backup: DatabaseBackup,
         ): Promise<void> => {
-            if (!token) {
+            if (
+                !token
+                || isRestoring
+            ) {
                 return;
             }
 
@@ -1114,8 +2160,13 @@ export default function BackupRestorePage() {
                 backup.id,
             );
 
-            setPageError('');
-            setSuccessMessage('');
+            setPageError(
+                '',
+            );
+
+            setSuccessMessage(
+                '',
+            );
 
             try {
                 const response =
@@ -1131,14 +2182,36 @@ export default function BackupRestorePage() {
                 await loadBackups();
             } catch (error) {
                 setPageError(
-                    error instanceof ApiError
-                        ? error.message
-                        : 'Unable to delete the database backup.',
+                    errorMessage(
+                        error,
+                        'Unable to delete the database backup.',
+                    ),
                 );
             } finally {
-                setBusyBackupId(null);
+                setBusyBackupId(
+                    null,
+                );
             }
         };
+
+    const restoreTargetName =
+        restoreTarget?.mode
+            === 'existing'
+            ? restoreTarget
+                .backup
+                .backup_number
+            : restoreTarget?.mode
+                === 'upload'
+                ? restoreTarget
+                    .file
+                    .name
+                : '';
+
+    const confirmationValid =
+        restoreConfirmation
+            .trim()
+            .toUpperCase()
+        === 'RESTORE';
 
     return (
         <div id="sapo-backup-page">
@@ -1157,8 +2230,11 @@ export default function BackupRestorePage() {
                     </h2>
 
                     <p>
-                        Create, download, verify and
-                        restore database backup files.
+                        Create database backups,
+                        download recovery files,
+                        upload external SQL backups
+                        and safely restore the
+                        database.
                     </p>
                 </div>
 
@@ -1168,6 +2244,7 @@ export default function BackupRestorePage() {
                     disabled={
                         isLoading
                         || isCreating
+                        || isRestoring
                     }
                     onClick={() => {
                         void loadBackups();
@@ -1184,7 +2261,10 @@ export default function BackupRestorePage() {
                     </span>
 
                     <strong>
-                        {summary.total_backups}
+                        {
+                            summary
+                                .total_backups
+                        }
                     </strong>
                 </article>
 
@@ -1221,7 +2301,8 @@ export default function BackupRestorePage() {
 
                     <strong>
                         {formatBytes(
-                            summary.total_size,
+                            summary
+                                .total_size,
                         )}
                     </strong>
                 </article>
@@ -1260,8 +2341,10 @@ export default function BackupRestorePage() {
                     </span>
 
                     <strong>
-                        {settings
-                            .automatic_time}
+                        {
+                            settings
+                                .automatic_time
+                        }
                     </strong>
                 </div>
 
@@ -1271,8 +2354,10 @@ export default function BackupRestorePage() {
                     </span>
 
                     <strong>
-                        {settings
-                            .retention_days}
+                        {
+                            settings
+                                .retention_days
+                        }
                         {' '}days
                     </strong>
                 </div>
@@ -1283,17 +2368,17 @@ export default function BackupRestorePage() {
                     className="bkp-success-alert"
                     role="status"
                 >
-                    <span>✓</span>
-
                     <p>
                         {successMessage}
                     </p>
 
                     <button
                         type="button"
-                        aria-label="Dismiss"
+                        aria-label="Dismiss success message"
                         onClick={() => {
-                            setSuccessMessage('');
+                            setSuccessMessage(
+                                '',
+                            );
                         }}
                     >
                         ×
@@ -1310,79 +2395,199 @@ export default function BackupRestorePage() {
                 </div>
             )}
 
-            <section className="bkp-content-card bkp-create-panel">
-                <header>
-                    <span className="bkp-kicker">
-                        Manual backup
-                    </span>
+            <section className="bkp-panel-grid">
+                <article className="bkp-content-card">
+                    <header className="bkp-panel-header">
+                        <h3>
+                            Create New Backup
+                        </h3>
 
+                        <p>
+                            Create a new SQL backup
+                            from the database that is
+                            running right now.
+                        </p>
+                    </header>
+
+                    <div className="bkp-create-form">
+                        <label>
+                            <span className="bkp-field-label">
+                                Notes — Optional
+                            </span>
+
+                            <textarea
+                                value={notes}
+                                maxLength={1000}
+                                disabled={
+                                    isCreating
+                                    || isRestoring
+                                }
+                                placeholder="Example: Backup before stock update"
+                                onChange={(event) => {
+                                    setNotes(
+                                        event
+                                            .target
+                                            .value,
+                                    );
+                                }}
+                            />
+                        </label>
+
+                        <button
+                            type="button"
+                            className="bkp-primary-button"
+                            disabled={
+                                isCreating
+                                || isRestoring
+                            }
+                            onClick={() => {
+                                void handleCreate();
+                            }}
+                        >
+                            {isCreating
+                                ? 'Creating Backup...'
+                                : 'Create Backup'}
+                        </button>
+                    </div>
+                </article>
+
+                <article className="bkp-content-card bkp-upload-card">
+                    <header className="bkp-panel-header">
+                        <h3>
+                            Upload & Restore Backup
+                        </h3>
+
+                        <p>
+                            Select a trusted SQL
+                            backup file from your
+                            computer and restore it.
+                        </p>
+                    </header>
+
+                    <input
+                        ref={uploadInputRef}
+                        id="sapo-backup-upload-file"
+                        type="file"
+                        className="bkp-file-input"
+                        accept=".sql,application/sql,text/sql,text/plain"
+                        disabled={isRestoring}
+                        onChange={
+                            handleUploadSelection
+                        }
+                    />
+
+                    <label
+                        htmlFor="sapo-backup-upload-file"
+                        className="bkp-file-picker"
+                    >
+                        <div>
+                            <strong>
+                                Choose SQL Backup File
+                            </strong>
+
+                            <span>
+                                Only trusted .sql
+                                backups • Maximum
+                                500 MB
+                            </span>
+                        </div>
+                    </label>
+
+                    {selectedUpload && (
+                        <div className="bkp-selected-file">
+                            <div className="bkp-selected-file-copy">
+                                <strong title={selectedUpload.name}>
+                                    {
+                                        selectedUpload
+                                            .name
+                                    }
+                                </strong>
+
+                                <span>
+                                    {formatBytes(
+                                        selectedUpload
+                                            .size,
+                                    )}
+                                </span>
+                            </div>
+
+                            <button
+                                type="button"
+                                className="bkp-clear-file"
+                                disabled={isRestoring}
+                                onClick={
+                                    clearSelectedUpload
+                                }
+                            >
+                                Remove
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="bkp-upload-actions">
+                        <button
+                            type="button"
+                            className="bkp-upload-button"
+                            disabled={
+                                !selectedUpload
+                                || isRestoring
+                                || isCreating
+                            }
+                            onClick={
+                                openUploadRestore
+                            }
+                        >
+                            {isRestoring
+                                && restoreTarget
+                                    ?.mode
+                                === 'upload'
+                                ? 'Restoring...'
+                                : 'Upload & Restore'}
+                        </button>
+                    </div>
+                </article>
+            </section>
+
+            <section className="bkp-content-card bkp-history-card">
+                <header className="bkp-panel-header">
                     <h3>
-                        Create Database Backup
+                        Backup History
                     </h3>
 
                     <p>
-                        The backup includes products,
-                        stock, customers, sales,
-                        purchases and settings.
+                        Download, restore or remove
+                        existing database backups.
                     </p>
                 </header>
 
-                <div className="bkp-create-form">
-                    <label>
-                        <span>
-                            Backup Notes
-                        </span>
-
-                        <textarea
-                            rows={3}
-                            maxLength={1000}
-                            value={notes}
-                            placeholder="Example: Backup before stock correction"
-                            disabled={isCreating}
-                            onChange={(event) => {
-                                setNotes(
-                                    event.target.value,
-                                );
-                            }}
-                        />
-                    </label>
-
-                    <button
-                        type="button"
-                        className="bkp-primary-button"
-                        disabled={isCreating}
-                        onClick={() => {
-                            void handleCreate();
-                        }}
-                    >
-                        {isCreating
-                            ? 'Creating Backup...'
-                            : 'Create Backup'}
-                    </button>
-                </div>
-            </section>
-
-            <section className="bkp-content-card">
                 <div className="bkp-toolbar">
                     <input
                         type="search"
                         value={searchInput}
                         placeholder="Search backup number, filename or notes..."
+                        disabled={isRestoring}
                         onChange={(event) => {
                             setSearchInput(
-                                event.target.value,
+                                event
+                                    .target
+                                    .value,
                             );
                         }}
                     />
 
                     <select
                         value={status}
+                        disabled={isRestoring}
                         onChange={(event) => {
                             setStatus(
-                                event.target.value,
+                                event
+                                    .target
+                                    .value,
                             );
 
-                            setPage(1);
+                            setPage(
+                                1,
+                            );
                         }}
                     >
                         <option value="all">
@@ -1412,14 +2617,19 @@ export default function BackupRestorePage() {
 
                     <select
                         value={perPage}
+                        disabled={isRestoring}
                         onChange={(event) => {
                             setPerPage(
                                 Number(
-                                    event.target.value,
+                                    event
+                                        .target
+                                        .value,
                                 ),
                             );
 
-                            setPage(1);
+                            setPage(
+                                1,
+                            );
                         }}
                     >
                         <option value={10}>
@@ -1440,14 +2650,37 @@ export default function BackupRestorePage() {
                     <table className="bkp-table">
                         <thead>
                             <tr>
-                                <th>Backup</th>
-                                <th>Created</th>
-                                <th>Database</th>
-                                <th>Size</th>
-                                <th>Type</th>
-                                <th>Status</th>
-                                <th>Created By</th>
-                                <th>Actions</th>
+                                <th>
+                                    Backup
+                                </th>
+
+                                <th>
+                                    Created
+                                </th>
+
+                                <th>
+                                    Database
+                                </th>
+
+                                <th>
+                                    Size
+                                </th>
+
+                                <th>
+                                    Type
+                                </th>
+
+                                <th>
+                                    Status
+                                </th>
+
+                                <th>
+                                    Created By
+                                </th>
+
+                                <th>
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
 
@@ -1458,7 +2691,8 @@ export default function BackupRestorePage() {
                                         colSpan={8}
                                         className="bkp-table-state"
                                     >
-                                        Loading database backups...
+                                        Loading database
+                                        backups...
                                     </td>
                                 </tr>
                             ) : backups.length
@@ -1468,15 +2702,19 @@ export default function BackupRestorePage() {
                                         colSpan={8}
                                         className="bkp-table-state"
                                     >
-                                        No database backups found.
+                                        No database
+                                        backups found.
                                     </td>
                                 </tr>
                             ) : (
                                 backups.map(
-                                    (backup) => (
+                                    (
+                                        backup,
+                                    ) => (
                                         <tr
                                             key={
-                                                backup.id
+                                                backup
+                                                    .id
                                             }
                                         >
                                             <td>
@@ -1539,7 +2777,12 @@ export default function BackupRestorePage() {
                                                 {backup
                                                     .is_scheduled
                                                     ? 'Scheduled'
-                                                    : 'Manual'}
+                                                    : backup.notes
+                                                        ?.startsWith(
+                                                            'Uploaded database backup:',
+                                                        )
+                                                        ? 'Uploaded'
+                                                        : 'Manual'}
                                             </td>
 
                                             <td>
@@ -1575,6 +2818,7 @@ export default function BackupRestorePage() {
                                                                 .can_download
                                                             || busyBackupId
                                                             === backup.id
+                                                            || isRestoring
                                                         }
                                                         onClick={() => {
                                                             void handleDownload(
@@ -1593,9 +2837,10 @@ export default function BackupRestorePage() {
                                                                 .can_restore
                                                             || busyBackupId
                                                             === backup.id
+                                                            || isRestoring
                                                         }
                                                         onClick={() => {
-                                                            void handleRestore(
+                                                            openExistingRestore(
                                                                 backup,
                                                             );
                                                         }}
@@ -1609,6 +2854,7 @@ export default function BackupRestorePage() {
                                                         disabled={
                                                             busyBackupId
                                                             === backup.id
+                                                            || isRestoring
                                                         }
                                                         onClick={() => {
                                                             void handleDelete(
@@ -1634,19 +2880,28 @@ export default function BackupRestorePage() {
                             Showing{' '}
 
                             <strong>
-                                {pagination.from}
+                                {
+                                    pagination
+                                        .from
+                                }
                             </strong>
 
                             {' '}to{' '}
 
                             <strong>
-                                {pagination.to}
+                                {
+                                    pagination
+                                        .to
+                                }
                             </strong>
 
                             {' '}of{' '}
 
                             <strong>
-                                {pagination.total}
+                                {
+                                    pagination
+                                        .total
+                                }
                             </strong>
 
                             {' '}backups
@@ -1656,13 +2911,19 @@ export default function BackupRestorePage() {
                             <button
                                 type="button"
                                 className="bkp-pagination-button"
-                                disabled={page <= 1}
+                                disabled={
+                                    page <= 1
+                                    || isRestoring
+                                }
                                 onClick={() => {
                                     setPage(
-                                        (current) =>
+                                        (
+                                            current,
+                                        ) =>
                                             Math.max(
                                                 1,
-                                                current - 1,
+                                                current
+                                                - 1,
                                             ),
                                     );
                                 }}
@@ -1697,15 +2958,18 @@ export default function BackupRestorePage() {
                                     page
                                     >= pagination
                                         .last_page
+                                    || isRestoring
                                 }
                                 onClick={() => {
                                     setPage(
-                                        (current) =>
+                                        (
+                                            current,
+                                        ) =>
                                             Math.min(
                                                 pagination
                                                     .last_page,
-
-                                                current + 1,
+                                                current
+                                                + 1,
                                             ),
                                     );
                                 }}
@@ -1716,6 +2980,212 @@ export default function BackupRestorePage() {
                     </footer>
                 )}
             </section>
+
+            {restoreTarget
+                && createPortal(
+                    <div
+                        id="sapo-backup-restore-confirmation"
+                        role="presentation"
+                        onMouseDown={(event) => {
+                            if (
+                                event.target
+                                === event.currentTarget
+                                && !isRestoring
+                            ) {
+                                closeRestoreModal();
+                            }
+                        }}
+                    >
+                        <section
+                            className="bkp-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="bkp-restore-title"
+                        >
+                            <header className="bkp-modal-header">
+                                <div>
+                                    <h3 id="bkp-restore-title">
+                                        Restore Database
+                                    </h3>
+
+                                    <p>
+                                        Confirm this
+                                        destructive database
+                                        operation.
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="bkp-modal-close"
+                                    aria-label="Close restore confirmation"
+                                    disabled={isRestoring}
+                                    onClick={
+                                        closeRestoreModal
+                                    }
+                                >
+                                    ×
+                                </button>
+                            </header>
+
+                            <div className="bkp-modal-body">
+                                <div className="bkp-danger-box">
+                                    <strong>
+                                        Current database
+                                        data will be
+                                        replaced
+                                    </strong>
+
+                                    Do not run this
+                                    operation while a
+                                    cashier is processing
+                                    a sale, payment,
+                                    return or while an
+                                    administrator is
+                                    processing a purchase.
+                                </div>
+
+                                <div className="bkp-target-box">
+                                    <span>
+                                        Restore From
+                                    </span>
+
+                                    <strong>
+                                        {
+                                            restoreTargetName
+                                        }
+                                    </strong>
+
+                                    {restoreTarget.mode
+                                        === 'upload'
+                                        && (
+                                            <span>
+                                                {formatBytes(
+                                                    restoreTarget
+                                                        .file
+                                                        .size,
+                                                )}
+                                            </span>
+                                        )}
+                                </div>
+
+                                <ol className="bkp-restore-process">
+                                    {restoreTarget.mode
+                                        === 'upload'
+                                        && (
+                                            <li>
+                                                Save and
+                                                validate the
+                                                uploaded SQL
+                                                file.
+                                            </li>
+                                        )}
+
+                                    <li>
+                                        Create a new
+                                        automatic safety
+                                        backup of the
+                                        current database.
+                                    </li>
+
+                                    <li>
+                                        Attempt the
+                                        configured
+                                        Cloudflare R2
+                                        backup copy.
+                                    </li>
+
+                                    <li>
+                                        Replace the
+                                        current database
+                                        using the selected
+                                        SQL backup.
+                                    </li>
+
+                                    <li>
+                                        Reload the
+                                        application and
+                                        verify the restored
+                                        login session.
+                                    </li>
+                                </ol>
+
+                                <label className="bkp-confirm-field">
+                                    <span>
+                                        Type{' '}
+                                        <strong>
+                                            RESTORE
+                                        </strong>
+                                        {' '}to continue
+                                    </span>
+
+                                    <input
+                                        type="text"
+                                        value={
+                                            restoreConfirmation
+                                        }
+                                        disabled={
+                                            isRestoring
+                                        }
+                                        autoFocus
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        placeholder="RESTORE"
+                                        onChange={(event) => {
+                                            setRestoreConfirmation(
+                                                event
+                                                    .target
+                                                    .value,
+                                            );
+                                        }}
+                                        onKeyDown={(event) => {
+                                            if (
+                                                event.key
+                                                === 'Enter'
+                                                && confirmationValid
+                                                && !isRestoring
+                                            ) {
+                                                event.preventDefault();
+
+                                                void handleConfirmedRestore();
+                                            }
+                                        }}
+                                    />
+                                </label>
+                            </div>
+
+                            <footer className="bkp-modal-footer">
+                                <button
+                                    type="button"
+                                    className="bkp-modal-cancel"
+                                    disabled={isRestoring}
+                                    onClick={
+                                        closeRestoreModal
+                                    }
+                                >
+                                    Cancel
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className="bkp-modal-restore"
+                                    disabled={
+                                        !confirmationValid
+                                        || isRestoring
+                                    }
+                                    onClick={() => {
+                                        void handleConfirmedRestore();
+                                    }}
+                                >
+                                    {isRestoring
+                                        ? 'Restoring Database...'
+                                        : 'Restore Database'}
+                                </button>
+                            </footer>
+                        </section>
+                    </div>,
+                    document.body,
+                )}
         </div>
     );
 }

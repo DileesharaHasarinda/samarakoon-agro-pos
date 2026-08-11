@@ -45,12 +45,13 @@ class ProductController extends Controller
                 ],
             ]);
 
-        $search = trim(
-            (string) (
-                $validated['search']
-                ?? ''
-            ),
-        );
+        $search =
+            trim(
+                (string) (
+                    $validated['search']
+                    ?? ''
+                ),
+            );
 
         $perPage =
             (int) (
@@ -58,9 +59,31 @@ class ProductController extends Controller
                 ?? 20
             );
 
-        $products = Product::query()
+        /*
+         * IMPORTANT:
+         *
+         * We load the stock-batch unit information because
+         * total_available_quantity alone does not tell us
+         * whether the physical stock is Bag, Kg, Bottle, etc.
+         */
+        $products =
+            Product::query()
             ->with([
                 'category:id,name',
+
+                'stockBatches' =>
+                function ($query): void {
+                    $query->select([
+                        'id',
+                        'product_id',
+                        'available_quantity',
+                        'received_quantity',
+                        'is_dual_unit',
+                        'stock_unit',
+                        'secondary_unit',
+                        'conversion_factor',
+                    ]);
+                },
             ])
             ->withSum(
                 'stockBatches as total_available_quantity',
@@ -115,9 +138,10 @@ class ProductController extends Controller
             ->orderBy('name')
             ->paginate($perPage);
 
-        $data = collect(
-            $products->items(),
-        )
+        $data =
+            collect(
+                $products->items(),
+            )
             ->map(
                 fn(
                     Product $product,
@@ -129,7 +153,8 @@ class ProductController extends Controller
             ->values();
 
         return response()->json([
-            'data' => $data,
+            'data' =>
+            $data,
 
             'meta' => [
                 'current_page' =>
@@ -155,7 +180,8 @@ class ProductController extends Controller
 
     public function options(): JsonResponse
     {
-        $products = Product::query()
+        $products =
+            Product::query()
             ->with([
                 'category:id,name',
             ])
@@ -166,7 +192,8 @@ class ProductController extends Controller
                 ),
                 fn(
                     Builder $query,
-                ) => $query->where(
+                ) =>
+                $query->where(
                     'is_active',
                     true,
                 ),
@@ -211,7 +238,8 @@ class ProductController extends Controller
             ->values();
 
         return response()->json([
-            'data' => $products,
+            'data' =>
+            $products,
         ]);
     }
 
@@ -221,61 +249,62 @@ class ProductController extends Controller
         $validated =
             $request->validated();
 
-        $product = DB::transaction(
-            function () use (
-                $validated,
-            ): Product {
-                $temporarySku =
-                    'TMP-'
-                    . Str::upper(
-                        Str::random(16),
-                    );
+        $product =
+            DB::transaction(
+                function () use (
+                    $validated,
+                ): Product {
+                    $temporarySku =
+                        'TMP-'
+                        . Str::upper(
+                            Str::random(16),
+                        );
 
-                $product =
-                    new Product();
+                    $product =
+                        new Product();
 
-                $product->forceFill([
-                    'category_id' =>
-                    (int) $validated['category_id'],
+                    $product->forceFill([
+                        'category_id' =>
+                        (int) $validated['category_id'],
 
-                    'name' =>
-                    trim(
-                        $validated['name'],
-                    ),
+                        'name' =>
+                        trim(
+                            $validated['name'],
+                        ),
 
-                    'sku' =>
-                    $temporarySku,
+                        'sku' =>
+                        $temporarySku,
 
-                    'barcode' =>
-                    $this->normaliseBarcode(
-                        $validated['barcode']
-                            ?? null,
-                    ),
+                        'barcode' =>
+                        $this->normaliseBarcode(
+                            $validated['barcode']
+                                ?? null,
+                        ),
 
-                    'unit' =>
-                    trim(
-                        $validated['unit'],
-                    ),
+                        'unit' =>
+                        trim(
+                            $validated['unit'],
+                        ),
 
-                    'is_active' =>
-                    true,
-                ]);
+                        'is_active' =>
+                        true,
+                    ]);
 
-                $product->save();
+                    $product->save();
 
-                $product->forceFill([
-                    'sku' =>
-                    sprintf(
-                        'PRD-%06d',
-                        $product->id,
-                    ),
-                ]);
+                    $product->forceFill([
+                        'sku' =>
+                        sprintf(
+                            'PRD-%06d',
+                            $product->id,
+                        ),
+                    ]);
 
-                $product->save();
+                    $product->save();
 
-                return $product;
-            },
-        );
+                    return $product;
+                },
+            );
 
         $product->load([
             'category:id,name',
@@ -304,7 +333,8 @@ class ProductController extends Controller
             'category:id,name',
         ]);
 
-        $batches = StockBatch::query()
+        $batches =
+            StockBatch::query()
             ->where(
                 'product_id',
                 $product->id,
@@ -321,7 +351,8 @@ class ProductController extends Controller
             ->orderBy('id')
             ->get();
 
-        $purchaseItemIds = $batches
+        $purchaseItemIds =
+            $batches
             ->pluck(
                 'purchase_item_id',
             )
@@ -345,7 +376,8 @@ class ProductController extends Controller
                 $purchaseItemIds,
             );
 
-        $purchaseIds = $purchaseItems
+        $purchaseIds =
+            $purchaseItems
             ->map(
                 fn(
                     object $item,
@@ -366,7 +398,8 @@ class ProductController extends Controller
                 $purchaseIds,
             );
 
-        $supplierIds = $purchases
+        $supplierIds =
+            $purchases
             ->map(
                 fn(
                     object $purchase,
@@ -387,13 +420,15 @@ class ProductController extends Controller
                 $supplierIds,
             );
 
-        $batchDetails = $batches
+        $batchDetails =
+            $batches
             ->map(
                 fn(
                     StockBatch $batch,
                 ): array =>
                 $this->batchData(
                     $batch,
+                    $product,
                     $purchaseItems,
                     $purchases,
                     $suppliers,
@@ -406,6 +441,12 @@ class ProductController extends Controller
                 $batchDetails,
             );
 
+        /*
+         * These numeric totals are retained for compatibility.
+         *
+         * Do not append product.unit to them in the UI.
+         * Use stock_by_unit for unit-aware display.
+         */
         $totalAvailableQuantity =
             round(
                 (float) $batchDetails
@@ -471,6 +512,11 @@ class ProductController extends Controller
                 2,
             );
 
+        $stockByUnit =
+            $this->buildStockByUnit(
+                $batchDetails,
+            );
+
         return response()->json([
             'data' => [
                 'id' =>
@@ -485,6 +531,14 @@ class ProductController extends Controller
                 'barcode' =>
                 $product->barcode,
 
+                /*
+                 * Main product/purchase unit.
+                 *
+                 * Example: Bag.
+                 *
+                 * This does not necessarily equal the
+                 * physical stock unit.
+                 */
                 'unit' =>
                 $product->unit,
 
@@ -548,6 +602,13 @@ class ProductController extends Controller
                             - $totalStockValueAtCost,
                         2,
                     ),
+
+                    /*
+                     * Correct physical stock quantity grouped
+                     * by physical stock unit.
+                     */
+                    'stock_by_unit' =>
+                    $stockByUnit,
                 ],
 
                 'price_options' =>
@@ -630,6 +691,159 @@ class ProductController extends Controller
             'message' =>
             'Product deleted successfully.',
         ]);
+    }
+
+    /**
+     * Build product-list stock grouped by the ACTUAL
+     * physical stock unit.
+     *
+     * Example:
+     *
+     * Product main unit:
+     * Bag
+     *
+     * Dual batch:
+     * 1 Bag = 100 Kg
+     *
+     * available_quantity:
+     * 95
+     *
+     * Result:
+     *
+     * [
+     *     [
+     *         'unit' => 'Kg',
+     *         'available_quantity' => 95,
+     *     ]
+     * ]
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildAvailableStockByUnit(
+        Product $product,
+    ): array {
+        if (
+            $product->relationLoaded(
+                'stockBatches',
+            )
+        ) {
+            $batches =
+                $product->stockBatches;
+        } else {
+            $batches =
+                StockBatch::query()
+                ->where(
+                    'product_id',
+                    $product->id,
+                )
+                ->get([
+                    'id',
+                    'product_id',
+                    'available_quantity',
+                    'received_quantity',
+                    'is_dual_unit',
+                    'stock_unit',
+                    'secondary_unit',
+                    'conversion_factor',
+                ]);
+        }
+
+        if ($batches->isEmpty()) {
+            $defaultUnit =
+                trim(
+                    (string) $product->unit,
+                );
+
+            return [
+                [
+                    'unit' =>
+                    $defaultUnit !== ''
+                        ? $defaultUnit
+                        : 'Unit',
+
+                    'available_quantity' =>
+                    0,
+                ],
+            ];
+        }
+
+        $stockByUnit = [];
+
+        foreach ($batches as $batch) {
+            /*
+             * IMPORTANT:
+             *
+             * For dual-unit stock we intentionally prefer
+             * secondary_unit as the physical stock unit.
+             *
+             * This also fixes older records where:
+             *
+             * is_dual_unit = 1
+             * stock_unit = Bag      <- old incorrect value
+             * secondary_unit = Kg
+             * conversion_factor = 100
+             *
+             * Physical stock must be displayed as Kg.
+             */
+            $stockUnit =
+                $this->resolvePhysicalStockUnit(
+                    $product,
+                    $batch->getAttribute(
+                        'is_dual_unit',
+                    ),
+                    $batch->getAttribute(
+                        'stock_unit',
+                    ),
+                    $batch->getAttribute(
+                        'secondary_unit',
+                    ),
+                    $batch->getAttribute(
+                        'conversion_factor',
+                    ),
+                );
+
+            $availableQuantity =
+                round(
+                    (float) (
+                        $batch->available_quantity
+                        ?? 0
+                    ),
+                    3,
+                );
+
+            if (
+                !array_key_exists(
+                    $stockUnit,
+                    $stockByUnit,
+                )
+            ) {
+                $stockByUnit[$stockUnit] = 0.0;
+            }
+
+            $stockByUnit[$stockUnit] +=
+                $availableQuantity;
+        }
+
+        return collect(
+            $stockByUnit,
+        )
+            ->map(
+                fn(
+                    float $quantity,
+                    string $unit,
+                ): array => [
+                    'unit' =>
+                    $unit,
+
+                    'available_quantity' =>
+                    round(
+                        $quantity,
+                        3,
+                    ),
+                ],
+            )
+            ->values()
+            ->all();
     }
 
     /**
@@ -740,6 +954,7 @@ class ProductController extends Controller
      */
     private function batchData(
         StockBatch $batch,
+        Product $product,
         Collection $purchaseItems,
         Collection $purchases,
         Collection $suppliers,
@@ -792,6 +1007,123 @@ class ProductController extends Controller
             )
             : null;
 
+        /*
+         * PRIMARY / PURCHASE UNIT
+         *
+         * Example: Bag
+         */
+        $purchaseUnitName =
+            $purchaseItem
+            && isset(
+                $purchaseItem
+                    ->purchase_unit_name,
+            )
+            && trim(
+                (string) $purchaseItem
+                    ->purchase_unit_name,
+            ) !== ''
+            ? trim(
+                (string) $purchaseItem
+                    ->purchase_unit_name,
+            )
+            : trim(
+                (string) $product->unit,
+            );
+
+        if ($purchaseUnitName === '') {
+            $purchaseUnitName =
+                'Unit';
+        }
+
+        $batchDualValue =
+            $batch->getAttribute(
+                'is_dual_unit',
+            );
+
+        $purchaseDualValue =
+            $purchaseItem
+            && isset(
+                $purchaseItem
+                    ->is_dual_unit,
+            )
+            ? $purchaseItem
+            ->is_dual_unit
+            : null;
+
+        $secondaryUnit =
+            $this->cleanString(
+                $batch->getAttribute(
+                    'secondary_unit',
+                ),
+            )
+            ?? $this->cleanString(
+                $purchaseItem
+                    ->secondary_unit
+                    ?? null,
+            );
+
+        $conversionFactor =
+            $this->positiveFloat(
+                $batch->getAttribute(
+                    'conversion_factor',
+                ),
+            )
+            ?? $this->positiveFloat(
+                $purchaseItem
+                    ->conversion_factor
+                    ?? null,
+            )
+            ?? 1.0;
+
+        $isDualUnit =
+            $this->booleanValue(
+                $batchDualValue,
+            )
+            || $this->booleanValue(
+                $purchaseDualValue,
+            );
+
+        if (
+            !$isDualUnit
+            && $secondaryUnit !== null
+            && $conversionFactor > 1
+        ) {
+            $isDualUnit =
+                true;
+        }
+
+        /*
+         * CRITICAL FIX:
+         *
+         * If this is a dual-unit batch:
+         *
+         * 1 Bag = 100 Kg
+         *
+         * physical stock is Kg.
+         *
+         * Even if an old database row accidentally contains:
+         *
+         * stock_unit = Bag
+         *
+         * we prefer secondary_unit = Kg.
+         */
+        $stockUnit =
+            $this->resolvePhysicalStockUnit(
+                $product,
+                $isDualUnit,
+                $batch->getAttribute(
+                    'stock_unit',
+                ),
+                $secondaryUnit,
+                $conversionFactor,
+            );
+
+        /*
+         * PURCHASE COST PER PRIMARY UNIT
+         *
+         * Example:
+         * Rs. 2,000 / Bag
+         */
         $unitCost =
             $purchaseItem
             && isset(
@@ -800,8 +1132,59 @@ class ProductController extends Controller
             )
             ? (float) $purchaseItem
                 ->unit_cost
+            : (
+                $batch->purchase_cost
+                !== null
+                ? (float) $batch
+                    ->purchase_cost
+                : null
+            );
+
+        /*
+         * COST PER PHYSICAL STOCK UNIT
+         *
+         * Example:
+         *
+         * Rs. 2,000 / Bag
+         * 1 Bag = 100 Kg
+         *
+         * Base cost = Rs. 20 / Kg
+         */
+        $baseUnitCostAttribute =
+            $batch->getAttribute(
+                'base_unit_cost',
+            );
+
+        $baseUnitCost =
+            $baseUnitCostAttribute
+            !== null
+            && $baseUnitCostAttribute !== ''
+            ? (float) $baseUnitCostAttribute
             : null;
 
+        if (
+            $baseUnitCost === null
+            && $unitCost !== null
+        ) {
+            if (
+                $isDualUnit
+                && $conversionFactor > 0
+            ) {
+                $baseUnitCost =
+                    $unitCost
+                    / $conversionFactor;
+            } else {
+                $baseUnitCost =
+                    $unitCost;
+            }
+        }
+
+        /*
+         * PRIMARY SELLING PRICE
+         *
+         * Example:
+         * Rs. 3,000 / Bag
+         */
         $sellingPrice =
             $batch->selling_price
             !== null
@@ -818,6 +1201,41 @@ class ProductController extends Controller
                 : 0
             );
 
+        /*
+         * LOOSE / SECONDARY SELLING PRICE
+         *
+         * Example:
+         * Rs. 35 / Kg
+         */
+        $secondarySellingPriceAttribute =
+            $batch->getAttribute(
+                'secondary_selling_price',
+            );
+
+        $secondarySellingPrice =
+            $secondarySellingPriceAttribute
+            !== null
+            && $secondarySellingPriceAttribute !== ''
+            ? (float) $secondarySellingPriceAttribute
+            : (
+                $purchaseItem
+                && isset(
+                    $purchaseItem
+                        ->secondary_selling_price,
+                )
+                && $purchaseItem
+                ->secondary_selling_price !== null
+                ? (float) $purchaseItem
+                    ->secondary_selling_price
+                : null
+            );
+
+        /*
+         * PURCHASE QUANTITY
+         *
+         * Example:
+         * 1 Bag
+         */
         $purchasedQuantity =
             $purchaseItem
             && isset(
@@ -828,7 +1246,13 @@ class ProductController extends Controller
                 ->quantity
             : 0;
 
-        $receivedQuantity =
+        /*
+         * RECEIVED PURCHASE UNITS
+         *
+         * Example:
+         * 1 Bag
+         */
+        $receivedPurchaseQuantity =
             $purchaseItem
             && isset(
                 $purchaseItem
@@ -838,12 +1262,96 @@ class ProductController extends Controller
                 ->received_quantity
             : $purchasedQuantity;
 
+        /*
+         * PHYSICAL QUANTITY RECEIVED
+         *
+         * Example:
+         * 100 Kg
+         */
+        $batchReceivedQuantity =
+            $batch->getAttribute(
+                'received_quantity',
+            );
+
+        if (
+            $batchReceivedQuantity !== null
+            && $batchReceivedQuantity !== ''
+        ) {
+            $receivedQuantity =
+                (float) $batchReceivedQuantity;
+        } elseif (
+            $isDualUnit
+            && $purchaseItem
+            && isset(
+                $purchaseItem
+                    ->base_received_quantity,
+            )
+            && $purchaseItem
+            ->base_received_quantity !== null
+        ) {
+            $receivedQuantity =
+                (float) $purchaseItem
+                    ->base_received_quantity;
+        } elseif ($isDualUnit) {
+            $receivedQuantity =
+                $receivedPurchaseQuantity
+                * $conversionFactor;
+        } else {
+            $receivedQuantity =
+                $receivedPurchaseQuantity;
+        }
+
+        $receivedQuantity =
+            round(
+                $receivedQuantity,
+                3,
+            );
+
+        /*
+         * CURRENT PHYSICAL STOCK
+         *
+         * Example after selling 5 Kg:
+         * 95 Kg
+         */
         $availableQuantity =
             round(
                 (float) $batch
                     ->available_quantity,
                 3,
             );
+
+        if (
+            $isDualUnit
+            && $conversionFactor > 0
+        ) {
+            $fullUnitsAvailable =
+                (int) floor(
+                    (
+                        $availableQuantity
+                        + 0.0000001
+                    )
+                        / $conversionFactor,
+                );
+
+            $looseQuantityAvailable =
+                round(
+                    max(
+                        0,
+                        $availableQuantity
+                            - (
+                                $fullUnitsAvailable
+                                * $conversionFactor
+                            ),
+                    ),
+                    3,
+                );
+        } else {
+            $fullUnitsAvailable =
+                $availableQuantity;
+
+            $looseQuantityAvailable =
+                0;
+        }
 
         $purchaseManufacturedDate =
             $purchaseItem
@@ -933,21 +1441,100 @@ class ProductController extends Controller
             $batch->batch_number
             ?? $purchaseBatchNumber;
 
+        /*
+         * CORRECT COST VALUE
+         *
+         * Dual:
+         * available Kg × cost/Kg
+         *
+         * Standard:
+         * available Bag × cost/Bag
+         */
         $currentCostValue =
-            $unitCost !== null
+            $baseUnitCost !== null
             ? round(
-                $unitCost
+                $baseUnitCost
                     * $availableQuantity,
                 2,
             )
             : 0;
 
-        $currentSaleValue =
-            round(
+        /*
+         * CORRECT EXPECTED SALE VALUE
+         */
+        if (
+            $isDualUnit
+            && $conversionFactor > 0
+        ) {
+            $fullUnitSaleValue =
+                $fullUnitsAvailable
+                * $sellingPrice;
+
+            $effectiveSecondarySellingPrice =
+                $secondarySellingPrice
+                ?? (
+                    $sellingPrice
+                    / $conversionFactor
+                );
+
+            $looseSaleValue =
+                $looseQuantityAvailable
+                * $effectiveSecondarySellingPrice;
+
+            $currentSaleValue =
+                round(
+                    $fullUnitSaleValue
+                        + $looseSaleValue,
+                    2,
+                );
+        } else {
+            $currentSaleValue =
+                round(
+                    $sellingPrice
+                        * $availableQuantity,
+                    2,
+                );
+        }
+
+        $profitPerPrimaryUnit =
+            $unitCost !== null
+            ? round(
                 $sellingPrice
-                    * $availableQuantity,
+                    - $unitCost,
                 2,
-            );
+            )
+            : null;
+
+        if ($baseUnitCost !== null) {
+            if (
+                $isDualUnit
+                && $conversionFactor > 0
+            ) {
+                $physicalSellingPrice =
+                    $secondarySellingPrice
+                    ?? (
+                        $sellingPrice
+                        / $conversionFactor
+                    );
+
+                $profitPerStockUnit =
+                    round(
+                        $physicalSellingPrice
+                            - $baseUnitCost,
+                        4,
+                    );
+            } else {
+                $profitPerStockUnit =
+                    round(
+                        $sellingPrice
+                            - $baseUnitCost,
+                        4,
+                    );
+            }
+        } else {
+            $profitPerStockUnit =
+                null;
+        }
 
         $notes =
             $purchaseItem
@@ -993,38 +1580,94 @@ class ProductController extends Controller
             'batch_number' =>
             $batchNumber,
 
+            /*
+             * UNIT INFORMATION
+             */
+            'is_dual_unit' =>
+            $isDualUnit,
+
+            'primary_unit' =>
+            $purchaseUnitName,
+
+            'purchase_unit_name' =>
+            $purchaseUnitName,
+
+            'stock_unit' =>
+            $stockUnit,
+
+            'secondary_unit' =>
+            $secondaryUnit,
+
+            'conversion_factor' =>
+            round(
+                $conversionFactor,
+                3,
+            ),
+
+            /*
+             * PURCHASE QUANTITIES
+             */
             'purchased_quantity' =>
             round(
                 $purchasedQuantity,
                 3,
             ),
 
-            'received_quantity' =>
+            'received_purchase_quantity' =>
             round(
-                $receivedQuantity,
+                $receivedPurchaseQuantity,
                 3,
             ),
+
+            /*
+             * PHYSICAL STOCK QUANTITIES
+             */
+            'received_quantity' =>
+            $receivedQuantity,
 
             'available_quantity' =>
             $availableQuantity,
 
+            'full_units_available' =>
+            $fullUnitsAvailable,
+
+            'loose_quantity_available' =>
+            $looseQuantityAvailable,
+
+            /*
+             * COSTS
+             */
             'unit_cost' =>
             $unitCost,
 
             'cost_price' =>
             $unitCost,
 
+            'base_unit_cost' =>
+            $baseUnitCost !== null
+                ? round(
+                    $baseUnitCost,
+                    4,
+                )
+                : null,
+
+            /*
+             * SELLING PRICES
+             */
             'selling_price' =>
             $sellingPrice,
 
+            'secondary_selling_price' =>
+            $secondarySellingPrice,
+
+            /*
+             * PROFITS
+             */
             'profit_per_unit' =>
-            $unitCost !== null
-                ? round(
-                    $sellingPrice
-                        - $unitCost,
-                    2,
-                )
-                : null,
+            $profitPerPrimaryUnit,
+
+            'profit_per_stock_unit' =>
+            $profitPerStockUnit,
 
             'discount' =>
             $purchaseItem
@@ -1081,20 +1724,54 @@ class ProductController extends Controller
     ): Collection {
         return $batches
             ->groupBy(
-                fn(
+                function (
                     array $batch,
-                ): string =>
-                number_format(
-                    (float) $batch['selling_price'],
-                    2,
-                    '.',
-                    '',
-                ),
+                ): string {
+                    return implode(
+                        '|',
+                        [
+                            number_format(
+                                (float) $batch['selling_price'],
+                                2,
+                                '.',
+                                '',
+                            ),
+
+                            (string) (
+                                $batch['primary_unit']
+                                ?? ''
+                            ),
+
+                            (string) (
+                                $batch['stock_unit']
+                                ?? ''
+                            ),
+
+                            (string) (
+                                $batch['secondary_unit']
+                                ?? ''
+                            ),
+
+                            number_format(
+                                (float) (
+                                    $batch['conversion_factor']
+                                    ?? 1
+                                ),
+                                3,
+                                '.',
+                                '',
+                            ),
+                        ],
+                    );
+                },
             )
             ->map(
                 function (
                     Collection $priceBatches,
                 ): array {
+                    $first =
+                        $priceBatches->first();
+
                     $costPrices =
                         $priceBatches
                         ->pluck(
@@ -1116,8 +1793,27 @@ class ProductController extends Controller
 
                     return [
                         'selling_price' =>
-                        (float) $priceBatches
-                            ->first()['selling_price'],
+                        (float) $first['selling_price'],
+
+                        'secondary_selling_price' =>
+                        $first['secondary_selling_price'] !== null
+                            ? (float) $first['secondary_selling_price']
+                            : null,
+
+                        'is_dual_unit' =>
+                        (bool) $first['is_dual_unit'],
+
+                        'primary_unit' =>
+                        (string) $first['primary_unit'],
+
+                        'stock_unit' =>
+                        (string) $first['stock_unit'],
+
+                        'secondary_unit' =>
+                        $first['secondary_unit'],
+
+                        'conversion_factor' =>
+                        (float) $first['conversion_factor'],
 
                         'cost_price_min' =>
                         $costPrices->isEmpty()
@@ -1185,6 +1881,205 @@ class ProductController extends Controller
             ->values();
     }
 
+    /**
+     * Product-details physical stock summary.
+     *
+     * @param Collection<int, array<string, mixed>> $batches
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildStockByUnit(
+        Collection $batches,
+    ): array {
+        return $batches
+            ->groupBy(
+                fn(
+                    array $batch,
+                ): string =>
+                trim(
+                    (string) (
+                        $batch['stock_unit']
+                        ?? 'Unit'
+                    ),
+                ),
+            )
+            ->map(
+                function (
+                    Collection $unitBatches,
+                    mixed $unit,
+                ): array {
+                    $unitName =
+                        trim(
+                            (string) $unit,
+                        );
+
+                    if ($unitName === '') {
+                        $unitName =
+                            'Unit';
+                    }
+
+                    return [
+                        'unit' =>
+                        $unitName,
+
+                        'total_received_quantity' =>
+                        round(
+                            (float) $unitBatches
+                                ->sum(
+                                    'received_quantity',
+                                ),
+                            3,
+                        ),
+
+                        'total_available_quantity' =>
+                        round(
+                            (float) $unitBatches
+                                ->sum(
+                                    'available_quantity',
+                                ),
+                            3,
+                        ),
+
+                        'saleable_quantity' =>
+                        round(
+                            (float) $unitBatches
+                                ->whereIn(
+                                    'status',
+                                    [
+                                        'available',
+                                        'expiring_soon',
+                                    ],
+                                )
+                                ->sum(
+                                    'available_quantity',
+                                ),
+                            3,
+                        ),
+
+                        'expired_quantity' =>
+                        round(
+                            (float) $unitBatches
+                                ->where(
+                                    'status',
+                                    'expired',
+                                )
+                                ->sum(
+                                    'available_quantity',
+                                ),
+                            3,
+                        ),
+                    ];
+                },
+            )
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Resolve the ACTUAL physical inventory unit.
+     *
+     * For normal stock:
+     *
+     * product.unit = Bottle
+     * stock_unit = Bottle
+     *
+     * Result:
+     * Bottle
+     *
+     * For dual stock:
+     *
+     * product.unit = Bag
+     * secondary_unit = Kg
+     * conversion_factor = 100
+     *
+     * Result:
+     * Kg
+     *
+     * We intentionally prefer the secondary unit for
+     * dual-unit stock because inventory quantities are
+     * stored in the base/physical unit.
+     */
+    private function resolvePhysicalStockUnit(
+        Product $product,
+        mixed $isDualUnitValue,
+        mixed $stockUnitValue,
+        mixed $secondaryUnitValue,
+        mixed $conversionFactorValue,
+    ): string {
+        $stockUnit =
+            $this->cleanString(
+                $stockUnitValue,
+            );
+
+        $secondaryUnit =
+            $this->cleanString(
+                $secondaryUnitValue,
+            );
+
+        $conversionFactor =
+            $this->positiveFloat(
+                $conversionFactorValue,
+            )
+            ?? 1.0;
+
+        $isDualUnit =
+            $this->booleanValue(
+                $isDualUnitValue,
+            );
+
+        /*
+         * Compatibility:
+         *
+         * Some old records may not have is_dual_unit set
+         * but still contain:
+         *
+         * secondary_unit = Kg
+         * conversion_factor = 100
+         */
+        if (
+            !$isDualUnit
+            && $secondaryUnit !== null
+            && $conversionFactor > 1
+        ) {
+            $isDualUnit =
+                true;
+        }
+
+        /*
+         * CRITICAL:
+         *
+         * Dual-unit inventory is physically maintained in
+         * the secondary/base unit.
+         *
+         * Therefore:
+         *
+         * Bag -> Kg
+         * Piece -> Gram
+         *
+         * etc.
+         */
+        if (
+            $isDualUnit
+            && $secondaryUnit !== null
+            && $conversionFactor > 1
+        ) {
+            return $secondaryUnit;
+        }
+
+        if ($stockUnit !== null) {
+            return $stockUnit;
+        }
+
+        $productUnit =
+            trim(
+                (string) $product->unit,
+            );
+
+        return $productUnit !== ''
+            ? $productUnit
+            : 'Unit';
+    }
+
     private function resolveBatchStatus(
         float $availableQuantity,
         ?string $expiryDate,
@@ -1225,6 +2120,75 @@ class ProductController extends Controller
         }
 
         return 'available';
+    }
+
+    private function booleanValue(
+        mixed $value,
+    ): bool {
+        if (
+            $value === true
+            || $value === 1
+            || $value === '1'
+        ) {
+            return true;
+        }
+
+        if (is_string($value)) {
+            return in_array(
+                strtolower(
+                    trim(
+                        $value,
+                    ),
+                ),
+                [
+                    'true',
+                    'yes',
+                    'on',
+                ],
+                true,
+            );
+        }
+
+        return false;
+    }
+
+    private function positiveFloat(
+        mixed $value,
+    ): ?float {
+        if (
+            $value === null
+            || $value === ''
+        ) {
+            return null;
+        }
+
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $numericValue =
+            (float) $value;
+
+        return $numericValue > 0
+            ? $numericValue
+            : null;
+    }
+
+    private function cleanString(
+        mixed $value,
+    ): ?string {
+        if ($value === null) {
+            return null;
+        }
+
+        $cleaned =
+            trim(
+                (string) $value,
+            );
+
+        return $cleaned !== ''
+            ? $cleaned
+            : null;
     }
 
     private function formatDateValue(
@@ -1375,11 +2339,25 @@ class ProductController extends Controller
     }
 
     /**
+     * Product data used by the Products list page.
+     *
      * @return array<string, mixed>
      */
     private function productData(
         Product $product,
     ): array {
+        /*
+         * THIS WAS THE MISSING PART IN YOUR CURRENT CODE.
+         *
+         * Without this call the API never sends
+         * available_stock_by_unit, so the frontend falls
+         * back to product.unit and displays Bag.
+         */
+        $availableStockByUnit =
+            $this->buildAvailableStockByUnit(
+                $product,
+            );
+
         return [
             'id' =>
             $product->id,
@@ -1393,6 +2371,12 @@ class ProductController extends Controller
             'barcode' =>
             $product->barcode,
 
+            /*
+             * Main unit only.
+             *
+             * Example:
+             * Bag
+             */
             'unit' =>
             $product->unit,
 
@@ -1415,15 +2399,32 @@ class ProductController extends Controller
                 ]
                 : null,
 
+            /*
+             * Legacy numeric total.
+             *
+             * Do not combine this with product.unit in
+             * frontend stock displays.
+             */
             'total_available_quantity' =>
             round(
                 (float) (
                     $product
                     ->total_available_quantity
-                    ?? 0
+                    ?? collect(
+                        $availableStockByUnit,
+                    )->sum(
+                        'available_quantity',
+                    )
                 ),
                 3,
             ),
+
+            /*
+             * AUTHORITATIVE stock quantity + unit for the
+             * Products list page.
+             */
+            'available_stock_by_unit' =>
+            $availableStockByUnit,
 
             'created_at' =>
             $product

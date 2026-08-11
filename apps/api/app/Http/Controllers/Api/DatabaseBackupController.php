@@ -5,16 +5,20 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backup\CreateDatabaseBackupRequest;
 use App\Http\Requests\Backup\RestoreDatabaseBackupRequest;
+use App\Http\Requests\Backup\UploadDatabaseBackupRequest;
 use App\Models\DatabaseBackup;
 use App\Models\User;
 use App\Services\DatabaseBackupService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use RuntimeException;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 class DatabaseBackupController
@@ -40,6 +44,7 @@ extends Controller
 
                     Rule::in([
                         'all',
+
                         DatabaseBackup::STATUS_PROCESSING,
 
                         DatabaseBackup::STATUS_COMPLETED,
@@ -95,11 +100,15 @@ extends Controller
                 $search !== '',
                 function (
                     Builder $backupQuery,
-                ) use ($search): void {
+                ) use (
+                    $search,
+                ): void {
                     $backupQuery->where(
                         function (
                             Builder $searchQuery,
-                        ) use ($search): void {
+                        ) use (
+                            $search,
+                        ): void {
                             $searchQuery
                                 ->where(
                                     'backup_number',
@@ -129,13 +138,18 @@ extends Controller
                 $status !== 'all',
                 fn(
                     Builder $backupQuery,
-                ) => $backupQuery->where(
+                ) =>
+                $backupQuery->where(
                     'status',
                     $status,
                 ),
             )
-            ->latest('created_at')
-            ->latest('id');
+            ->latest(
+                'created_at',
+            )
+            ->latest(
+                'id',
+            );
 
         $summary = [
             'total_backups' =>
@@ -251,7 +265,8 @@ extends Controller
                     ->perPage(),
 
                 'total' =>
-                $backups->total(),
+                $backups
+                    ->total(),
 
                 'from' =>
                 $backups
@@ -283,7 +298,8 @@ extends Controller
                 ->create(
                     $user,
                     $request
-                        ->validated()['notes'] ?? null,
+                        ->validated()['notes']
+                        ?? null,
                 );
 
             return response()->json([
@@ -296,9 +312,26 @@ extends Controller
                 ),
             ], 201);
         } catch (Throwable $exception) {
+            Log::error(
+                'Manual database backup failed.',
+                [
+                    'user_id' =>
+                    $user->id,
+
+                    'exception' =>
+                    $exception::class,
+
+                    'message' =>
+                    $exception
+                        ->getMessage(),
+                ],
+            );
+
             return response()->json([
                 'message' =>
-                'Unable to create the database backup.',
+                'Unable to create the database backup: '
+                    . $exception
+                    ->getMessage(),
 
                 'errors' => [
                     'backup' => [
@@ -310,9 +343,107 @@ extends Controller
         }
     }
 
+    /**
+     * Upload an external SQL backup and restore
+     * it after automatically creating a safety
+     * backup of the current database.
+     */
+    public function uploadAndRestore(
+        UploadDatabaseBackupRequest $request,
+    ): JsonResponse {
+        $user =
+            $request->user();
+
+        if (! $user instanceof User) {
+            return response()->json([
+                'message' =>
+                'Unauthenticated.',
+            ], 401);
+        }
+
+        $uploadedFile =
+            $request->file(
+                'backup_file',
+            );
+
+        if (
+            ! $uploadedFile
+                instanceof UploadedFile
+        ) {
+            return response()->json([
+                'message' =>
+                'A valid database backup file is required.',
+
+                'errors' => [
+                    'backup_file' => [
+                        'Select a valid .sql database backup file.',
+                    ],
+                ],
+            ], 422);
+        }
+
+        try {
+            $result =
+                $this->backupService
+                ->uploadAndRestore(
+                    $uploadedFile,
+                    $user,
+                );
+
+            return response()->json([
+                'message' =>
+                'Uploaded database backup restored successfully. A safety backup of the previous database was created automatically before restoration.',
+
+                'data' =>
+                $result,
+            ]);
+        } catch (Throwable $exception) {
+            Log::error(
+                'Uploaded database restore failed.',
+                [
+                    'user_id' =>
+                    $user->id,
+
+                    'uploaded_filename' =>
+                    $uploadedFile
+                        ->getClientOriginalName(),
+
+                    'exception' =>
+                    $exception::class,
+
+                    'message' =>
+                    $exception
+                        ->getMessage(),
+
+                    'file' =>
+                    $exception
+                        ->getFile(),
+
+                    'line' =>
+                    $exception
+                        ->getLine(),
+                ],
+            );
+
+            return response()->json([
+                'message' =>
+                'Unable to restore the uploaded database backup: '
+                    . $exception
+                    ->getMessage(),
+
+                'errors' => [
+                    'restore' => [
+                        $exception
+                            ->getMessage(),
+                    ],
+                ],
+            ], 422);
+        }
+    }
+
     public function download(
         DatabaseBackup $databaseBackup,
-    ): BinaryFileResponse {
+    ): StreamedResponse {
         if (
             ! $databaseBackup
                 ->isDownloadable()
@@ -323,11 +454,17 @@ extends Controller
             );
         }
 
+        /** @var FilesystemAdapter $filesystem */
+        $filesystem =
+            Storage::disk(
+                $databaseBackup
+                    ->disk,
+            );
+
         if (
-            ! Storage::disk(
-                $databaseBackup->disk,
-            )->exists(
-                $databaseBackup->path,
+            ! $filesystem->exists(
+                $databaseBackup
+                    ->path,
             )
         ) {
             abort(
@@ -336,18 +473,47 @@ extends Controller
             );
         }
 
-        return Storage::disk(
-            $databaseBackup->disk,
-        )->download(
-            $databaseBackup->path,
+        return response()->streamDownload(
+            function () use (
+                $filesystem,
+                $databaseBackup,
+            ): void {
+                $stream =
+                    $filesystem->readStream(
+                        $databaseBackup
+                            ->path,
+                    );
+
+                if (! is_resource($stream)) {
+                    throw new RuntimeException(
+                        'Unable to read the database backup file.',
+                    );
+                }
+
+                try {
+                    fpassthru(
+                        $stream,
+                    );
+                } finally {
+                    fclose(
+                        $stream,
+                    );
+                }
+            },
             $databaseBackup
                 ->filename,
             [
                 'Content-Type' =>
-                'application/sql',
+                'application/octet-stream',
+
+                'Content-Disposition' =>
+                'attachment',
 
                 'X-Content-Type-Options' =>
                 'nosniff',
+
+                'Cache-Control' =>
+                'no-store, no-cache, must-revalidate',
             ],
         );
     }
@@ -382,9 +548,42 @@ extends Controller
                 $result,
             ]);
         } catch (Throwable $exception) {
+            Log::error(
+                'Database restore failed.',
+                [
+                    'backup_id' =>
+                    $databaseBackup
+                        ->id,
+
+                    'backup_number' =>
+                    $databaseBackup
+                        ->backup_number,
+
+                    'user_id' =>
+                    $user->id,
+
+                    'exception' =>
+                    $exception::class,
+
+                    'message' =>
+                    $exception
+                        ->getMessage(),
+
+                    'file' =>
+                    $exception
+                        ->getFile(),
+
+                    'line' =>
+                    $exception
+                        ->getLine(),
+                ],
+            );
+
             return response()->json([
                 'message' =>
-                'Unable to restore the selected database backup.',
+                'Unable to restore the selected database backup: '
+                    . $exception
+                    ->getMessage(),
 
                 'errors' => [
                     'restore' => [
@@ -435,14 +634,16 @@ extends Controller
                 ->backup_number,
 
             'filename' =>
-            $backup->filename,
+            $backup
+                ->filename,
 
             'database_name' =>
             $backup
                 ->database_name,
 
             'status' =>
-            $backup->status,
+            $backup
+                ->status,
 
             'file_size' =>
             $backup
@@ -457,7 +658,8 @@ extends Controller
                 ->is_scheduled,
 
             'notes' =>
-            $backup->notes,
+            $backup
+                ->notes,
 
             'error_message' =>
             $backup

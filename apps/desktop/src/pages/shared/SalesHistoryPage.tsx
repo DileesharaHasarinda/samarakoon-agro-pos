@@ -47,6 +47,7 @@ type ExtendedSaleHistoryItem =
         } | null;
 
         payment_status?: string;
+
         due_amount?: number;
     };
 
@@ -74,7 +75,10 @@ const emptySummary:
 function formatDateTime(
     value: string,
 ): string {
-    const date = new Date(value);
+    const date =
+        new Date(
+            value,
+        );
 
     if (
         Number.isNaN(
@@ -93,33 +97,9 @@ function formatDateTime(
             hour: '2-digit',
             minute: '2-digit',
         },
-    ).format(date);
-}
-
-function paymentName(
-    method: string | null,
-    paymentStatus?: string,
-): string {
-    if (
-        paymentStatus === 'due'
-        && method === null
-    ) {
-        return 'On Due';
-    }
-
-    switch (method) {
-        case 'bank_transfer':
-            return 'Bank Transfer';
-
-        case 'card':
-            return 'Card';
-
-        case 'cash':
-            return 'Cash';
-
-        default:
-            return 'Not Recorded';
-    }
+    ).format(
+        date,
+    );
 }
 
 function paymentStatusName(
@@ -159,1103 +139,1864 @@ function paymentStatusClass(
 }
 
 const salesHistoryStyles = `
-    #sapo-sales-history-page,
-    #sapo-sales-history-page *,
-    #sapo-sales-history-page *::before,
-    #sapo-sales-history-page *::after {
-        box-sizing: border-box !important;
+#sapo-sales-history-page,
+#sapo-sales-history-page *,
+#sapo-sales-history-page *::before,
+#sapo-sales-history-page *::after {
+    box-sizing: border-box !important;
+}
+
+#sapo-sales-history-page {
+    --shp-green-950: #052e16;
+    --shp-green-900: #14532d;
+    --shp-green-800: #166534;
+    --shp-green-700: #15803d;
+    --shp-green-100: #dcfce7;
+    --shp-green-50: #f0fdf4;
+
+    --shp-blue: #2563eb;
+    --shp-blue-light: #eff6ff;
+
+    --shp-amber: #b45309;
+    --shp-amber-light: #fffbeb;
+
+    --shp-red: #dc2626;
+    --shp-red-light: #fef2f2;
+
+    --shp-text: #0f172a;
+    --shp-text-secondary: #334155;
+    --shp-muted: #64748b;
+
+    --shp-border: #e2e8f0;
+    --shp-border-strong: #cbd5e1;
+
+    --shp-bg: #f8fafc;
+    --shp-white: #ffffff;
+
+    --shp-radius: 8px;
+    --shp-radius-sm: 6px;
+
+    --shp-font:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif;
+
+    position: relative !important;
+
+    display: block !important;
+
+    width: 100% !important;
+
+    height:
+        calc(
+            100vh
+            - 100px
+        ) !important;
+
+    height:
+        calc(
+            100dvh
+            - 100px
+        ) !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    max-width: 100% !important;
+
+    max-height:
+        calc(
+            100dvh
+            - 100px
+        ) !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    overflow:
+        hidden !important;
+
+    color:
+        var(--shp-text) !important;
+
+    font-family:
+        var(--shp-font) !important;
+
+    font-size: 14px !important;
+    line-height: 1.45 !important;
+
+    background:
+        var(--shp-bg) !important;
+
+    border: 0 !important;
+
+    isolation:
+        isolate !important;
+}
+
+#sapo-sales-history-page
+.shp-scroll-region {
+    position: absolute !important;
+
+    inset: 0 !important;
+
+    display: flex !important;
+
+    width: 100% !important;
+    height: 100% !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    flex-direction:
+        column !important;
+
+    align-items:
+        stretch !important;
+
+    gap: 12px !important;
+
+    margin: 0 !important;
+
+    padding:
+        14px
+        14px
+        28px !important;
+
+    overflow-x:
+        hidden !important;
+
+    overflow-y:
+        auto !important;
+
+    overscroll-behavior-y:
+        contain !important;
+
+    touch-action:
+        pan-y !important;
+
+    -webkit-overflow-scrolling:
+        touch !important;
+
+    scrollbar-width:
+        thin !important;
+
+    scrollbar-color:
+        var(--shp-border-strong)
+        transparent !important;
+}
+
+#sapo-sales-history-page
+.shp-scroll-region > * {
+    width: 100% !important;
+    min-width: 0 !important;
+
+    flex:
+        0 0 auto !important;
+}
+
+#sapo-sales-history-page
+.shp-scroll-region::-webkit-scrollbar {
+    width: 9px !important;
+}
+
+#sapo-sales-history-page
+.shp-scroll-region::-webkit-scrollbar-track {
+    background:
+        transparent !important;
+}
+
+#sapo-sales-history-page
+.shp-scroll-region::-webkit-scrollbar-thumb {
+    background:
+        var(--shp-border-strong) !important;
+
+    border:
+        2px solid
+        transparent !important;
+
+    border-radius:
+        999px !important;
+
+    background-clip:
+        content-box !important;
+}
+
+#sapo-sales-history-page h1,
+#sapo-sales-history-page h2,
+#sapo-sales-history-page h3,
+#sapo-sales-history-page p {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+#sapo-sales-history-page button,
+#sapo-sales-history-page input,
+#sapo-sales-history-page select {
+    font-family:
+        var(--shp-font) !important;
+
+    text-transform:
+        none !important;
+
+    letter-spacing:
+        normal !important;
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-header {
+    display: flex !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        space-between !important;
+
+    gap: 12px !important;
+
+    padding:
+        15px
+        17px !important;
+
+    background:
+        var(--shp-white) !important;
+
+    border:
+        1px solid
+        var(--shp-border) !important;
+
+    border-radius:
+        var(--shp-radius) !important;
+
+    box-shadow:
+        0 1px 2px
+        rgba(
+            15,
+            23,
+            42,
+            0.04
+        ) !important;
+}
+
+#sapo-sales-history-page
+.shp-header-copy {
+    display: flex !important;
+
+    min-width: 0 !important;
+
+    flex-direction:
+        column !important;
+
+    gap: 3px !important;
+}
+
+#sapo-sales-history-page
+.shp-kicker {
+    display: block !important;
+
+    color:
+        var(--shp-green-700) !important;
+
+    font-size: 11px !important;
+    font-weight: 700 !important;
+
+    line-height: 1.3 !important;
+
+    letter-spacing:
+        0.06em !important;
+
+    text-transform:
+        uppercase !important;
+}
+
+#sapo-sales-history-page
+.shp-title {
+    display: block !important;
+
+    color:
+        var(--shp-text) !important;
+
+    font-size: 20px !important;
+    font-weight: 700 !important;
+
+    line-height: 1.3 !important;
+
+    letter-spacing:
+        -0.01em !important;
+}
+
+#sapo-sales-history-page
+.shp-total-badge {
+    display: inline-flex !important;
+
+    min-height: 32px !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    padding:
+        5px
+        11px !important;
+
+    color:
+        var(--shp-green-800) !important;
+
+    font-size: 12px !important;
+    font-weight: 700 !important;
+
+    white-space:
+        nowrap !important;
+
+    background:
+        var(--shp-green-50) !important;
+
+    border:
+        1px solid
+        var(--shp-green-100) !important;
+
+    border-radius:
+        var(--shp-radius-sm) !important;
+}
+
+/* =========================================================
+   SUMMARY
+
+   No horizontal scrolling.
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-summary-strip {
+    display: grid !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    grid-template-columns:
+        repeat(
+            auto-fit,
+            minmax(
+                135px,
+                1fr
+            )
+        ) !important;
+
+    gap: 8px !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    overflow:
+        visible !important;
+}
+
+#sapo-sales-history-page
+.shp-summary-card {
+    display: flex !important;
+
+    width: auto !important;
+    min-width: 0 !important;
+
+    min-height: 72px !important;
+
+    flex-direction:
+        column !important;
+
+    justify-content:
+        center !important;
+
+    gap: 2px !important;
+
+    padding:
+        10px
+        11px !important;
+
+    overflow:
+        hidden !important;
+
+    background:
+        var(--shp-white) !important;
+
+    border:
+        1px solid
+        var(--shp-border) !important;
+
+    border-radius:
+        var(--shp-radius) !important;
+
+    box-shadow:
+        0 1px 2px
+        rgba(
+            15,
+            23,
+            42,
+            0.035
+        ) !important;
+}
+
+#sapo-sales-history-page
+.shp-summary-label {
+    color:
+        var(--shp-muted) !important;
+
+    font-size: 11px !important;
+    font-weight: 600 !important;
+
+    line-height: 1.25 !important;
+}
+
+#sapo-sales-history-page
+.shp-summary-value {
+    display: block !important;
+
+    min-width: 0 !important;
+
+    overflow:
+        hidden !important;
+
+    color:
+        var(--shp-text) !important;
+
+    font-size: 16px !important;
+    font-weight: 700 !important;
+
+    line-height: 1.25 !important;
+
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
+}
+
+#sapo-sales-history-page
+.shp-summary-blue
+.shp-summary-value {
+    color:
+        var(--shp-blue) !important;
+}
+
+#sapo-sales-history-page
+.shp-summary-red
+.shp-summary-value {
+    color:
+        var(--shp-red) !important;
+}
+
+#sapo-sales-history-page
+.shp-summary-amber
+.shp-summary-value {
+    color:
+        var(--shp-amber) !important;
+}
+
+#sapo-sales-history-page
+.shp-summary-help {
+    color:
+        var(--shp-muted) !important;
+
+    font-size: 10px !important;
+    font-weight: 500 !important;
+
+    line-height: 1.25 !important;
+}
+
+/* =========================================================
+   MESSAGES
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-message {
+    display: flex !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    align-items:
+        center !important;
+
+    gap: 8px !important;
+
+    padding:
+        9px
+        12px !important;
+
+    font-size: 13px !important;
+    font-weight: 600 !important;
+
+    border-radius:
+        var(--shp-radius-sm) !important;
+}
+
+#sapo-sales-history-page
+.shp-success {
+    color:
+        var(--shp-green-800) !important;
+
+    background:
+        var(--shp-green-50) !important;
+
+    border:
+        1px solid
+        var(--shp-green-100) !important;
+}
+
+#sapo-sales-history-page
+.shp-error {
+    color:
+        var(--shp-red) !important;
+
+    background:
+        var(--shp-red-light) !important;
+
+    border:
+        1px solid
+        #fecaca !important;
+}
+
+#sapo-sales-history-page
+.shp-message-icon {
+    display: grid !important;
+
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+
+    place-items:
+        center !important;
+
+    color:
+        #ffffff !important;
+
+    font-size: 12px !important;
+    font-weight: 700 !important;
+
+    background:
+        var(--shp-green-700) !important;
+
+    border-radius:
+        50% !important;
+}
+
+#sapo-sales-history-page
+.shp-error
+.shp-message-icon {
+    background:
+        var(--shp-red) !important;
+}
+
+#sapo-sales-history-page
+.shp-message-text {
+    min-width: 0 !important;
+
+    flex: 1 !important;
+}
+
+#sapo-sales-history-page
+.shp-message-close {
+    display: grid !important;
+
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+
+    place-items:
+        center !important;
+
+    padding: 0 !important;
+
+    color:
+        inherit !important;
+
+    font-size: 16px !important;
+
+    background:
+        rgba(
+            255,
+            255,
+            255,
+            0.6
+        ) !important;
+
+    border:
+        1px solid
+        currentColor !important;
+
+    border-radius:
+        var(--shp-radius-sm) !important;
+
+    cursor:
+        pointer !important;
+}
+
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-button {
+    display: inline-flex !important;
+
+    min-height: 34px !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    gap: 4px !important;
+
+    margin: 0 !important;
+
+    padding:
+        7px
+        11px !important;
+
+    font-size: 12px !important;
+    font-weight: 650 !important;
+
+    line-height: 1.2 !important;
+
+    text-align:
+        center !important;
+
+    appearance:
+        none !important;
+
+    border-radius:
+        var(--shp-radius-sm) !important;
+
+    cursor:
+        pointer !important;
+}
+
+#sapo-sales-history-page
+.shp-primary-button {
+    color:
+        #ffffff !important;
+
+    background:
+        var(--shp-green-700) !important;
+
+    border:
+        1px solid
+        var(--shp-green-700) !important;
+}
+
+#sapo-sales-history-page
+.shp-primary-button:hover:not(:disabled) {
+    background:
+        var(--shp-green-800) !important;
+
+    border-color:
+        var(--shp-green-800) !important;
+}
+
+#sapo-sales-history-page
+.shp-secondary-button {
+    color:
+        var(--shp-text-secondary) !important;
+
+    background:
+        var(--shp-white) !important;
+
+    border:
+        1px solid
+        var(--shp-border-strong) !important;
+}
+
+#sapo-sales-history-page
+.shp-return-button {
+    color:
+        var(--shp-amber) !important;
+
+    background:
+        var(--shp-amber-light) !important;
+
+    border:
+        1px solid
+        #fde68a !important;
+}
+
+#sapo-sales-history-page
+.shp-return-button:hover:not(:disabled) {
+    color:
+        #ffffff !important;
+
+    background:
+        var(--shp-amber) !important;
+
+    border-color:
+        var(--shp-amber) !important;
+}
+
+#sapo-sales-history-page
+button:disabled {
+    opacity: 0.55 !important;
+
+    cursor:
+        not-allowed !important;
+}
+
+/* =========================================================
+   PANEL
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-panel {
+    display: flex !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    flex-direction:
+        column !important;
+
+    overflow:
+        hidden !important;
+
+    background:
+        var(--shp-white) !important;
+
+    border:
+        1px solid
+        var(--shp-border) !important;
+
+    border-radius:
+        var(--shp-radius) !important;
+
+    box-shadow:
+        0 1px 2px
+        rgba(
+            15,
+            23,
+            42,
+            0.04
+        ) !important;
+}
+
+/* =========================================================
+   TOOLBAR
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-toolbar {
+    display: flex !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    flex-direction:
+        column !important;
+
+    gap: 9px !important;
+
+    padding:
+        11px
+        12px !important;
+
+    background:
+        var(--shp-white) !important;
+
+    border-bottom:
+        1px solid
+        var(--shp-border) !important;
+}
+
+#sapo-sales-history-page
+.shp-search-wrapper {
+    position: relative !important;
+
+    display: flex !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    align-items:
+        center !important;
+}
+
+#sapo-sales-history-page
+.shp-search-icon {
+    position: absolute !important;
+
+    left: 11px !important;
+
+    z-index: 2 !important;
+
+    color:
+        var(--shp-muted) !important;
+
+    font-size: 16px !important;
+
+    pointer-events:
+        none !important;
+}
+
+#sapo-sales-history-page
+.shp-input,
+#sapo-sales-history-page
+.shp-select {
+    display: block !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    height: 36px !important;
+    min-height: 36px !important;
+
+    margin: 0 !important;
+
+    color:
+        var(--shp-text) !important;
+
+    font-size: 12px !important;
+    font-weight: 500 !important;
+
+    outline: none !important;
+
+    background:
+        var(--shp-white) !important;
+
+    border:
+        1px solid
+        var(--shp-border-strong) !important;
+
+    border-radius:
+        var(--shp-radius-sm) !important;
+}
+
+#sapo-sales-history-page
+.shp-input {
+    padding:
+        0
+        10px !important;
+}
+
+#sapo-sales-history-page
+.shp-search-input {
+    padding:
+        0
+        38px
+        0
+        35px !important;
+}
+
+#sapo-sales-history-page
+.shp-input::placeholder {
+    color:
+        #94a3b8 !important;
+}
+
+#sapo-sales-history-page
+.shp-select {
+    padding:
+        0
+        8px !important;
+
+    cursor:
+        pointer !important;
+}
+
+#sapo-sales-history-page
+.shp-input:focus,
+#sapo-sales-history-page
+.shp-select:focus {
+    border-color:
+        var(--shp-green-700) !important;
+
+    box-shadow:
+        0 0 0 3px
+        rgba(
+            21,
+            128,
+            61,
+            0.12
+        ) !important;
+}
+
+#sapo-sales-history-page
+.shp-clear-search {
+    position: absolute !important;
+
+    right: 5px !important;
+
+    z-index: 3 !important;
+
+    display: grid !important;
+
+    width: 25px !important;
+    height: 25px !important;
+
+    place-items:
+        center !important;
+
+    padding: 0 !important;
+
+    color:
+        var(--shp-muted) !important;
+
+    font-size: 16px !important;
+
+    background:
+        var(--shp-bg) !important;
+
+    border: 0 !important;
+
+    border-radius:
+        var(--shp-radius-sm) !important;
+
+    cursor:
+        pointer !important;
+}
+
+#sapo-sales-history-page
+.shp-filter-grid {
+    display: grid !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    grid-template-columns:
+        minmax(125px, 1fr)
+        minmax(125px, 1fr)
+        minmax(125px, 1fr)
+        minmax(100px, 0.7fr)
+        auto !important;
+
+    align-items:
+        end !important;
+
+    gap: 7px !important;
+}
+
+#sapo-sales-history-page
+.shp-filter-field {
+    display: flex !important;
+
+    min-width: 0 !important;
+
+    flex-direction:
+        column !important;
+
+    gap: 4px !important;
+}
+
+#sapo-sales-history-page
+.shp-filter-label {
+    color:
+        var(--shp-text-secondary) !important;
+
+    font-size: 11px !important;
+    font-weight: 600 !important;
+}
+
+#sapo-sales-history-page
+.shp-clear-filter {
+    min-width: 100px !important;
+
+    height: 36px !important;
+}
+
+/* =========================================================
+   TABLE
+
+   IMPORTANT:
+   No forced min-width.
+   No horizontal scrolling.
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-table-wrapper {
+    display: block !important;
+
+    width: 100% !important;
+    max-width: 100% !important;
+
+    min-width: 0 !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    overflow-x:
+        hidden !important;
+
+    overflow-y:
+        visible !important;
+
+    background:
+        var(--shp-white) !important;
+}
+
+#sapo-sales-history-page
+.shp-table {
+    width: 100% !important;
+    max-width: 100% !important;
+
+    min-width: 0 !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    table-layout:
+        fixed !important;
+
+    border-collapse:
+        separate !important;
+
+    border-spacing:
+        0 !important;
+
+    background:
+        var(--shp-white) !important;
+}
+
+#sapo-sales-history-page
+.shp-table th,
+#sapo-sales-history-page
+.shp-table td {
+    min-width: 0 !important;
+
+    margin: 0 !important;
+
+    padding:
+        8px
+        7px !important;
+
+    vertical-align:
+        middle !important;
+
+    text-align:
+        left !important;
+
+    border: 0 !important;
+
+    border-bottom:
+        1px solid
+        var(--shp-border) !important;
+
+    overflow-wrap:
+        anywhere !important;
+
+    word-break:
+        normal !important;
+}
+
+#sapo-sales-history-page
+.shp-table th {
+    position: sticky !important;
+
+    top: 0 !important;
+
+    z-index: 4 !important;
+
+    height: 38px !important;
+
+    color:
+        var(--shp-text-secondary) !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+
+    line-height: 1.2 !important;
+
+    letter-spacing:
+        0.02em !important;
+
+    text-transform:
+        uppercase !important;
+
+    background:
+        #f1f5f9 !important;
+
+    border-bottom:
+        1px solid
+        var(--shp-border-strong) !important;
+}
+
+#sapo-sales-history-page
+.shp-table td {
+    min-height: 50px !important;
+
+    color:
+        var(--shp-text) !important;
+
+    font-size: 12px !important;
+    font-weight: 500 !important;
+
+    line-height: 1.3 !important;
+
+    background:
+        var(--shp-white) !important;
+}
+
+#sapo-sales-history-page
+.shp-table tbody tr:hover td {
+    background:
+        #f8fafc !important;
+}
+
+/* 100% total */
+
+#sapo-sales-history-page
+.shp-col-sale {
+    width: 21% !important;
+}
+
+#sapo-sales-history-page
+.shp-col-date {
+    width: 15% !important;
+}
+
+#sapo-sales-history-page
+.shp-col-cashier {
+    width: 10% !important;
+}
+
+#sapo-sales-history-page
+.shp-col-status {
+    width: 13% !important;
+}
+
+#sapo-sales-history-page
+.shp-col-money {
+    width: 12% !important;
+}
+
+#sapo-sales-history-page
+.shp-col-actions {
+    width: 17% !important;
+}
+
+/* =========================================================
+   SALE CELL
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-sale-cell {
+    display: flex !important;
+
+    min-width: 0 !important;
+
+    flex-direction:
+        column !important;
+
+    gap: 2px !important;
+}
+
+#sapo-sales-history-page
+.shp-sale-number {
+    display: block !important;
+
+    min-width: 0 !important;
+
+    overflow:
+        hidden !important;
+
+    color:
+        var(--shp-text) !important;
+
+    font-size: 12px !important;
+    font-weight: 700 !important;
+
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
+}
+
+#sapo-sales-history-page
+.shp-customer-name {
+    display: block !important;
+
+    min-width: 0 !important;
+
+    overflow:
+        hidden !important;
+
+    color:
+        var(--shp-muted) !important;
+
+    font-size: 10px !important;
+    font-weight: 500 !important;
+
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
+}
+
+/* =========================================================
+   STATUS
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-status-badge {
+    display: inline-flex !important;
+
+    max-width: 100% !important;
+
+    min-height: 23px !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    padding:
+        3px
+        7px !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+
+    line-height: 1.2 !important;
+
+    text-align:
+        center !important;
+
+    white-space:
+        normal !important;
+
+    border-radius:
+        999px !important;
+}
+
+#sapo-sales-history-page
+.shp-status-paid {
+    color:
+        var(--shp-green-800) !important;
+
+    background:
+        var(--shp-green-100) !important;
+}
+
+#sapo-sales-history-page
+.shp-status-partial {
+    color:
+        var(--shp-amber) !important;
+
+    background:
+        var(--shp-amber-light) !important;
+}
+
+#sapo-sales-history-page
+.shp-status-due {
+    color:
+        var(--shp-red) !important;
+
+    background:
+        #fee2e2 !important;
+}
+
+/* =========================================================
+   MONEY
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-money-green,
+#sapo-sales-history-page
+.shp-money-red,
+#sapo-sales-history-page
+.shp-money-blue {
+    display: block !important;
+
+    max-width: 100% !important;
+
+    overflow:
+        hidden !important;
+
+    font-size: 11px !important;
+    font-weight: 700 !important;
+
+    line-height: 1.3 !important;
+
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
+}
+
+#sapo-sales-history-page
+.shp-money-green {
+    color:
+        var(--shp-green-800) !important;
+}
+
+#sapo-sales-history-page
+.shp-money-red {
+    color:
+        var(--shp-red) !important;
+}
+
+#sapo-sales-history-page
+.shp-money-blue {
+    color:
+        var(--shp-blue) !important;
+}
+
+/* =========================================================
+   TABLE ACTIONS
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-table-actions {
+    display: grid !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    grid-template-columns:
+        repeat(
+            2,
+            minmax(
+                0,
+                1fr
+            )
+        ) !important;
+
+    align-items:
+        center !important;
+
+    gap: 4px !important;
+}
+
+#sapo-sales-history-page
+.shp-action-button {
+    width: 100% !important;
+    min-width: 0 !important;
+
+    min-height: 30px !important;
+
+    padding:
+        4px
+        5px !important;
+
+    font-size: 9px !important;
+    font-weight: 700 !important;
+
+    white-space:
+        normal !important;
+}
+
+/* =========================================================
+   TABLE STATES
+   ========================================================= */
+
+#sapo-sales-history-page
+.shp-table-state {
+    height: 180px !important;
+
+    padding: 20px !important;
+
+    text-align:
+        center !important;
+}
+
+#sapo-sales-history-page
+.shp-state-content {
+    display: flex !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    flex-direction:
+        column !important;
+
+    gap: 8px !important;
+}
+
+#sapo-sales-history-page
+.shp-spinner {
+    width: 30px !important;
+    height: 30px !important;
+
+    border:
+        3px solid
+        var(--shp-green-100) !important;
+
+    border-top-color:
+        var(--shp-green-700) !important;
+
+    border-radius:
+        50% !important;
+
+    animation:
+        shp-spin
+        700ms
+        linear
+        infinite !important;
+}
+
+@keyframes shp-spin {
+    to {
+        transform:
+            rotate(
+                360deg
+            );
     }
+}
 
-    #sapo-sales-history-page {
-        --shp-green-950: #052e16;
-        --shp-green-900: #14532d;
-        --shp-green-800: #166534;
-        --shp-green-700: #15803d;
-        --shp-green-100: #dcfce7;
-        --shp-green-50: #f0fdf4;
-        --shp-blue: #2563eb;
-        --shp-blue-light: #eff6ff;
-        --shp-amber: #b45309;
-        --shp-amber-light: #fffbeb;
-        --shp-red: #dc2626;
-        --shp-red-light: #fef2f2;
-        --shp-text: #0f172a;
-        --shp-text-secondary: #334155;
-        --shp-muted: #64748b;
-        --shp-border: #e2e8f0;
-        --shp-border-strong: #cbd5e1;
-        --shp-bg: #f8fafc;
-        --shp-white: #ffffff;
-        --shp-radius: 8px;
-        --shp-radius-sm: 6px;
-        --shp-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+#sapo-sales-history-page
+.shp-state-title {
+    color:
+        var(--shp-text) !important;
 
-        position: relative !important;
-        display: block !important;
-        width: 100% !important;
-        height: calc(100vh - 100px) !important;
-        height: calc(100dvh - 100px) !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        max-width: 100% !important;
-        max-height: calc(100vh - 100px) !important;
-        max-height: calc(100dvh - 100px) !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        color: var(--shp-text) !important;
-        font-family: var(--shp-font) !important;
-        font-size: 14px !important;
-        line-height: 1.45 !important;
-        background: var(--shp-bg) !important;
-        border: 0 !important;
-        isolation: isolate !important;
-    }
+    font-size: 14px !important;
+    font-weight: 700 !important;
+}
 
-    #sapo-sales-history-page
-    .shp-scroll-region {
-        position: absolute !important;
-        inset: 0 !important;
-        display: flex !important;
-        width: 100% !important;
-        height: 100% !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        gap: 16px !important;
-        margin: 0 !important;
-        padding: 16px 16px 32px 16px !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
-        overscroll-behavior-y: contain !important;
-        scrollbar-gutter: stable !important;
-        touch-action: pan-y !important;
-        -webkit-overflow-scrolling: touch !important;
-        scrollbar-width: thin !important;
-        scrollbar-color:
-            var(--shp-border-strong)
-            transparent !important;
-    }
+#sapo-sales-history-page
+.shp-state-message {
+    color:
+        var(--shp-muted) !important;
 
-    #sapo-sales-history-page
-    .shp-scroll-region > * {
-        flex: 0 0 auto !important;
-        flex-shrink: 0 !important;
-    }
+    font-size: 12px !important;
+}
 
-    #sapo-sales-history-page
-    .shp-scroll-region::-webkit-scrollbar {
-        width: 10px !important;
-    }
+/* =========================================================
+   PAGINATION
+   ========================================================= */
 
-    #sapo-sales-history-page
-    .shp-scroll-region::-webkit-scrollbar-track {
-        background: transparent !important;
-    }
+#sapo-sales-history-page
+.shp-pagination {
+    display: flex !important;
 
-    #sapo-sales-history-page
-    .shp-scroll-region::-webkit-scrollbar-thumb {
-        background: var(--shp-border-strong) !important;
-        border: 2px solid transparent !important;
-        border-radius: 999px !important;
-        background-clip: content-box !important;
-    }
+    min-height: 52px !important;
 
-    #sapo-sales-history-page
-    .shp-scroll-region::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8 !important;
-        background-clip: content-box !important;
-    }
+    align-items:
+        center !important;
 
-    #sapo-sales-history-page h1,
-    #sapo-sales-history-page h2,
-    #sapo-sales-history-page h3,
-    #sapo-sales-history-page p,
-    #sapo-sales-history-page span,
-    #sapo-sales-history-page strong,
-    #sapo-sales-history-page small,
-    #sapo-sales-history-page label {
-        font-family: var(--shp-font) !important;
-    }
+    justify-content:
+        space-between !important;
 
-    #sapo-sales-history-page h1,
-    #sapo-sales-history-page h2,
-    #sapo-sales-history-page h3,
-    #sapo-sales-history-page p {
-        margin: 0 !important;
-        padding: 0 !important;
-    }
+    gap: 10px !important;
 
-    #sapo-sales-history-page button,
-    #sapo-sales-history-page input,
-    #sapo-sales-history-page select {
-        font-family: var(--shp-font) !important;
-        text-transform: none !important;
-        letter-spacing: normal !important;
-    }
+    padding:
+        10px
+        12px !important;
 
-    /* ---------- Header ---------- */
+    background:
+        var(--shp-white) !important;
 
-    #sapo-sales-history-page
-    .shp-header {
-        display: flex !important;
-        width: 100% !important;
-        min-height: 0 !important;
-        align-items: center !important;
-        justify-content: space-between !important;
-        gap: 16px !important;
-        margin: 0 !important;
-        padding: 18px 20px !important;
-        background: var(--shp-white) !important;
-        border: 1px solid var(--shp-border) !important;
-        border-radius: var(--shp-radius) !important;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
-    }
+    border-top:
+        1px solid
+        var(--shp-border) !important;
+}
 
-    #sapo-sales-history-page
-    .shp-header-copy {
-        display: flex !important;
-        min-width: 0 !important;
-        flex-direction: column !important;
-        gap: 4px !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
+#sapo-sales-history-page
+.shp-pagination-info {
+    color:
+        var(--shp-muted) !important;
 
-    #sapo-sales-history-page
-    .shp-kicker {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-green-700) !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        line-height: 1.3 !important;
-        letter-spacing: 0.06em !important;
-        text-transform: uppercase !important;
-    }
+    font-size: 11px !important;
+    font-weight: 500 !important;
+}
 
-    #sapo-sales-history-page
-    .shp-title {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-text) !important;
-        font-size: 20px !important;
-        font-weight: 700 !important;
-        line-height: 1.3 !important;
-        letter-spacing: -0.01em !important;
-    }
+#sapo-sales-history-page
+.shp-pagination-info strong {
+    color:
+        var(--shp-text) !important;
 
-    #sapo-sales-history-page
-    .shp-total-badge {
-        display: inline-flex !important;
-        min-height: 34px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        margin: 0 !important;
-        padding: 6px 12px !important;
-        color: var(--shp-green-800) !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
-        white-space: nowrap !important;
-        background: var(--shp-green-50) !important;
-        border: 1px solid var(--shp-green-100) !important;
-        border-radius: var(--shp-radius-sm) !important;
-    }
+    font-weight: 700 !important;
+}
 
-    /* ---------- Summary cards ---------- */
+#sapo-sales-history-page
+.shp-pagination-actions {
+    display: flex !important;
 
+    align-items:
+        center !important;
+
+    gap: 5px !important;
+}
+
+#sapo-sales-history-page
+.shp-page-button {
+    min-width: 72px !important;
+
+    min-height: 32px !important;
+
+    padding:
+        5px
+        8px !important;
+
+    font-size: 11px !important;
+}
+
+#sapo-sales-history-page
+.shp-page-number {
+    display: inline-flex !important;
+
+    min-height: 32px !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    padding:
+        5px
+        9px !important;
+
+    color:
+        var(--shp-text-secondary) !important;
+
+    font-size: 11px !important;
+
+    white-space:
+        nowrap !important;
+
+    background:
+        var(--shp-bg) !important;
+
+    border:
+        1px solid
+        var(--shp-border) !important;
+
+    border-radius:
+        var(--shp-radius-sm) !important;
+}
+
+#sapo-sales-history-page
+.shp-page-number strong {
+    color:
+        var(--shp-green-800) !important;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (
+    max-width: 1150px
+) {
     #sapo-sales-history-page
     .shp-summary-strip {
-        display: flex !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        align-items: stretch !important;
-        gap: 10px !important;
-        margin: 0 !important;
-        padding: 0 0 4px !important;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        scrollbar-width: thin !important;
-        scrollbar-color:
-            var(--shp-border-strong)
-            transparent !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-summary-card {
-        position: relative !important;
-        display: flex !important;
-        width: 168px !important;
-        min-width: 168px !important;
-        min-height: 76px !important;
-        flex-direction: column !important;
-        justify-content: center !important;
-        gap: 3px !important;
-        margin: 0 !important;
-        padding: 12px 14px !important;
-        overflow: hidden !important;
-        background: var(--shp-white) !important;
-        border: 1px solid var(--shp-border) !important;
-        border-radius: var(--shp-radius) !important;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-summary-label {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-muted) !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-summary-value {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        color: var(--shp-text) !important;
-        font-size: 18px !important;
-        font-weight: 700 !important;
-        line-height: 1.25 !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-summary-blue
-    .shp-summary-value {
-        color: var(--shp-blue) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-summary-red
-    .shp-summary-value {
-        color: var(--shp-red) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-summary-amber
-    .shp-summary-value {
-        color: var(--shp-amber) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-summary-help {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-muted) !important;
-        font-size: 11px !important;
-        font-weight: 500 !important;
-        line-height: 1.3 !important;
-    }
-
-    /* ---------- Messages ---------- */
-
-    #sapo-sales-history-page
-    .shp-message {
-        display: flex !important;
-        width: 100% !important;
-        min-height: 0 !important;
-        align-items: center !important;
-        gap: 10px !important;
-        margin: 0 !important;
-        padding: 10px 14px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.4 !important;
-        border-radius: var(--shp-radius-sm) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-success {
-        color: var(--shp-green-800) !important;
-        background: var(--shp-green-50) !important;
-        border: 1px solid var(--shp-green-100) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-error {
-        color: var(--shp-red) !important;
-        background: var(--shp-red-light) !important;
-        border: 1px solid #fecaca !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-message-icon {
-        display: grid !important;
-        width: 20px !important;
-        height: 20px !important;
-        min-width: 20px !important;
-        place-items: center !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: #ffffff !important;
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        line-height: 1 !important;
-        background: var(--shp-green-700) !important;
-        border-radius: 50% !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-error
-    .shp-message-icon {
-        background: var(--shp-red) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-message-text {
-        display: block !important;
-        min-width: 0 !important;
-        flex: 1 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: inherit !important;
-        font-size: inherit !important;
-        font-weight: inherit !important;
-        line-height: inherit !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-message-close {
-        display: grid !important;
-        width: 24px !important;
-        height: 24px !important;
-        min-width: 24px !important;
-        place-items: center !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: inherit !important;
-        font-size: 16px !important;
-        font-weight: 400 !important;
-        line-height: 1 !important;
-        appearance: none !important;
-        background: rgba(255, 255, 255, 0.6) !important;
-        border: 1px solid currentColor !important;
-        border-radius: var(--shp-radius-sm) !important;
-        cursor: pointer !important;
-    }
-
-    /* ---------- Buttons ---------- */
-
-    #sapo-sales-history-page
-    .shp-button {
-        display: inline-flex !important;
-        min-height: 36px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: 6px !important;
-        margin: 0 !important;
-        padding: 8px 14px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.2 !important;
-        text-align: center !important;
-        text-decoration: none !important;
-        appearance: none !important;
-        border-radius: var(--shp-radius-sm) !important;
-        box-shadow: none !important;
-        cursor: pointer !important;
-        transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-primary-button {
-        color: #ffffff !important;
-        background: var(--shp-green-700) !important;
-        border: 1px solid var(--shp-green-700) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-primary-button:hover:not(:disabled) {
-        background: var(--shp-green-800) !important;
-        border-color: var(--shp-green-800) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-secondary-button {
-        color: var(--shp-text-secondary) !important;
-        background: var(--shp-white) !important;
-        border: 1px solid var(--shp-border-strong) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-secondary-button:hover:not(:disabled) {
-        color: var(--shp-text) !important;
-        background: var(--shp-bg) !important;
-        border-color: #94a3b8 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-return-button {
-        color: var(--shp-amber) !important;
-        background: var(--shp-amber-light) !important;
-        border: 1px solid #fde68a !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-return-button:hover:not(:disabled) {
-        color: #ffffff !important;
-        background: var(--shp-amber) !important;
-        border-color: var(--shp-amber) !important;
-    }
-
-    #sapo-sales-history-page button:disabled {
-        opacity: 0.55 !important;
-        cursor: not-allowed !important;
-    }
-
-    /* ---------- Panel / Toolbar ---------- */
-
-    #sapo-sales-history-page
-    .shp-panel {
-        display: flex !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        flex-direction: column !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        background: var(--shp-white) !important;
-        border: 1px solid var(--shp-border) !important;
-        border-radius: var(--shp-radius) !important;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-toolbar {
-        display: flex !important;
-        width: 100% !important;
-        flex-direction: column !important;
-        gap: 12px !important;
-        margin: 0 !important;
-        padding: 14px 16px !important;
-        background: var(--shp-white) !important;
-        border: 0 !important;
-        border-bottom: 1px solid var(--shp-border) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-search-wrapper {
-        position: relative !important;
-        display: flex !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        align-items: center !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-search-icon {
-        position: absolute !important;
-        left: 12px !important;
-        z-index: 2 !important;
-        display: grid !important;
-        width: 18px !important;
-        height: 18px !important;
-        place-items: center !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-muted) !important;
-        font-size: 16px !important;
-        font-weight: 600 !important;
-        line-height: 1 !important;
-        pointer-events: none !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-input,
-    #sapo-sales-history-page
-    .shp-select {
-        display: block !important;
-        width: 100% !important;
-        height: 38px !important;
-        min-height: 38px !important;
-        margin: 0 !important;
-        color: var(--shp-text) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: normal !important;
-        outline: none !important;
-        background: var(--shp-white) !important;
-        border: 1px solid var(--shp-border-strong) !important;
-        border-radius: var(--shp-radius-sm) !important;
-        box-shadow: none !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-input {
-        padding: 0 12px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-search-input {
-        padding: 0 40px 0 38px !important;
-        appearance: none !important;
-        background: var(--shp-white) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-input::placeholder {
-        color: #94a3b8 !important;
-        font-size: 13px !important;
-        opacity: 1 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-select {
-        padding: 0 10px !important;
-        appearance: auto !important;
-        cursor: pointer !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-input:focus,
-    #sapo-sales-history-page
-    .shp-select:focus {
-        border-color: var(--shp-green-700) !important;
-        box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.12) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-clear-search {
-        position: absolute !important;
-        right: 6px !important;
-        z-index: 3 !important;
-        display: grid !important;
-        width: 26px !important;
-        height: 26px !important;
-        min-width: 26px !important;
-        place-items: center !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-muted) !important;
-        font-size: 17px !important;
-        font-weight: 400 !important;
-        line-height: 1 !important;
-        appearance: none !important;
-        background: var(--shp-bg) !important;
-        border: 0 !important;
-        border-radius: var(--shp-radius-sm) !important;
-        cursor: pointer !important;
+        grid-template-columns:
+            repeat(
+                4,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
     }
 
     #sapo-sales-history-page
     .shp-filter-grid {
-        display: grid !important;
         grid-template-columns:
-            repeat(4, minmax(140px, 1fr)) auto !important;
-        align-items: end !important;
-        gap: 10px !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-filter-field {
-        display: flex !important;
-        min-width: 0 !important;
-        flex-direction: column !important;
-        gap: 5px !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-filter-label {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-text-secondary) !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
+            repeat(
+                4,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
     }
 
     #sapo-sales-history-page
     .shp-clear-filter {
-        min-width: 120px !important;
-        height: 38px !important;
-    }
-
-    /* ---------- Table ---------- */
-
-    #sapo-sales-history-page
-    .shp-table-wrapper {
-        display: block !important;
         width: 100% !important;
-        min-width: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow-x: auto !important;
-        overflow-y: visible !important;
-        background: var(--shp-white) !important;
-        scrollbar-width: thin !important;
-        scrollbar-color:
-            var(--shp-border-strong)
-            transparent !important;
+
+        grid-column:
+            1 / -1 !important;
     }
 
     #sapo-sales-history-page
-    .shp-table-wrapper::-webkit-scrollbar {
-        height: 10px !important;
+    .shp-col-sale {
+        width: 20% !important;
     }
 
     #sapo-sales-history-page
-    .shp-table-wrapper::-webkit-scrollbar-track {
-        background: transparent !important;
+    .shp-col-date {
+        width: 15% !important;
     }
 
     #sapo-sales-history-page
-    .shp-table-wrapper::-webkit-scrollbar-thumb {
-        background: var(--shp-border-strong) !important;
-        border-radius: 999px !important;
+    .shp-col-cashier {
+        width: 10% !important;
     }
 
     #sapo-sales-history-page
-    .shp-table {
-        width: 100% !important;
-        min-width: 1780px !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        table-layout: fixed !important;
-        border-collapse: separate !important;
-        border-spacing: 0 !important;
-        background: var(--shp-white) !important;
+    .shp-col-status {
+        width: 13% !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-col-money {
+        width: 12% !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-col-actions {
+        width: 18% !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-table-actions {
+        grid-template-columns:
+            1fr !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-action-button {
+        min-height: 27px !important;
+
+        font-size: 9px !important;
+    }
+}
+
+@media (
+    max-width: 900px
+) {
+    #sapo-sales-history-page
+    .shp-summary-strip {
+        grid-template-columns:
+            repeat(
+                3,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-filter-grid {
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
     }
 
     #sapo-sales-history-page
     .shp-table th,
     #sapo-sales-history-page
     .shp-table td {
-        margin: 0 !important;
-        padding: 10px 12px !important;
-        vertical-align: middle !important;
-        text-align: left !important;
-        white-space: nowrap !important;
-        border: 0 !important;
-        border-bottom: 1px solid var(--shp-border) !important;
+        padding:
+            7px
+            5px !important;
     }
 
     #sapo-sales-history-page
     .shp-table th {
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 4 !important;
-        height: 40px !important;
-        color: var(--shp-text-secondary) !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
-        letter-spacing: 0.02em !important;
-        text-transform: uppercase !important;
-        background: #f1f5f9 !important;
-        border-bottom: 1px solid var(--shp-border-strong) !important;
+        font-size: 9px !important;
     }
 
     #sapo-sales-history-page
     .shp-table td {
-        height: 54px !important;
-        color: var(--shp-text) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: 1.3 !important;
-        background: var(--shp-white) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-table tbody tr:hover td {
-        background: #f8fafc !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-col-sale {
-        width: 210px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-col-date {
-        width: 165px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-col-cashier {
-        width: 140px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-col-small {
-        width: 90px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-col-payment {
-        width: 140px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-col-status {
-        width: 150px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-col-money {
-        width: 140px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-col-actions {
-        width: 240px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-sale-cell {
-        display: flex !important;
-        min-width: 0 !important;
-        flex-direction: column !important;
-        gap: 2px !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        font-size: 10px !important;
     }
 
     #sapo-sales-history-page
     .shp-sale-number {
-        display: block !important;
-        min-width: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        color: var(--shp-text) !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
+        font-size: 10px !important;
     }
 
     #sapo-sales-history-page
     .shp-customer-name {
-        display: block !important;
-        min-width: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        color: var(--shp-muted) !important;
-        font-size: 12px !important;
-        font-weight: 500 !important;
-        line-height: 1.3 !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
+        font-size: 9px !important;
     }
 
     #sapo-sales-history-page
-    .shp-payment-badge,
+    .shp-money-green,
     #sapo-sales-history-page
-    .shp-status-badge {
-        display: inline-flex !important;
-        min-height: 24px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        margin: 0 !important;
-        padding: 3px 9px !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        line-height: 1.2 !important;
-        white-space: nowrap !important;
-        border-radius: 999px !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-payment-badge {
-        color: var(--shp-blue) !important;
-        background: var(--shp-blue-light) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-status-paid {
-        color: var(--shp-green-800) !important;
-        background: var(--shp-green-100) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-status-partial {
-        color: var(--shp-amber) !important;
-        background: var(--shp-amber-light) !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-status-due {
-        color: var(--shp-red) !important;
-        background: #fee2e2 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-money-green {
-        color: var(--shp-green-800) !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-money-red {
-        color: var(--shp-red) !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-    }
-
+    .shp-money-red,
     #sapo-sales-history-page
     .shp-money-blue {
-        color: var(--shp-blue) !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
+        font-size: 9px !important;
+    }
+}
+
+@media (
+    max-width: 760px
+) {
+    #sapo-sales-history-page {
+        height:
+            calc(
+                100dvh
+                - 72px
+            ) !important;
+
+        max-height:
+            calc(
+                100dvh
+                - 72px
+            ) !important;
     }
 
     #sapo-sales-history-page
-    .shp-table-actions {
-        display: flex !important;
-        align-items: center !important;
-        gap: 6px !important;
-        margin: 0 !important;
-        padding: 0 !important;
+    .shp-scroll-region {
+        gap: 10px !important;
+
+        padding:
+            10px
+            8px
+            24px !important;
     }
 
     #sapo-sales-history-page
-    .shp-action-button {
-        min-width: 100px !important;
-        min-height: 32px !important;
-        padding: 5px 10px !important;
-        font-size: 12px !important;
-    }
+    .shp-header {
+        align-items:
+            stretch !important;
 
-    #sapo-sales-history-page
-    .shp-table-state {
-        height: 200px !important;
-        padding: 20px !important;
-        text-align: center !important;
-        white-space: normal !important;
-        background: var(--shp-white) !important;
-    }
+        flex-direction:
+            column !important;
 
-    #sapo-sales-history-page
-    .shp-state-content {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        flex-direction: column !important;
         gap: 8px !important;
-        margin: 0 !important;
-        padding: 0 !important;
+
+        padding: 12px !important;
     }
 
     #sapo-sales-history-page
-    .shp-spinner {
-        display: block !important;
-        width: 32px !important;
-        height: 32px !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: transparent !important;
-        border: 3px solid var(--shp-green-100) !important;
-        border-top-color: var(--shp-green-700) !important;
-        border-radius: 50% !important;
-        animation: shp-spin 700ms linear infinite !important;
-    }
-
-    @keyframes shp-spin {
-        to {
-            transform: rotate(360deg);
-        }
+    .shp-total-badge {
+        width: 100% !important;
     }
 
     #sapo-sales-history-page
-    .shp-state-title {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-text) !important;
-        font-size: 15px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
+    .shp-summary-strip {
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
     }
 
     #sapo-sales-history-page
-    .shp-state-message {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-muted) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: 1.4 !important;
+    .shp-filter-grid {
+        grid-template-columns:
+            1fr !important;
     }
 
-    /* ---------- Pagination ---------- */
+    #sapo-sales-history-page
+    .shp-table th,
+    #sapo-sales-history-page
+    .shp-table td {
+        padding:
+            6px
+            3px !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-col-sale {
+        width: 20% !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-col-date {
+        width: 15% !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-col-cashier {
+        width: 9% !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-col-status {
+        width: 14% !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-col-money {
+        width: 12% !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-col-actions {
+        width: 18% !important;
+    }
 
     #sapo-sales-history-page
     .shp-pagination {
-        display: flex !important;
-        min-height: 56px !important;
-        align-items: center !important;
-        justify-content: space-between !important;
-        gap: 14px !important;
-        margin: 0 !important;
-        padding: 12px 16px !important;
-        background: var(--shp-white) !important;
-        border: 0 !important;
-        border-top: 1px solid var(--shp-border) !important;
-    }
+        align-items:
+            stretch !important;
 
-    #sapo-sales-history-page
-    .shp-pagination-info {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        color: var(--shp-muted) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: 1.4 !important;
-    }
-
-    #sapo-sales-history-page
-    .shp-pagination-info strong {
-        color: var(--shp-text) !important;
-        font-weight: 600 !important;
+        flex-direction:
+            column !important;
     }
 
     #sapo-sales-history-page
     .shp-pagination-actions {
-        display: flex !important;
-        align-items: center !important;
-        gap: 6px !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
+        display: grid !important;
 
-    #sapo-sales-history-page
-    .shp-page-button {
-        min-width: 84px !important;
-        min-height: 34px !important;
-        padding: 6px 10px !important;
-        font-size: 13px !important;
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
     }
 
     #sapo-sales-history-page
     .shp-page-number {
-        display: inline-flex !important;
-        min-height: 34px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        margin: 0 !important;
-        padding: 6px 12px !important;
-        color: var(--shp-text-secondary) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: 1.2 !important;
-        white-space: nowrap !important;
-        background: var(--shp-bg) !important;
-        border: 1px solid var(--shp-border) !important;
-        border-radius: var(--shp-radius-sm) !important;
+        grid-column:
+            1 / -1 !important;
+
+        grid-row:
+            1 !important;
     }
 
     #sapo-sales-history-page
-    .shp-page-number strong {
-        color: var(--shp-green-800) !important;
-        font-weight: 700 !important;
+    .shp-page-button {
+        width: 100% !important;
+
+        min-width: 0 !important;
+    }
+}
+
+@media (
+    max-width: 520px
+) {
+    #sapo-sales-history-page
+    .shp-summary-strip {
+        grid-template-columns:
+            1fr
+            1fr !important;
     }
 
-    /* ---------- Responsive ---------- */
+    #sapo-sales-history-page
+    .shp-action-button {
+        padding:
+            3px
+            2px !important;
 
-    @media (max-width: 1120px) {
-        #sapo-sales-history-page
-        .shp-filter-grid {
-            grid-template-columns:
-                repeat(2, minmax(160px, 1fr)) !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-clear-filter {
-            width: 100% !important;
-        }
+        font-size: 8px !important;
     }
-
-    @media (max-width: 760px) {
-        #sapo-sales-history-page {
-            height: calc(100vh - 72px) !important;
-            height: calc(100dvh - 72px) !important;
-            max-height: calc(100vh - 72px) !important;
-            max-height: calc(100dvh - 72px) !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-scroll-region {
-            gap: 12px !important;
-            padding: 12px 10px 28px 10px !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-header {
-            min-height: 0 !important;
-            align-items: stretch !important;
-            flex-direction: column !important;
-            padding: 14px !important;
-            gap: 10px !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-title {
-            font-size: 18px !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-total-badge {
-            width: 100% !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-toolbar {
-            padding: 12px !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-filter-grid {
-            grid-template-columns: 1fr !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-pagination {
-            align-items: stretch !important;
-            flex-direction: column !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-pagination-actions {
-            display: grid !important;
-            grid-template-columns:
-                repeat(2, minmax(0, 1fr)) !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-page-number {
-            grid-column: 1 / -1 !important;
-            grid-row: 1 !important;
-        }
-
-        #sapo-sales-history-page
-        .shp-page-button {
-            width: 100% !important;
-            min-width: 0 !important;
-        }
-    }
+}
 `;
 
 export default function SalesHistoryPage() {
@@ -1267,151 +2008,230 @@ export default function SalesHistoryPage() {
     const [
         sales,
         setSales,
-    ] = useState<SaleHistoryItem[]>(
-        [],
-    );
+    ] =
+        useState<
+            SaleHistoryItem[]
+        >(
+            [],
+        );
 
     const [
         summary,
         setSummary,
-    ] = useState<SaleHistorySummary>(
-        emptySummary,
-    );
+    ] =
+        useState<
+            SaleHistorySummary
+        >(
+            emptySummary,
+        );
 
     const [
         page,
         setPage,
-    ] = useState(1);
+    ] =
+        useState(
+            1,
+        );
 
     const [
         perPage,
         setPerPage,
-    ] = useState(20);
+    ] =
+        useState(
+            20,
+        );
 
     const [
         currentPage,
         setCurrentPage,
-    ] = useState(1);
+    ] =
+        useState(
+            1,
+        );
 
     const [
         lastPage,
         setLastPage,
-    ] = useState(1);
+    ] =
+        useState(
+            1,
+        );
 
     const [
         totalResults,
         setTotalResults,
-    ] = useState(0);
+    ] =
+        useState(
+            0,
+        );
 
     const [
         resultFrom,
         setResultFrom,
-    ] = useState<number | null>(
-        null,
-    );
+    ] =
+        useState<
+            number | null
+        >(
+            null,
+        );
 
     const [
         resultTo,
         setResultTo,
-    ] = useState<number | null>(
-        null,
-    );
+    ] =
+        useState<
+            number | null
+        >(
+            null,
+        );
 
     const [
         searchInput,
         setSearchInput,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         appliedSearch,
         setAppliedSearch,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         paymentMethod,
         setPaymentMethod,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         dateFrom,
         setDateFrom,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         dateTo,
         setDateTo,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         isLoading,
         setIsLoading,
-    ] = useState(true);
+    ] =
+        useState(
+            true,
+        );
 
     const [
         pageError,
         setPageError,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         selectedSaleId,
         setSelectedSaleId,
-    ] = useState<number | null>(
-        null,
-    );
+    ] =
+        useState<
+            number | null
+        >(
+            null,
+        );
 
     const [
         selectedSale,
         setSelectedSale,
-    ] = useState<SaleReceipt | null>(
-        null,
-    );
+    ] =
+        useState<
+            SaleReceipt | null
+        >(
+            null,
+        );
 
     const [
         isLoadingSale,
         setIsLoadingSale,
-    ] = useState(false);
+    ] =
+        useState(
+            false,
+        );
 
     const [
         saleDetailsError,
         setSaleDetailsError,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         returnSaleId,
         setReturnSaleId,
-    ] = useState<number | null>(
-        null,
-    );
+    ] =
+        useState<
+            number | null
+        >(
+            null,
+        );
 
     const [
         returnOptions,
         setReturnOptions,
-    ] = useState<SalesReturnOptions | null>(
-        null,
-    );
+    ] =
+        useState<
+            SalesReturnOptions | null
+        >(
+            null,
+        );
 
     const [
         isLoadingReturn,
         setIsLoadingReturn,
-    ] = useState(false);
+    ] =
+        useState(
+            false,
+        );
 
     const [
         isSubmittingReturn,
         setIsSubmittingReturn,
-    ] = useState(false);
+    ] =
+        useState(
+            false,
+        );
 
     const [
         returnError,
         setReturnError,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         returnSuccess,
         setReturnSuccess,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const isAdmin =
-        user?.role === 'admin';
+        user?.role
+        === 'admin';
 
     const loadSales =
         useCallback(
@@ -1420,8 +2240,13 @@ export default function SalesHistoryPage() {
                     return;
                 }
 
-                setIsLoading(true);
-                setPageError('');
+                setIsLoading(
+                    true,
+                );
+
+                setPageError(
+                    '',
+                );
 
                 try {
                     const response =
@@ -1429,11 +2254,16 @@ export default function SalesHistoryPage() {
                             token,
                             {
                                 page,
+
                                 perPage,
+
                                 search:
                                     appliedSearch,
+
                                 paymentMethod,
+
                                 dateFrom,
+
                                 dateTo,
                             },
                         );
@@ -1447,34 +2277,47 @@ export default function SalesHistoryPage() {
                     );
 
                     setCurrentPage(
-                        response.meta
+                        response
+                            .meta
                             .current_page,
                     );
 
                     setLastPage(
-                        response.meta
+                        response
+                            .meta
                             .last_page,
                     );
 
                     setTotalResults(
-                        response.meta.total,
+                        response
+                            .meta
+                            .total,
                     );
 
                     setResultFrom(
-                        response.meta.from,
+                        response
+                            .meta
+                            .from,
                     );
 
                     setResultTo(
-                        response.meta.to,
+                        response
+                            .meta
+                            .to,
                     );
-                } catch (error) {
+                } catch (
+                error
+                ) {
                     setPageError(
-                        error instanceof ApiError
+                        error
+                            instanceof ApiError
                             ? error.message
                             : 'Unable to load sales history.',
                     );
                 } finally {
-                    setIsLoading(false);
+                    setIsLoading(
+                        false,
+                    );
                 }
             },
             [
@@ -1488,49 +2331,70 @@ export default function SalesHistoryPage() {
             ],
         );
 
-    useEffect(() => {
-        void loadSales();
-    }, [loadSales]);
+    useEffect(
+        () => {
+            void loadSales();
+        },
+        [
+            loadSales,
+        ],
+    );
 
-    useEffect(() => {
-        const timeout =
-            window.setTimeout(
-                () => {
-                    setPage(1);
+    useEffect(
+        () => {
+            const timeout =
+                window.setTimeout(
+                    () => {
+                        setPage(
+                            1,
+                        );
 
-                    setAppliedSearch(
-                        searchInput.trim(),
-                    );
-                },
-                350,
-            );
+                        setAppliedSearch(
+                            searchInput.trim(),
+                        );
+                    },
+                    350,
+                );
 
-        return () => {
-            window.clearTimeout(
-                timeout,
-            );
-        };
-    }, [searchInput]);
+            return () => {
+                window.clearTimeout(
+                    timeout,
+                );
+            };
+        },
+        [
+            searchInput,
+        ],
+    );
 
-    useEffect(() => {
-        if (!returnSuccess) {
-            return;
-        }
+    useEffect(
+        () => {
+            if (
+                !returnSuccess
+            ) {
+                return;
+            }
 
-        const timeout =
-            window.setTimeout(
-                () => {
-                    setReturnSuccess('');
-                },
-                3500,
-            );
+            const timeout =
+                window.setTimeout(
+                    () => {
+                        setReturnSuccess(
+                            '',
+                        );
+                    },
+                    3500,
+                );
 
-        return () => {
-            window.clearTimeout(
-                timeout,
-            );
-        };
-    }, [returnSuccess]);
+            return () => {
+                window.clearTimeout(
+                    timeout,
+                );
+            };
+        },
+        [
+            returnSuccess,
+        ],
+    );
 
     const loadSelectedSale =
         useCallback(
@@ -1541,9 +2405,17 @@ export default function SalesHistoryPage() {
                     return;
                 }
 
-                setIsLoadingSale(true);
-                setSaleDetailsError('');
-                setSelectedSale(null);
+                setIsLoadingSale(
+                    true,
+                );
+
+                setSaleDetailsError(
+                    '',
+                );
+
+                setSelectedSale(
+                    null,
+                );
 
                 try {
                     const response =
@@ -1555,17 +2427,24 @@ export default function SalesHistoryPage() {
                     setSelectedSale(
                         response.data,
                     );
-                } catch (error) {
+                } catch (
+                error
+                ) {
                     setSaleDetailsError(
-                        error instanceof ApiError
+                        error
+                            instanceof ApiError
                             ? error.message
                             : 'Unable to load sale details.',
                     );
                 } finally {
-                    setIsLoadingSale(false);
+                    setIsLoadingSale(
+                        false,
+                    );
                 }
             },
-            [token],
+            [
+                token,
+            ],
         );
 
     const openSaleDetails = (
@@ -1582,9 +2461,17 @@ export default function SalesHistoryPage() {
 
     const closeSaleDetails =
         (): void => {
-            setSelectedSaleId(null);
-            setSelectedSale(null);
-            setSaleDetailsError('');
+            setSelectedSaleId(
+                null,
+            );
+
+            setSelectedSale(
+                null,
+            );
+
+            setSaleDetailsError(
+                '',
+            );
         };
 
     const openReturnModal =
@@ -1599,10 +2486,21 @@ export default function SalesHistoryPage() {
                 saleId,
             );
 
-            setReturnOptions(null);
-            setReturnError('');
-            setReturnSuccess('');
-            setIsLoadingReturn(true);
+            setReturnOptions(
+                null,
+            );
+
+            setReturnError(
+                '',
+            );
+
+            setReturnSuccess(
+                '',
+            );
+
+            setIsLoadingReturn(
+                true,
+            );
 
             try {
                 const response =
@@ -1614,27 +2512,45 @@ export default function SalesHistoryPage() {
                 setReturnOptions(
                     response.data,
                 );
-            } catch (error) {
+            } catch (
+            error
+            ) {
                 setReturnError(
-                    error instanceof ApiError
+                    error
+                        instanceof ApiError
                         ? error.message
                         : 'Unable to load returnable items.',
                 );
             } finally {
-                setIsLoadingReturn(false);
+                setIsLoadingReturn(
+                    false,
+                );
             }
         };
 
     const closeReturnModal =
         (): void => {
-            if (isSubmittingReturn) {
+            if (
+                isSubmittingReturn
+            ) {
                 return;
             }
 
-            setReturnSaleId(null);
-            setReturnOptions(null);
-            setReturnError('');
-            setIsLoadingReturn(false);
+            setReturnSaleId(
+                null,
+            );
+
+            setReturnOptions(
+                null,
+            );
+
+            setReturnError(
+                '',
+            );
+
+            setIsLoadingReturn(
+                false,
+            );
         };
 
     const submitReturn =
@@ -1644,14 +2560,20 @@ export default function SalesHistoryPage() {
         ): Promise<void> => {
             if (
                 !token
-                || returnSaleId === null
+                || returnSaleId
+                === null
                 || isSubmittingReturn
             ) {
                 return;
             }
 
-            setIsSubmittingReturn(true);
-            setReturnError('');
+            setIsSubmittingReturn(
+                true,
+            );
+
+            setReturnError(
+                '',
+            );
 
             try {
                 const response =
@@ -1666,36 +2588,76 @@ export default function SalesHistoryPage() {
                     ?? 'Sales return completed successfully.',
                 );
 
-                setReturnSaleId(null);
-                setReturnOptions(null);
-                setReturnError('');
+                setReturnSaleId(
+                    null,
+                );
+
+                setReturnOptions(
+                    null,
+                );
+
+                setReturnError(
+                    '',
+                );
 
                 await loadSales();
-            } catch (error) {
+            } catch (
+            error
+            ) {
                 setReturnError(
-                    error instanceof ApiError
+                    error
+                        instanceof ApiError
                         ? error.message
                         : 'Unable to complete the sales return.',
                 );
             } finally {
-                setIsSubmittingReturn(false);
+                setIsSubmittingReturn(
+                    false,
+                );
             }
         };
 
-    const clearSearch = (): void => {
-        setSearchInput('');
-        setAppliedSearch('');
-        setPage(1);
-    };
+    const clearSearch =
+        (): void => {
+            setSearchInput(
+                '',
+            );
 
-    const clearFilters = (): void => {
-        setSearchInput('');
-        setAppliedSearch('');
-        setPaymentMethod('');
-        setDateFrom('');
-        setDateTo('');
-        setPage(1);
-    };
+            setAppliedSearch(
+                '',
+            );
+
+            setPage(
+                1,
+            );
+        };
+
+    const clearFilters =
+        (): void => {
+            setSearchInput(
+                '',
+            );
+
+            setAppliedSearch(
+                '',
+            );
+
+            setPaymentMethod(
+                '',
+            );
+
+            setDateFrom(
+                '',
+            );
+
+            setDateTo(
+                '',
+            );
+
+            setPage(
+                1,
+            );
+        };
 
     const hasFilters =
         appliedSearch !== ''
@@ -1710,6 +2672,8 @@ export default function SalesHistoryPage() {
             </style>
 
             <div className="shp-scroll-region">
+                {/* HEADER */}
+
                 <header className="shp-header">
                     <div className="shp-header-copy">
                         <span className="shp-kicker">
@@ -1726,11 +2690,14 @@ export default function SalesHistoryPage() {
                     <span className="shp-total-badge">
                         {totalResults}
                         {' '}
+
                         {totalResults === 1
                             ? 'Sale'
                             : 'Sales'}
                     </span>
                 </header>
+
+                {/* SUMMARY */}
 
                 <section className="shp-summary-strip">
                     <article className="shp-summary-card">
@@ -1739,7 +2706,10 @@ export default function SalesHistoryPage() {
                         </span>
 
                         <strong className="shp-summary-value">
-                            {summary.total_sales}
+                            {
+                                summary
+                                    .total_sales
+                            }
                         </strong>
 
                         <small className="shp-summary-help">
@@ -1754,7 +2724,8 @@ export default function SalesHistoryPage() {
 
                         <strong className="shp-summary-value">
                             {currencyFormatter.format(
-                                summary.total_revenue,
+                                summary
+                                    .total_revenue,
                             )}
                         </strong>
 
@@ -1770,7 +2741,8 @@ export default function SalesHistoryPage() {
 
                         <strong className="shp-summary-value">
                             {currencyFormatter.format(
-                                summary.outstanding_due,
+                                summary
+                                    .outstanding_due,
                             )}
                         </strong>
 
@@ -1785,7 +2757,10 @@ export default function SalesHistoryPage() {
                         </span>
 
                         <strong className="shp-summary-value">
-                            {summary.total_items}
+                            {
+                                summary
+                                    .total_items
+                            }
                         </strong>
 
                         <small className="shp-summary-help">
@@ -1800,7 +2775,8 @@ export default function SalesHistoryPage() {
 
                         <strong className="shp-summary-value">
                             {currencyFormatter.format(
-                                summary.total_discount,
+                                summary
+                                    .total_discount,
                             )}
                         </strong>
 
@@ -1818,7 +2794,8 @@ export default function SalesHistoryPage() {
 
                                 <strong className="shp-summary-value">
                                     {currencyFormatter.format(
-                                        summary.gross_profit
+                                        summary
+                                            .gross_profit
                                         ?? 0,
                                     )}
                                 </strong>
@@ -1835,7 +2812,8 @@ export default function SalesHistoryPage() {
 
                                 <strong className="shp-summary-value">
                                     {currencyFormatter.format(
-                                        summary.net_profit
+                                        summary
+                                            .net_profit
                                         ?? 0,
                                     )}
                                 </strong>
@@ -1848,6 +2826,8 @@ export default function SalesHistoryPage() {
                     )}
                 </section>
 
+                {/* MESSAGES */}
+
                 {returnSuccess && (
                     <div
                         className="shp-message shp-success"
@@ -1858,7 +2838,9 @@ export default function SalesHistoryPage() {
                         </span>
 
                         <span className="shp-message-text">
-                            {returnSuccess}
+                            {
+                                returnSuccess
+                            }
                         </span>
 
                         <button
@@ -1866,7 +2848,9 @@ export default function SalesHistoryPage() {
                             className="shp-message-close"
                             aria-label="Close success message"
                             onClick={() => {
-                                setReturnSuccess('');
+                                setReturnSuccess(
+                                    '',
+                                );
                             }}
                         >
                             ×
@@ -1884,7 +2868,9 @@ export default function SalesHistoryPage() {
                         </span>
 
                         <span className="shp-message-text">
-                            {pageError}
+                            {
+                                pageError
+                            }
                         </span>
 
                         <button
@@ -1899,7 +2885,11 @@ export default function SalesHistoryPage() {
                     </div>
                 )}
 
+                {/* MAIN PANEL */}
+
                 <section className="shp-panel">
+                    {/* TOOLBAR */}
+
                     <div className="shp-toolbar">
                         <div className="shp-search-wrapper">
                             <span
@@ -1912,12 +2902,18 @@ export default function SalesHistoryPage() {
                             <input
                                 type="search"
                                 className="shp-input shp-search-input"
-                                value={searchInput}
+                                value={
+                                    searchInput
+                                }
                                 placeholder="Search sale, customer, cashier, product, SKU or barcode"
                                 aria-label="Search sales history"
-                                onChange={(event) => {
+                                onChange={(
+                                    event,
+                                ) => {
                                     setSearchInput(
-                                        event.target.value,
+                                        event
+                                            .target
+                                            .value,
                                     );
                                 }}
                             />
@@ -1927,7 +2923,9 @@ export default function SalesHistoryPage() {
                                     type="button"
                                     className="shp-clear-search"
                                     aria-label="Clear search"
-                                    onClick={clearSearch}
+                                    onClick={
+                                        clearSearch
+                                    }
                                 >
                                     ×
                                 </button>
@@ -1943,17 +2941,25 @@ export default function SalesHistoryPage() {
                                 <input
                                     type="date"
                                     className="shp-input"
-                                    value={dateFrom}
+                                    value={
+                                        dateFrom
+                                    }
                                     max={
                                         dateTo
                                         || undefined
                                     }
-                                    onChange={(event) => {
+                                    onChange={(
+                                        event,
+                                    ) => {
                                         setDateFrom(
-                                            event.target.value,
+                                            event
+                                                .target
+                                                .value,
                                         );
 
-                                        setPage(1);
+                                        setPage(
+                                            1,
+                                        );
                                     }}
                                 />
                             </label>
@@ -1966,17 +2972,25 @@ export default function SalesHistoryPage() {
                                 <input
                                     type="date"
                                     className="shp-input"
-                                    value={dateTo}
+                                    value={
+                                        dateTo
+                                    }
                                     min={
                                         dateFrom
                                         || undefined
                                     }
-                                    onChange={(event) => {
+                                    onChange={(
+                                        event,
+                                    ) => {
                                         setDateTo(
-                                            event.target.value,
+                                            event
+                                                .target
+                                                .value,
                                         );
 
-                                        setPage(1);
+                                        setPage(
+                                            1,
+                                        );
                                     }}
                                 />
                             </label>
@@ -1988,13 +3002,21 @@ export default function SalesHistoryPage() {
 
                                 <select
                                     className="shp-select"
-                                    value={paymentMethod}
-                                    onChange={(event) => {
+                                    value={
+                                        paymentMethod
+                                    }
+                                    onChange={(
+                                        event,
+                                    ) => {
                                         setPaymentMethod(
-                                            event.target.value,
+                                            event
+                                                .target
+                                                .value,
                                         );
 
-                                        setPage(1);
+                                        setPage(
+                                            1,
+                                        );
                                     }}
                                 >
                                     <option value="">
@@ -2022,15 +3044,23 @@ export default function SalesHistoryPage() {
 
                                 <select
                                     className="shp-select"
-                                    value={perPage}
-                                    onChange={(event) => {
+                                    value={
+                                        perPage
+                                    }
+                                    onChange={(
+                                        event,
+                                    ) => {
                                         setPerPage(
                                             Number(
-                                                event.target.value,
+                                                event
+                                                    .target
+                                                    .value,
                                             ),
                                         );
 
-                                        setPage(1);
+                                        setPage(
+                                            1,
+                                        );
                                     }}
                                 >
                                     <option value={10}>
@@ -2055,13 +3085,17 @@ export default function SalesHistoryPage() {
                                 <button
                                     type="button"
                                     className="shp-button shp-secondary-button shp-clear-filter"
-                                    onClick={clearFilters}
+                                    onClick={
+                                        clearFilters
+                                    }
                                 >
                                     Clear Filters
                                 </button>
                             )}
                         </div>
                     </div>
+
+                    {/* TABLE */}
 
                     <div className="shp-table-wrapper">
                         <table className="shp-table">
@@ -2072,35 +3106,16 @@ export default function SalesHistoryPage() {
                                     </th>
 
                                     <th className="shp-col-date">
-                                        Date and Time
+                                        Date & Time
                                     </th>
 
                                     <th className="shp-col-cashier">
                                         Cashier
                                     </th>
 
-                                    <th className="shp-col-small">
-                                    </th>
-
-                                    {/* <th className="shp-col-small">
-                                        Items
-                                    </th> */}
-
-                                    {/* <th className="shp-col-small">
-                                        Quantity
-                                    </th> */}
-
-                                    {/* <th className="shp-col-payment">
-                                        Payment
-                                    </th> */}
-
                                     <th className="shp-col-status">
                                         Status
                                     </th>
-
-                                    {/* <th className="shp-col-money">
-                                        Discount
-                                    </th> */}
 
                                     <th className="shp-col-money">
                                         Total
@@ -2109,12 +3124,6 @@ export default function SalesHistoryPage() {
                                     <th className="shp-col-money">
                                         Due
                                     </th>
-
-                                    {/* {isAdmin && (
-                                        <th className="shp-col-money">
-                                            Net Profit
-                                        </th>
-                                    )} */}
 
                                     <th className="shp-col-actions">
                                         Actions
@@ -2126,11 +3135,7 @@ export default function SalesHistoryPage() {
                                 {isLoading ? (
                                     <tr>
                                         <td
-                                            colSpan={
-                                                isAdmin
-                                                    ? 12
-                                                    : 11
-                                            }
+                                            colSpan={7}
                                             className="shp-table-state"
                                         >
                                             <div className="shp-state-content">
@@ -2149,11 +3154,7 @@ export default function SalesHistoryPage() {
                                 ) : sales.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={
-                                                isAdmin
-                                                    ? 12
-                                                    : 11
-                                            }
+                                            colSpan={7}
                                             className="shp-table-state"
                                         >
                                             <div className="shp-state-content">
@@ -2173,16 +3174,20 @@ export default function SalesHistoryPage() {
                                     </tr>
                                 ) : (
                                     sales.map(
-                                        (sale) => {
+                                        (
+                                            sale,
+                                        ) => {
                                             const saleRow =
                                                 sale as ExtendedSaleHistoryItem;
 
                                             const paymentStatus =
-                                                saleRow.payment_status
+                                                saleRow
+                                                    .payment_status
                                                 ?? 'paid';
 
                                             const dueAmount =
-                                                saleRow.due_amount
+                                                saleRow
+                                                    .due_amount
                                                 ?? 0;
 
                                             const customerText =
@@ -2192,17 +3197,31 @@ export default function SalesHistoryPage() {
                                                         : ''}`
                                                     : 'Walk-in Customer';
 
+                                            const cashierName =
+                                                sale
+                                                    .created_by
+                                                    ?.name
+                                                ?? 'Unknown';
+
                                             return (
-                                                <tr key={sale.id}>
+                                                <tr
+                                                    key={
+                                                        sale.id
+                                                    }
+                                                >
                                                     <td>
                                                         <div className="shp-sale-cell">
                                                             <strong
                                                                 className="shp-sale-number"
                                                                 title={
-                                                                    sale.sale_number
+                                                                    sale
+                                                                        .sale_number
                                                                 }
                                                             >
-                                                                {sale.sale_number}
+                                                                {
+                                                                    sale
+                                                                        .sale_number
+                                                                }
                                                             </strong>
 
                                                             <span
@@ -2211,48 +3230,29 @@ export default function SalesHistoryPage() {
                                                                     customerText
                                                                 }
                                                             >
-                                                                {customerText}
+                                                                {
+                                                                    customerText
+                                                                }
                                                             </span>
                                                         </div>
                                                     </td>
 
                                                     <td>
                                                         {formatDateTime(
-                                                            sale.sale_date,
+                                                            sale
+                                                                .sale_date,
                                                         )}
                                                     </td>
 
-                                                    <td>
+                                                    <td
+                                                        title={
+                                                            cashierName
+                                                        }
+                                                    >
                                                         {
-                                                            (sale
-                                                                .created_by
-                                                                ?.name
-                                                                ?? 'U')
-                                                                .charAt(0)
-                                                                .toUpperCase()
+                                                            cashierName
                                                         }
                                                     </td>
-
-                                                    <td>
-
-                                                    </td>
-
-                                                    {/* <td>
-                                                        {sale.items_count}
-                                                    </td> */}
-
-                                                    {/* <td>
-                                                        {sale.total_quantity}
-                                                    </td> */}
-
-                                                    {/* <td>
-                                                        <span className="shp-payment-badge">
-                                                            {paymentName(
-                                                                sale.payment_method,
-                                                                paymentStatus,
-                                                            )}
-                                                        </span>
-                                                    </td> */}
 
                                                     <td>
                                                         <span
@@ -2268,19 +3268,11 @@ export default function SalesHistoryPage() {
                                                         </span>
                                                     </td>
 
-                                                    {/* <td>
-                                                        <strong className="shp-money-blue">
-                                                            {currencyFormatter.format(
-                                                                sale.item_discount_total
-                                                                + sale.discount,
-                                                            )}
-                                                        </strong>
-                                                    </td> */}
-
                                                     <td>
                                                         <strong className="shp-money-green">
                                                             {currencyFormatter.format(
-                                                                sale.grand_total,
+                                                                sale
+                                                                    .grand_total,
                                                             )}
                                                         </strong>
                                                     </td>
@@ -2298,26 +3290,6 @@ export default function SalesHistoryPage() {
                                                             )}
                                                         </strong>
                                                     </td>
-
-                                                    {/* {isAdmin && (
-                                                        <td>
-                                                            <strong
-                                                                className={
-                                                                    (
-                                                                        sale.net_profit
-                                                                        ?? 0
-                                                                    ) >= 0
-                                                                        ? 'shp-money-green'
-                                                                        : 'shp-money-red'
-                                                                }
-                                                            >
-                                                                {currencyFormatter.format(
-                                                                    sale.net_profit
-                                                                    ?? 0,
-                                                                )}
-                                                            </strong>
-                                                        </td>
-                                                    )} */}
 
                                                     <td>
                                                         <div className="shp-table-actions">
@@ -2355,24 +3327,43 @@ export default function SalesHistoryPage() {
                         </table>
                     </div>
 
+                    {/* PAGINATION */}
+
                     {!isLoading
                         && totalResults > 0 && (
                             <footer className="shp-pagination">
                                 <p className="shp-pagination-info">
                                     Showing
                                     {' '}
+
                                     <strong>
-                                        {resultFrom}
+                                        {
+                                            resultFrom
+                                        }
                                     </strong>
-                                    {' '}to{' '}
+
+                                    {' '}
+                                    to
+                                    {' '}
+
                                     <strong>
-                                        {resultTo}
+                                        {
+                                            resultTo
+                                        }
                                     </strong>
-                                    {' '}of{' '}
+
+                                    {' '}
+                                    of
+                                    {' '}
+
                                     <strong>
-                                        {totalResults}
+                                        {
+                                            totalResults
+                                        }
                                     </strong>
-                                    {' '}sales
+
+                                    {' '}
+                                    sales
                                 </p>
 
                                 <div className="shp-pagination-actions">
@@ -2384,10 +3375,13 @@ export default function SalesHistoryPage() {
                                         }
                                         onClick={() => {
                                             setPage(
-                                                (current) =>
+                                                (
+                                                    current,
+                                                ) =>
                                                     Math.max(
                                                         1,
-                                                        current - 1,
+                                                        current
+                                                        - 1,
                                                     ),
                                             );
                                         }}
@@ -2398,12 +3392,21 @@ export default function SalesHistoryPage() {
                                     <span className="shp-page-number">
                                         Page
                                         {' '}
+
                                         <strong>
-                                            {currentPage}
+                                            {
+                                                currentPage
+                                            }
                                         </strong>
-                                        {' '}of{' '}
+
+                                        {' '}
+                                        of
+                                        {' '}
+
                                         <strong>
-                                            {lastPage}
+                                            {
+                                                lastPage
+                                            }
                                         </strong>
                                     </span>
 
@@ -2416,10 +3419,13 @@ export default function SalesHistoryPage() {
                                         }
                                         onClick={() => {
                                             setPage(
-                                                (current) =>
+                                                (
+                                                    current,
+                                                ) =>
                                                     Math.min(
                                                         lastPage,
-                                                        current + 1,
+                                                        current
+                                                        + 1,
                                                     ),
                                             );
                                         }}
@@ -2433,9 +3439,15 @@ export default function SalesHistoryPage() {
             </div>
 
             <SaleDetailsModal
-                saleId={selectedSaleId}
-                sale={selectedSale}
-                isLoading={isLoadingSale}
+                saleId={
+                    selectedSaleId
+                }
+                sale={
+                    selectedSale
+                }
+                isLoading={
+                    isLoadingSale
+                }
                 errorMessage={
                     saleDetailsError
                 }
@@ -2455,8 +3467,12 @@ export default function SalesHistoryPage() {
             />
 
             <CreateSalesReturnModal
-                saleId={returnSaleId}
-                options={returnOptions}
+                saleId={
+                    returnSaleId
+                }
+                options={
+                    returnOptions
+                }
                 isLoading={
                     isLoadingReturn
                 }
@@ -2469,7 +3485,9 @@ export default function SalesHistoryPage() {
                 onClose={
                     closeReturnModal
                 }
-                onSubmit={(values) => {
+                onSubmit={(
+                    values,
+                ) => {
                     void submitReturn(
                         values,
                     );

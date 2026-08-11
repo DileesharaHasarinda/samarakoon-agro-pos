@@ -3814,30 +3814,9 @@ export default function PosPage() {
                             New Sale
                         </h1>
 
-                        <p className="subtitle">
-                            Search a product, select
-                            its batch and choose the
-                            selling unit. Bag products
-                            can be sold as a full Bag
-                            or as loose Kg where
-                            enabled.
-                        </p>
                     </div>
 
-                    <div className="customer-note">
-                        <span>
-                            Customer
-                        </span>
-
-                        <strong>
-                            Selected at Checkout
-                        </strong>
-
-                        <small>
-                            Walk-in or registered
-                            customer
-                        </small>
-                    </div>
+                   
                 </header>
 
                 {pageError && (
