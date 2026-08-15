@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Product\StoreProductRequest;
 use App\Http\Requests\Product\UpdateProductRequest;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\StockBatch;
 use Carbon\Carbon;
 use DateTimeInterface;
@@ -16,10 +17,17 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class ProductController extends Controller
 {
+    /*
+     * =====================================================
+     * PRODUCT LIST
+     * =====================================================
+     */
+
     public function index(
         Request $request,
     ): JsonResponse {
@@ -59,23 +67,33 @@ class ProductController extends Controller
                 ?? 20
             );
 
-        /*
-         * IMPORTANT:
-         *
-         * We load the stock-batch unit information because
-         * total_available_quantity alone does not tell us
-         * whether the physical stock is Bag, Kg, Bottle, etc.
-         */
         $products =
             Product::query()
             ->with([
                 'category:id,name',
 
+                'variants' =>
+                function (
+                    $query,
+                ): void {
+                    $query
+                        ->orderBy(
+                            'sort_order',
+                        )
+                        ->orderBy(
+                            'id',
+                        );
+                },
+
                 'stockBatches' =>
-                function ($query): void {
+                function (
+                    $query,
+                ): void {
                     $query->select([
                         'id',
                         'product_id',
+                        'product_variant_id',
+                        'purchase_item_id',
                         'available_quantity',
                         'received_quantity',
                         'is_dual_unit',
@@ -93,11 +111,15 @@ class ProductController extends Controller
                 $search !== '',
                 function (
                     Builder $query,
-                ) use ($search): void {
+                ) use (
+                    $search,
+                ): void {
                     $query->where(
                         function (
                             Builder $searchQuery,
-                        ) use ($search): void {
+                        ) use (
+                            $search,
+                        ): void {
                             $searchQuery
                                 ->where(
                                     'name',
@@ -123,20 +145,62 @@ class ProductController extends Controller
                                     'category',
                                     function (
                                         Builder $categoryQuery,
-                                    ) use ($search): void {
-                                        $categoryQuery->where(
-                                            'name',
-                                            'like',
-                                            "%{$search}%",
-                                        );
+                                    ) use (
+                                        $search,
+                                    ): void {
+                                        $categoryQuery
+                                            ->where(
+                                                'name',
+                                                'like',
+                                                "%{$search}%",
+                                            );
+                                    },
+                                )
+                                ->orWhereHas(
+                                    'variants',
+                                    function (
+                                        Builder $variantQuery,
+                                    ) use (
+                                        $search,
+                                    ): void {
+                                        $variantQuery
+                                            ->where(
+                                                'sku',
+                                                'like',
+                                                "%{$search}%",
+                                            )
+                                            ->orWhere(
+                                                'barcode',
+                                                'like',
+                                                "%{$search}%",
+                                            )
+                                            ->orWhere(
+                                                'size_value',
+                                                'like',
+                                                "%{$search}%",
+                                            )
+                                            ->orWhere(
+                                                'size_unit',
+                                                'like',
+                                                "%{$search}%",
+                                            )
+                                            ->orWhere(
+                                                'package_unit',
+                                                'like',
+                                                "%{$search}%",
+                                            );
                                     },
                                 );
                         },
                     );
                 },
             )
-            ->orderBy('name')
-            ->paginate($perPage);
+            ->orderBy(
+                'name',
+            )
+            ->paginate(
+                $perPage,
+            );
 
         $data =
             collect(
@@ -178,12 +242,31 @@ class ProductController extends Controller
         ]);
     }
 
+    /*
+     * =====================================================
+     * PRODUCT OPTIONS
+     * =====================================================
+     */
+
     public function options(): JsonResponse
     {
         $products =
             Product::query()
             ->with([
                 'category:id,name',
+
+                'variants' =>
+                function (
+                    $query,
+                ): void {
+                    $query
+                        ->orderBy(
+                            'sort_order',
+                        )
+                        ->orderBy(
+                            'id',
+                        );
+                },
             ])
             ->when(
                 Schema::hasColumn(
@@ -198,42 +281,96 @@ class ProductController extends Controller
                     true,
                 ),
             )
-            ->orderBy('name')
+            ->orderBy(
+                'name',
+            )
             ->get()
             ->map(
-                fn(
+                function (
                     Product $product,
-                ): array => [
-                    'id' =>
-                    $product->id,
+                ): array {
+                    $variants =
+                        $product
+                        ->variants
+                        ->map(
+                            fn(
+                                ProductVariant $variant,
+                            ): array => [
+                                'id' =>
+                                $variant->id,
 
-                    'name' =>
-                    $product->name,
+                                'display_name' =>
+                                $variant
+                                    ->displayName(),
 
-                    'sku' =>
-                    $product->sku,
+                                'size_value' =>
+                                (float) $variant
+                                    ->size_value,
 
-                    'barcode' =>
-                    $product->barcode,
+                                'size_unit' =>
+                                $variant
+                                    ->size_unit,
 
-                    'unit' =>
-                    $product->unit,
+                                'package_unit' =>
+                                $variant
+                                    ->package_unit,
 
-                    'category' =>
-                    $product->category
-                        ? [
-                            'id' =>
-                            $product
-                                ->category
-                                ->id,
+                                'sku' =>
+                                $variant
+                                    ->sku,
 
-                            'name' =>
-                            $product
-                                ->category
-                                ->name,
-                        ]
-                        : null,
-                ],
+                                'barcode' =>
+                                $variant
+                                    ->barcode,
+
+                                'is_active' =>
+                                (bool) $variant
+                                    ->is_active,
+                            ],
+                        )
+                        ->values()
+                        ->all();
+
+                    return [
+                        'id' =>
+                        $product->id,
+
+                        'name' =>
+                        $product->name,
+
+                        'sku' =>
+                        $product->sku,
+
+                        'barcode' =>
+                        $product->barcode,
+
+                        'unit' =>
+                        $product->unit,
+
+                        'has_variants' =>
+                        count(
+                            $variants,
+                        ) > 0,
+
+                        'variants' =>
+                        $variants,
+
+                        'category' =>
+                        $product->category
+                            ? [
+                                'id' =>
+                                $product
+                                    ->category
+                                    ->id,
+
+                                'name' =>
+                                $product
+                                    ->category
+                                    ->name,
+                            ]
+                            : null,
+                    ];
+                },
             )
             ->values();
 
@@ -243,11 +380,24 @@ class ProductController extends Controller
         ]);
     }
 
+    /*
+     * =====================================================
+     * CREATE PRODUCT
+     * =====================================================
+     */
+
     public function store(
         StoreProductRequest $request,
     ): JsonResponse {
         $validated =
             $request->validated();
+
+        $this->validateBarcodeNamespace(
+            $validated['barcode']
+                ?? null,
+            $validated['variants']
+                ?? [],
+        );
 
         $product =
             DB::transaction(
@@ -257,7 +407,9 @@ class ProductController extends Controller
                     $temporarySku =
                         'TMP-'
                         . Str::upper(
-                            Str::random(16),
+                            Str::random(
+                                16,
+                            ),
                         );
 
                     $product =
@@ -302,12 +454,33 @@ class ProductController extends Controller
 
                     $product->save();
 
+                    $this->syncVariants(
+                        $product,
+                        $validated['variants']
+                            ?? [],
+                    );
+
                     return $product;
                 },
             );
 
         $product->load([
             'category:id,name',
+
+            'variants' =>
+            function (
+                $query,
+            ): void {
+                $query
+                    ->orderBy(
+                        'sort_order',
+                    )
+                    ->orderBy(
+                        'id',
+                    );
+            },
+
+            'stockBatches',
         ]);
 
         $product->setAttribute(
@@ -326,11 +499,30 @@ class ProductController extends Controller
         ], 201);
     }
 
+    /*
+     * =====================================================
+     * PRODUCT DETAILS
+     * =====================================================
+     */
+
     public function show(
         Product $product,
     ): JsonResponse {
         $product->load([
             'category:id,name',
+
+            'variants' =>
+            function (
+                $query,
+            ): void {
+                $query
+                    ->orderBy(
+                        'sort_order',
+                    )
+                    ->orderBy(
+                        'id',
+                    );
+            },
         ]);
 
         $batches =
@@ -348,7 +540,9 @@ class ProductController extends Controller
             ->orderBy(
                 'selling_price',
             )
-            ->orderBy('id')
+            ->orderBy(
+                'id',
+            )
             ->get();
 
         $purchaseItemIds =
@@ -420,6 +614,17 @@ class ProductController extends Controller
                 $supplierIds,
             );
 
+        /*
+         * Important:
+         *
+         * batchData() resolves product_variant_id
+         * from the StockBatch and also has a
+         * purchase-item compatibility fallback.
+         *
+         * All detail summaries therefore use the
+         * RESOLVED batch details rather than raw
+         * StockBatch data.
+         */
         $batchDetails =
             $batches
             ->map(
@@ -441,12 +646,6 @@ class ProductController extends Controller
                 $batchDetails,
             );
 
-        /*
-         * These numeric totals are retained for compatibility.
-         *
-         * Do not append product.unit to them in the UI.
-         * Use stock_by_unit for unit-aware display.
-         */
         $totalAvailableQuantity =
             round(
                 (float) $batchDetails
@@ -517,6 +716,28 @@ class ProductController extends Controller
                 $batchDetails,
             );
 
+        /*
+         * Variant cards shown on Product Details.
+         *
+         * Every variant contains:
+         *
+         * available_stock_by_unit
+         */
+        $variantPayload =
+            $this->buildDetailVariantPayload(
+                $product,
+                $batchDetails,
+            );
+
+        /*
+         * Detailed variant stock + price summary.
+         */
+        $variantStock =
+            $this->buildVariantStockSummary(
+                $product,
+                $batchDetails,
+            );
+
         return response()->json([
             'data' => [
                 'id' =>
@@ -531,14 +752,6 @@ class ProductController extends Controller
                 'barcode' =>
                 $product->barcode,
 
-                /*
-                 * Main product/purchase unit.
-                 *
-                 * Example: Bag.
-                 *
-                 * This does not necessarily equal the
-                 * physical stock unit.
-                 */
                 'unit' =>
                 $product->unit,
 
@@ -561,6 +774,23 @@ class ProductController extends Controller
                     ]
                     : null,
 
+                /*
+                 * VARIANT INFORMATION
+                 */
+                'has_variants' =>
+                $product
+                    ->variants
+                    ->isNotEmpty(),
+
+                'variants' =>
+                $variantPayload,
+
+                /*
+                 * VARIANT STOCK + PRICES
+                 */
+                'variant_stock' =>
+                $variantStock,
+
                 'created_at' =>
                 $product
                     ->created_at
@@ -572,11 +802,21 @@ class ProductController extends Controller
                     ?->toISOString(),
 
                 'summary' => [
+                    /*
+                     * Required by ProductDetailsSummary.
+                     */
+                    'number_of_variants' =>
+                    $product
+                        ->variants
+                        ->count(),
+
                     'number_of_batches' =>
-                    $batchDetails->count(),
+                    $batchDetails
+                        ->count(),
 
                     'number_of_price_options' =>
-                    $priceOptions->count(),
+                    $priceOptions
+                        ->count(),
 
                     'total_received_quantity' =>
                     $totalReceivedQuantity,
@@ -603,10 +843,6 @@ class ProductController extends Controller
                         2,
                     ),
 
-                    /*
-                     * Correct physical stock quantity grouped
-                     * by physical stock unit.
-                     */
                     'stock_by_unit' =>
                     $stockByUnit,
                 ],
@@ -620,6 +856,12 @@ class ProductController extends Controller
         ]);
     }
 
+    /*
+     * =====================================================
+     * UPDATE PRODUCT
+     * =====================================================
+     */
+
     public function update(
         UpdateProductRequest $request,
         Product $product,
@@ -627,31 +869,67 @@ class ProductController extends Controller
         $validated =
             $request->validated();
 
-        $product->forceFill([
-            'category_id' =>
-            (int) $validated['category_id'],
+        $this->validateBarcodeNamespace(
+            $validated['barcode']
+                ?? null,
+            $validated['variants']
+                ?? [],
+            $product,
+        );
 
-            'name' =>
-            trim(
-                $validated['name'],
-            ),
+        DB::transaction(
+            function () use (
+                $validated,
+                $product,
+            ): void {
+                $product->forceFill([
+                    'category_id' =>
+                    (int) $validated['category_id'],
 
-            'unit' =>
-            trim(
-                $validated['unit'],
-            ),
+                    'name' =>
+                    trim(
+                        $validated['name'],
+                    ),
 
-            'barcode' =>
-            $this->normaliseBarcode(
-                $validated['barcode']
-                    ?? null,
-            ),
-        ]);
+                    'unit' =>
+                    trim(
+                        $validated['unit'],
+                    ),
 
-        $product->save();
+                    'barcode' =>
+                    $this->normaliseBarcode(
+                        $validated['barcode']
+                            ?? null,
+                    ),
+                ]);
+
+                $product->save();
+
+                $this->syncVariants(
+                    $product,
+                    $validated['variants']
+                        ?? [],
+                );
+            },
+        );
 
         $product->load([
             'category:id,name',
+
+            'variants' =>
+            function (
+                $query,
+            ): void {
+                $query
+                    ->orderBy(
+                        'sort_order',
+                    )
+                    ->orderBy(
+                        'id',
+                    );
+            },
+
+            'stockBatches',
         ]);
 
         $product->loadSum(
@@ -670,6 +948,12 @@ class ProductController extends Controller
         ]);
     }
 
+    /*
+     * =====================================================
+     * DELETE PRODUCT
+     * =====================================================
+     */
+
     public function destroy(
         Product $product,
     ): JsonResponse {
@@ -678,7 +962,10 @@ class ProductController extends Controller
                 $product,
             );
 
-        if ($usageMessage !== null) {
+        if (
+            $usageMessage
+            !== null
+        ) {
             return response()->json([
                 'message' =>
                 $usageMessage,
@@ -693,30 +980,1048 @@ class ProductController extends Controller
         ]);
     }
 
+    /*
+     * =====================================================
+     * PRODUCT VARIANT SYNC
+     * =====================================================
+     */
+
     /**
-     * Build product-list stock grouped by the ACTUAL
-     * physical stock unit.
+     * @param array<int, array<string, mixed>> $variants
+     */
+    private function syncVariants(
+        Product $product,
+        array $variants,
+    ): void {
+        $existingVariants =
+            ProductVariant::query()
+            ->where(
+                'product_id',
+                $product->id,
+            )
+            ->get()
+            ->keyBy(
+                'id',
+            );
+
+        $incomingExistingIds = [];
+
+        foreach (
+            $variants as $variantData
+        ) {
+            if (
+                !isset(
+                    $variantData['id'],
+                )
+                || $variantData['id']
+                === null
+            ) {
+                continue;
+            }
+
+            $variantId =
+                (int) $variantData['id'];
+
+            if (
+                !$existingVariants
+                    ->has(
+                        $variantId,
+                    )
+            ) {
+                throw ValidationException::withMessages([
+                    'variants' =>
+                    'One of the selected product variants does not belong to this product.',
+                ]);
+            }
+
+            $incomingExistingIds[] =
+                $variantId;
+        }
+
+        /*
+         * Remove submitted omissions only when
+         * the existing variant is unused.
+         */
+        foreach (
+            $existingVariants as
+            $existingVariant
+        ) {
+            if (
+                in_array(
+                    (int) $existingVariant
+                        ->id,
+                    $incomingExistingIds,
+                    true,
+                )
+            ) {
+                continue;
+            }
+
+            $usageMessage =
+                $this->variantUsageMessage(
+                    $existingVariant,
+                );
+
+            if (
+                $usageMessage
+                !== null
+            ) {
+                throw ValidationException::withMessages([
+                    'variants' =>
+                    $usageMessage,
+                ]);
+            }
+
+            $existingVariant
+                ->delete();
+        }
+
+        foreach (
+            $variants as
+            $index => $variantData
+        ) {
+            $variantId =
+                isset(
+                    $variantData['id'],
+                )
+                && $variantData['id']
+                !== null
+                ? (int) $variantData['id']
+                : null;
+
+            if (
+                $variantId
+                !== null
+            ) {
+                $variant =
+                    $existingVariants
+                    ->get(
+                        $variantId,
+                    );
+            } else {
+                $variant =
+                    new ProductVariant();
+
+                $variant->forceFill([
+                    'product_id' =>
+                    $product->id,
+
+                    'sku' =>
+                    'TMP-V-'
+                        . Str::upper(
+                            Str::random(
+                                16,
+                            ),
+                        ),
+                ]);
+            }
+
+            if (
+                !$variant
+                    instanceof ProductVariant
+            ) {
+                throw ValidationException::withMessages([
+                    'variants' =>
+                    'Unable to locate one of the selected product variants.',
+                ]);
+            }
+
+            $variant->forceFill([
+                'product_id' =>
+                $product->id,
+
+                'size_value' =>
+                round(
+                    (float) $variantData['size_value'],
+                    3,
+                ),
+
+                'size_unit' =>
+                trim(
+                    (string) $variantData['size_unit'],
+                ),
+
+                'package_unit' =>
+                trim(
+                    (string) $variantData['package_unit'],
+                ),
+
+                'barcode' =>
+                $this->normaliseBarcode(
+                    $variantData['barcode']
+                        ?? null,
+                ),
+
+                'is_active' =>
+                (bool) (
+                    $variantData['is_active']
+                    ?? true
+                ),
+
+                'sort_order' =>
+                $index,
+            ]);
+
+            $variant->save();
+
+            if (
+                $variantId
+                === null
+            ) {
+                $variant->forceFill([
+                    'sku' =>
+                    sprintf(
+                        '%s-V%06d',
+                        $product->sku,
+                        $variant->id,
+                    ),
+                ]);
+
+                $variant->save();
+            }
+        }
+    }
+
+    /*
+     * =====================================================
+     * VARIANT USAGE PROTECTION
+     * =====================================================
+     */
+
+    private function variantUsageMessage(
+        ProductVariant $variant,
+    ): ?string {
+        $tables = [
+            'purchase_items',
+            'stock_batches',
+            'sale_items',
+            'sale_return_items',
+            'sales_return_items',
+        ];
+
+        foreach (
+            $tables as $table
+        ) {
+            if (
+                !Schema::hasTable(
+                    $table,
+                )
+                || !Schema::hasColumn(
+                    $table,
+                    'product_variant_id',
+                )
+            ) {
+                continue;
+            }
+
+            if (
+                DB::table(
+                    $table,
+                )
+                ->where(
+                    'product_variant_id',
+                    $variant->id,
+                )
+                ->exists()
+            ) {
+                return sprintf(
+                    'The variant "%s" is already connected to inventory or transactions and cannot be removed. Mark it inactive instead.',
+                    $variant
+                        ->displayName(),
+                );
+            }
+        }
+
+        return null;
+    }
+
+    /*
+     * =====================================================
+     * BARCODE VALIDATION
+     * =====================================================
+     */
+
+    /**
+     * @param array<int, array<string, mixed>> $variants
+     */
+    private function validateBarcodeNamespace(
+        mixed $productBarcode,
+        array $variants,
+        ?Product $editingProduct = null,
+    ): void {
+        $entries = [];
+
+        $cleanProductBarcode =
+            $this->normaliseBarcode(
+                $productBarcode,
+            );
+
+        if (
+            $cleanProductBarcode
+            !== null
+        ) {
+            $entries[] = [
+                'barcode' =>
+                $cleanProductBarcode,
+
+                'type' =>
+                'product',
+            ];
+        }
+
+        foreach (
+            $variants as $variant
+        ) {
+            $barcode =
+                $this->normaliseBarcode(
+                    $variant['barcode']
+                        ?? null,
+                );
+
+            if (
+                $barcode
+                === null
+            ) {
+                continue;
+            }
+
+            $entries[] = [
+                'barcode' =>
+                $barcode,
+
+                'type' =>
+                'variant',
+            ];
+        }
+
+        $submittedBarcodes = [];
+
+        foreach (
+            $entries as $entry
+        ) {
+            $normalised =
+                strtolower(
+                    trim(
+                        (string) $entry['barcode'],
+                    ),
+                );
+
+            if (
+                isset(
+                    $submittedBarcodes[$normalised],
+                )
+            ) {
+                throw ValidationException::withMessages([
+                    'variants' =>
+                    'The same barcode has been entered more than once.',
+                ]);
+            }
+
+            $submittedBarcodes[$normalised] = true;
+        }
+
+        if (
+            $entries
+            === []
+        ) {
+            return;
+        }
+
+        $barcodes =
+            collect(
+                $entries,
+            )
+            ->pluck(
+                'barcode',
+            )
+            ->unique()
+            ->values()
+            ->all();
+
+        $productQuery =
+            Product::query()
+            ->whereIn(
+                'barcode',
+                $barcodes,
+            );
+
+        if (
+            $editingProduct
+            !== null
+        ) {
+            $productQuery->where(
+                'id',
+                '!=',
+                $editingProduct->id,
+            );
+        }
+
+        if (
+            $productQuery
+            ->exists()
+        ) {
+            throw ValidationException::withMessages([
+                'barcode' =>
+                'One of these barcodes is already assigned to another product.',
+            ]);
+        }
+
+        if (
+            !Schema::hasTable(
+                'product_variants',
+            )
+        ) {
+            return;
+        }
+
+        $variantQuery =
+            ProductVariant::query()
+            ->whereIn(
+                'barcode',
+                $barcodes,
+            );
+
+        if (
+            $editingProduct
+            !== null
+        ) {
+            $variantQuery->where(
+                'product_id',
+                '!=',
+                $editingProduct->id,
+            );
+        }
+
+        if (
+            $variantQuery
+            ->exists()
+        ) {
+            throw ValidationException::withMessages([
+                'variants' =>
+                'One of these barcodes is already assigned to another product variant.',
+            ]);
+        }
+    }
+
+    /*
+     * =====================================================
+     * BASIC VARIANT PAYLOAD
+     * =====================================================
+     */
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function basicVariantData(
+        ProductVariant $variant,
+    ): array {
+        return [
+            'id' =>
+            $variant->id,
+
+            'product_id' =>
+            $variant->product_id,
+
+            'display_name' =>
+            $variant
+                ->displayName(),
+
+            'size_value' =>
+            (float) $variant
+                ->size_value,
+
+            'size_unit' =>
+            $variant
+                ->size_unit,
+
+            'package_unit' =>
+            $variant
+                ->package_unit,
+
+            'sku' =>
+            $variant
+                ->sku,
+
+            'barcode' =>
+            $variant
+                ->barcode,
+
+            'is_active' =>
+            (bool) $variant
+                ->is_active,
+
+            'sort_order' =>
+            (int) $variant
+                ->sort_order,
+        ];
+    }
+
+    /*
+     * =====================================================
+     * VARIANT DATA FOR PRODUCT LIST
+     * =====================================================
+     */
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function variantData(
+        ProductVariant $variant,
+        Product $product,
+    ): array {
+        if (
+            $product->relationLoaded(
+                'stockBatches',
+            )
+        ) {
+            $stockBatches =
+                $product
+                ->stockBatches
+                ->filter(
+                    fn(
+                        StockBatch $batch,
+                    ): bool =>
+                    (int) (
+                        $batch
+                        ->getAttribute(
+                            'product_variant_id',
+                        )
+                        ?? 0
+                    )
+                        === (int) $variant->id,
+                );
+        } else {
+            $stockBatches =
+                StockBatch::query()
+                ->where(
+                    'product_id',
+                    $product->id,
+                )
+                ->where(
+                    'product_variant_id',
+                    $variant->id,
+                )
+                ->get();
+        }
+
+        $stockByUnit = [];
+
+        foreach (
+            $stockBatches as $batch
+        ) {
+            $stockUnit =
+                $this->resolvePhysicalStockUnit(
+                    $product,
+                    $batch->getAttribute(
+                        'is_dual_unit',
+                    ),
+                    $batch->getAttribute(
+                        'stock_unit',
+                    ),
+                    $batch->getAttribute(
+                        'secondary_unit',
+                    ),
+                    $batch->getAttribute(
+                        'conversion_factor',
+                    ),
+                );
+
+            /*
+             * Normal variant stock should normally
+             * be displayed using its package unit.
+             */
+            if (
+                !$this->booleanValue(
+                    $batch->getAttribute(
+                        'is_dual_unit',
+                    ),
+                )
+            ) {
+                $variantPackageUnit =
+                    trim(
+                        (string) $variant
+                            ->package_unit,
+                    );
+
+                if (
+                    $variantPackageUnit
+                    !== ''
+                ) {
+                    $stockUnit =
+                        $variantPackageUnit;
+                }
+            }
+
+            $availableQuantity =
+                round(
+                    (float) (
+                        $batch
+                        ->available_quantity
+                        ?? 0
+                    ),
+                    3,
+                );
+
+            if (
+                !array_key_exists(
+                    $stockUnit,
+                    $stockByUnit,
+                )
+            ) {
+                $stockByUnit[$stockUnit] = 0.0;
+            }
+
+            $stockByUnit[$stockUnit] +=
+                $availableQuantity;
+        }
+
+        if (
+            $stockByUnit
+            === []
+        ) {
+            $packageUnit =
+                trim(
+                    (string) $variant
+                        ->package_unit,
+                );
+
+            $stockByUnit[$packageUnit !== ''
+                ? $packageUnit
+                : 'Unit'] = 0.0;
+        }
+
+        $availableStockByUnit =
+            collect(
+                $stockByUnit,
+            )
+            ->map(
+                fn(
+                    mixed $quantity,
+                    mixed $unit,
+                ): array => [
+                    'unit' =>
+                    (string) $unit,
+
+                    'available_quantity' =>
+                    round(
+                        (float) $quantity,
+                        3,
+                    ),
+                ],
+            )
+            ->values()
+            ->all();
+
+        return [
+            ...$this->basicVariantData(
+                $variant,
+            ),
+
+            'available_stock_by_unit' =>
+            $availableStockByUnit,
+        ];
+    }
+
+    /*
+     * =====================================================
+     * VARIANT DATA FOR PRODUCT DETAILS
+     * =====================================================
+     */
+
+    /**
+     * Build each variant with its own current
+     * stock from RESOLVED batch data.
      *
-     * Example:
+     * @param Collection<int, array<string, mixed>> $batches
      *
-     * Product main unit:
-     * Bag
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildDetailVariantPayload(
+        Product $product,
+        Collection $batches,
+    ): array {
+        return $product
+            ->variants
+            ->map(
+                function (
+                    ProductVariant $variant,
+                ) use (
+                    $batches,
+                ): array {
+                    $variantBatches =
+                        $batches
+                        ->filter(
+                            fn(
+                                array $batch,
+                            ): bool =>
+                            (int) (
+                                $batch['product_variant_id']
+                                ?? 0
+                            )
+                                === (int) $variant
+                                    ->id,
+                        )
+                        ->values();
+
+                    $stockByUnit = [];
+
+                    foreach (
+                        $variantBatches
+                        as $batch
+                    ) {
+                        $stockUnit =
+                            trim(
+                                (string) (
+                                    $batch['stock_unit']
+                                    ?? ''
+                                ),
+                            );
+
+                        /*
+                         * Variant products are independent
+                         * package quantities.
+                         *
+                         * Example:
+                         * 100g Packet -> Packet
+                         */
+                        if (
+                            !(
+                                (bool) (
+                                    $batch['is_dual_unit']
+                                    ?? false
+                                )
+                            )
+                        ) {
+                            $packageUnit =
+                                trim(
+                                    (string) $variant
+                                        ->package_unit,
+                                );
+
+                            if (
+                                $packageUnit
+                                !== ''
+                            ) {
+                                $stockUnit =
+                                    $packageUnit;
+                            }
+                        }
+
+                        if (
+                            $stockUnit
+                            === ''
+                        ) {
+                            $stockUnit =
+                                'Unit';
+                        }
+
+                        if (
+                            !array_key_exists(
+                                $stockUnit,
+                                $stockByUnit,
+                            )
+                        ) {
+                            $stockByUnit[$stockUnit] = 0.0;
+                        }
+
+                        $stockByUnit[$stockUnit] +=
+                            (float) (
+                                $batch['available_quantity']
+                                ?? 0
+                            );
+                    }
+
+                    /*
+                     * Variant exists but has never
+                     * been purchased.
+                     */
+                    if (
+                        $stockByUnit
+                        === []
+                    ) {
+                        $packageUnit =
+                            trim(
+                                (string) $variant
+                                    ->package_unit,
+                            );
+
+                        $stockByUnit[$packageUnit !== ''
+                            ? $packageUnit
+                            : 'Unit'] = 0.0;
+                    }
+
+                    $availableStockByUnit =
+                        collect(
+                            $stockByUnit,
+                        )
+                        ->map(
+                            fn(
+                                mixed $quantity,
+                                mixed $unit,
+                            ): array => [
+                                'unit' =>
+                                (string) $unit,
+
+                                'available_quantity' =>
+                                round(
+                                    (float) $quantity,
+                                    3,
+                                ),
+                            ],
+                        )
+                        ->values()
+                        ->all();
+
+                    return [
+                        ...$this->basicVariantData(
+                            $variant,
+                        ),
+
+                        'available_stock_by_unit' =>
+                        $availableStockByUnit,
+                    ];
+                },
+            )
+            ->values()
+            ->all();
+    }
+
+    /*
+     * =====================================================
+     * VARIANT STOCK SUMMARY
+     * =====================================================
+     */
+
+    /**
+     * Data used by the Product Details page
+     * to show:
      *
-     * Dual batch:
-     * 1 Bag = 100 Kg
+     * Variant
+     * Available Stock
+     * Saleable Stock
+     * Selling Price
+     * Batch Count
+     * Stock Values
      *
-     * available_quantity:
-     * 95
+     * @param Collection<int, array<string, mixed>> $batches
      *
-     * Result:
-     *
-     * [
-     *     [
-     *         'unit' => 'Kg',
-     *         'available_quantity' => 95,
-     *     ]
-     * ]
-     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildVariantStockSummary(
+        Product $product,
+        Collection $batches,
+    ): array {
+        return $product
+            ->variants
+            ->map(
+                function (
+                    ProductVariant $variant,
+                ) use (
+                    $batches,
+                ): array {
+                    $variantBatches =
+                        $batches
+                        ->filter(
+                            fn(
+                                array $batch,
+                            ): bool =>
+                            (int) (
+                                $batch['product_variant_id']
+                                ?? 0
+                            )
+                                === (int) $variant
+                                    ->id,
+                        )
+                        ->values();
+
+                    $availableQuantity =
+                        round(
+                            (float) $variantBatches
+                                ->sum(
+                                    'available_quantity',
+                                ),
+                            3,
+                        );
+
+                    $saleableQuantity =
+                        round(
+                            (float) $variantBatches
+                                ->whereIn(
+                                    'status',
+                                    [
+                                        'available',
+                                        'expiring_soon',
+                                    ],
+                                )
+                                ->sum(
+                                    'available_quantity',
+                                ),
+                            3,
+                        );
+
+                    /*
+                     * Only positive prices are useful
+                     * for the displayed variant price.
+                     */
+                    $sellingPrices =
+                        $variantBatches
+                        ->pluck(
+                            'selling_price',
+                        )
+                        ->filter(
+                            fn(
+                                mixed $price,
+                            ): bool =>
+                            $price !== null
+                                && (float) $price
+                                > 0,
+                        )
+                        ->map(
+                            fn(
+                                mixed $price,
+                            ): float =>
+                            round(
+                                (float) $price,
+                                2,
+                            ),
+                        )
+                        ->values();
+
+                    $minimumSellingPrice =
+                        $sellingPrices
+                        ->isEmpty()
+                        ? null
+                        : (float) $sellingPrices
+                            ->min();
+
+                    $maximumSellingPrice =
+                        $sellingPrices
+                        ->isEmpty()
+                        ? null
+                        : (float) $sellingPrices
+                            ->max();
+
+                    /*
+                     * selling_price remains the lowest
+                     * currently configured batch price.
+                     *
+                     * UI can use min/max when batches
+                     * have multiple prices.
+                     */
+                    $sellingPrice =
+                        $minimumSellingPrice;
+
+                    $stockUnit =
+                        trim(
+                            (string) $variant
+                                ->package_unit,
+                        );
+
+                    if (
+                        $stockUnit
+                        === ''
+                    ) {
+                        $stockUnit =
+                            trim(
+                                (string) $variant
+                                    ->size_unit,
+                            );
+                    }
+
+                    if (
+                        $stockUnit
+                        === ''
+                    ) {
+                        $stockUnit =
+                            'Unit';
+                    }
+
+                    /*
+                     * Use the already-correct batch values.
+                     *
+                     * Important:
+                     * Do not calculate:
+                     *
+                     * total stock × lowest price
+                     *
+                     * because two batches may have
+                     * different prices.
+                     */
+                    $stockValueAtCost =
+                        round(
+                            (float) $variantBatches
+                                ->sum(
+                                    'current_cost_value',
+                                ),
+                            2,
+                        );
+
+                    $stockValueAtSale =
+                        round(
+                            (float) $variantBatches
+                                ->sum(
+                                    'current_sale_value',
+                                ),
+                            2,
+                        );
+
+                    return [
+                        'variant_id' =>
+                        $variant->id,
+
+                        'variant' =>
+                        $this->basicVariantData(
+                            $variant,
+                        ),
+
+                        'available_quantity' =>
+                        $availableQuantity,
+
+                        'saleable_quantity' =>
+                        $saleableQuantity,
+
+                        'batch_count' =>
+                        $variantBatches
+                            ->count(),
+
+                        'selling_price' =>
+                        $sellingPrice,
+
+                        'minimum_selling_price' =>
+                        $minimumSellingPrice,
+
+                        'maximum_selling_price' =>
+                        $maximumSellingPrice,
+
+                        'stock_unit' =>
+                        $stockUnit,
+
+                        'stock_value_at_cost' =>
+                        $stockValueAtCost,
+
+                        'stock_value_at_sale' =>
+                        $stockValueAtSale,
+
+                        'potential_gross_profit' =>
+                        round(
+                            $stockValueAtSale
+                                - $stockValueAtCost,
+                            2,
+                        ),
+                    ];
+                },
+            )
+            ->values()
+            ->all();
+    }
+
+    /*
+     * =====================================================
+     * PRODUCT LIST STOCK
+     * =====================================================
+     */
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     private function buildAvailableStockByUnit(
@@ -728,7 +2033,8 @@ class ProductController extends Controller
             )
         ) {
             $batches =
-                $product->stockBatches;
+                $product
+                ->stockBatches;
         } else {
             $batches =
                 StockBatch::query()
@@ -739,6 +2045,7 @@ class ProductController extends Controller
                 ->get([
                     'id',
                     'product_id',
+                    'product_variant_id',
                     'available_quantity',
                     'received_quantity',
                     'is_dual_unit',
@@ -748,10 +2055,13 @@ class ProductController extends Controller
                 ]);
         }
 
-        if ($batches->isEmpty()) {
+        if (
+            $batches->isEmpty()
+        ) {
             $defaultUnit =
                 trim(
-                    (string) $product->unit,
+                    (string) $product
+                        ->unit,
                 );
 
             return [
@@ -769,22 +2079,9 @@ class ProductController extends Controller
 
         $stockByUnit = [];
 
-        foreach ($batches as $batch) {
-            /*
-             * IMPORTANT:
-             *
-             * For dual-unit stock we intentionally prefer
-             * secondary_unit as the physical stock unit.
-             *
-             * This also fixes older records where:
-             *
-             * is_dual_unit = 1
-             * stock_unit = Bag      <- old incorrect value
-             * secondary_unit = Kg
-             * conversion_factor = 100
-             *
-             * Physical stock must be displayed as Kg.
-             */
+        foreach (
+            $batches as $batch
+        ) {
             $stockUnit =
                 $this->resolvePhysicalStockUnit(
                     $product,
@@ -805,7 +2102,8 @@ class ProductController extends Controller
             $availableQuantity =
                 round(
                     (float) (
-                        $batch->available_quantity
+                        $batch
+                        ->available_quantity
                         ?? 0
                     ),
                     3,
@@ -829,15 +2127,15 @@ class ProductController extends Controller
         )
             ->map(
                 fn(
-                    float $quantity,
-                    string $unit,
+                    mixed $quantity,
+                    mixed $unit,
                 ): array => [
                     'unit' =>
-                    $unit,
+                    (string) $unit,
 
                     'available_quantity' =>
                     round(
-                        $quantity,
+                        (float) $quantity,
                         3,
                     ),
                 ],
@@ -845,6 +2143,12 @@ class ProductController extends Controller
             ->values()
             ->all();
     }
+
+    /*
+     * =====================================================
+     * PURCHASE DATA LOADERS
+     * =====================================================
+     */
 
     /**
      * @param Collection<int, int> $purchaseItemIds
@@ -855,7 +2159,8 @@ class ProductController extends Controller
         Collection $purchaseItemIds,
     ): Collection {
         if (
-            $purchaseItemIds->isEmpty()
+            $purchaseItemIds
+            ->isEmpty()
             || !Schema::hasTable(
                 'purchase_items',
             )
@@ -868,7 +2173,8 @@ class ProductController extends Controller
         )
             ->whereIn(
                 'id',
-                $purchaseItemIds->all(),
+                $purchaseItemIds
+                    ->all(),
             )
             ->get()
             ->keyBy(
@@ -888,7 +2194,8 @@ class ProductController extends Controller
         Collection $purchaseIds,
     ): Collection {
         if (
-            $purchaseIds->isEmpty()
+            $purchaseIds
+            ->isEmpty()
             || !Schema::hasTable(
                 'purchases',
             )
@@ -901,7 +2208,8 @@ class ProductController extends Controller
         )
             ->whereIn(
                 'id',
-                $purchaseIds->all(),
+                $purchaseIds
+                    ->all(),
             )
             ->get()
             ->keyBy(
@@ -921,7 +2229,8 @@ class ProductController extends Controller
         Collection $supplierIds,
     ): Collection {
         if (
-            $supplierIds->isEmpty()
+            $supplierIds
+            ->isEmpty()
             || !Schema::hasTable(
                 'suppliers',
             )
@@ -934,7 +2243,8 @@ class ProductController extends Controller
         )
             ->whereIn(
                 'id',
-                $supplierIds->all(),
+                $supplierIds
+                    ->all(),
             )
             ->get()
             ->keyBy(
@@ -944,6 +2254,12 @@ class ProductController extends Controller
                 (int) $supplier->id,
             );
     }
+
+    /*
+     * =====================================================
+     * STOCK BATCH DATA
+     * =====================================================
+     */
 
     /**
      * @param Collection<int, object> $purchaseItems
@@ -959,6 +2275,12 @@ class ProductController extends Controller
         Collection $purchases,
         Collection $suppliers,
     ): array {
+        /*
+         * =================================================
+         * PURCHASE ITEM
+         * =================================================
+         */
+
         $purchaseItemId =
             $batch->purchase_item_id
             !== null
@@ -967,11 +2289,76 @@ class ProductController extends Controller
             : null;
 
         $purchaseItem =
-            $purchaseItemId !== null
-            ? $purchaseItems->get(
+            $purchaseItemId
+            !== null
+            ? $purchaseItems
+            ->get(
                 $purchaseItemId,
             )
             : null;
+
+        /*
+         * =================================================
+         * VARIANT
+         * =================================================
+         */
+
+        $productVariantId =
+            $batch->getAttribute(
+                'product_variant_id',
+            ) !== null
+            ? (int) $batch
+                ->getAttribute(
+                    'product_variant_id',
+                )
+            : null;
+
+        /*
+         * Compatibility with older data where
+         * purchase_items has product_variant_id
+         * but stock_batches did not.
+         */
+        if (
+            $productVariantId
+            === null
+            && $purchaseItem
+            && isset(
+                $purchaseItem
+                    ->product_variant_id,
+            )
+            && $purchaseItem
+            ->product_variant_id
+            !== null
+        ) {
+            $productVariantId =
+                (int) $purchaseItem
+                    ->product_variant_id;
+        }
+
+        $variant =
+            $productVariantId
+            !== null
+            ? $product
+            ->variants
+            ->firstWhere(
+                'id',
+                $productVariantId,
+            )
+            : null;
+
+        $variantPayload =
+            $variant
+            instanceof ProductVariant
+            ? $this->batchVariantData(
+                $variant,
+            )
+            : null;
+
+        /*
+         * =================================================
+         * PURCHASE
+         * =================================================
+         */
 
         $purchaseId =
             $purchaseItem
@@ -984,8 +2371,10 @@ class ProductController extends Controller
             : null;
 
         $purchase =
-            $purchaseId !== null
-            ? $purchases->get(
+            $purchaseId
+            !== null
+            ? $purchases
+            ->get(
                 $purchaseId,
             )
             : null;
@@ -1001,17 +2390,20 @@ class ProductController extends Controller
             : null;
 
         $supplier =
-            $supplierId !== null
-            ? $suppliers->get(
+            $supplierId
+            !== null
+            ? $suppliers
+            ->get(
                 $supplierId,
             )
             : null;
 
         /*
-         * PRIMARY / PURCHASE UNIT
-         *
-         * Example: Bag
+         * =================================================
+         * PURCHASE UNIT
+         * =================================================
          */
+
         $purchaseUnitName =
             $purchaseItem
             && isset(
@@ -1026,14 +2418,36 @@ class ProductController extends Controller
                 (string) $purchaseItem
                     ->purchase_unit_name,
             )
-            : trim(
-                (string) $product->unit,
+            : (
+                $variant
+                instanceof ProductVariant
+                && trim(
+                    (string) $variant
+                        ->package_unit,
+                ) !== ''
+                ? trim(
+                    (string) $variant
+                        ->package_unit,
+                )
+                : trim(
+                    (string) $product
+                        ->unit,
+                )
             );
 
-        if ($purchaseUnitName === '') {
+        if (
+            $purchaseUnitName
+            === ''
+        ) {
             $purchaseUnitName =
                 'Unit';
         }
+
+        /*
+         * =================================================
+         * DUAL UNIT
+         * =================================================
+         */
 
         $batchDualValue =
             $batch->getAttribute(
@@ -1085,28 +2499,21 @@ class ProductController extends Controller
 
         if (
             !$isDualUnit
-            && $secondaryUnit !== null
-            && $conversionFactor > 1
+            && $secondaryUnit
+            !== null
+            && $conversionFactor
+            > 1
         ) {
             $isDualUnit =
                 true;
         }
 
         /*
-         * CRITICAL FIX:
-         *
-         * If this is a dual-unit batch:
-         *
-         * 1 Bag = 100 Kg
-         *
-         * physical stock is Kg.
-         *
-         * Even if an old database row accidentally contains:
-         *
-         * stock_unit = Bag
-         *
-         * we prefer secondary_unit = Kg.
+         * =================================================
+         * PHYSICAL STOCK UNIT
+         * =================================================
          */
+
         $stockUnit =
             $this->resolvePhysicalStockUnit(
                 $product,
@@ -1119,11 +2526,38 @@ class ProductController extends Controller
             );
 
         /*
-         * PURCHASE COST PER PRIMARY UNIT
+         * Variants such as:
          *
-         * Example:
-         * Rs. 2,000 / Bag
+         * 100g Packet
+         *
+         * are physically counted as Packet.
          */
+        if (
+            !$isDualUnit
+            && $variant
+            instanceof ProductVariant
+        ) {
+            $variantPackageUnit =
+                trim(
+                    (string) $variant
+                        ->package_unit,
+                );
+
+            if (
+                $variantPackageUnit
+                !== ''
+            ) {
+                $stockUnit =
+                    $variantPackageUnit;
+            }
+        }
+
+        /*
+         * =================================================
+         * COST
+         * =================================================
+         */
+
         $unitCost =
             $purchaseItem
             && isset(
@@ -1140,16 +2574,6 @@ class ProductController extends Controller
                 : null
             );
 
-        /*
-         * COST PER PHYSICAL STOCK UNIT
-         *
-         * Example:
-         *
-         * Rs. 2,000 / Bag
-         * 1 Bag = 100 Kg
-         *
-         * Base cost = Rs. 20 / Kg
-         */
         $baseUnitCostAttribute =
             $batch->getAttribute(
                 'base_unit_cost',
@@ -1158,17 +2582,21 @@ class ProductController extends Controller
         $baseUnitCost =
             $baseUnitCostAttribute
             !== null
-            && $baseUnitCostAttribute !== ''
+            && $baseUnitCostAttribute
+            !== ''
             ? (float) $baseUnitCostAttribute
             : null;
 
         if (
-            $baseUnitCost === null
-            && $unitCost !== null
+            $baseUnitCost
+            === null
+            && $unitCost
+            !== null
         ) {
             if (
                 $isDualUnit
-                && $conversionFactor > 0
+                && $conversionFactor
+                > 0
             ) {
                 $baseUnitCost =
                     $unitCost
@@ -1180,11 +2608,11 @@ class ProductController extends Controller
         }
 
         /*
-         * PRIMARY SELLING PRICE
-         *
-         * Example:
-         * Rs. 3,000 / Bag
+         * =================================================
+         * SELLING PRICE
+         * =================================================
          */
+
         $sellingPrice =
             $batch->selling_price
             !== null
@@ -1201,12 +2629,6 @@ class ProductController extends Controller
                 : 0
             );
 
-        /*
-         * LOOSE / SECONDARY SELLING PRICE
-         *
-         * Example:
-         * Rs. 35 / Kg
-         */
         $secondarySellingPriceAttribute =
             $batch->getAttribute(
                 'secondary_selling_price',
@@ -1215,7 +2637,8 @@ class ProductController extends Controller
         $secondarySellingPrice =
             $secondarySellingPriceAttribute
             !== null
-            && $secondarySellingPriceAttribute !== ''
+            && $secondarySellingPriceAttribute
+            !== ''
             ? (float) $secondarySellingPriceAttribute
             : (
                 $purchaseItem
@@ -1224,18 +2647,19 @@ class ProductController extends Controller
                         ->secondary_selling_price,
                 )
                 && $purchaseItem
-                ->secondary_selling_price !== null
+                ->secondary_selling_price
+                !== null
                 ? (float) $purchaseItem
                     ->secondary_selling_price
                 : null
             );
 
         /*
+         * =================================================
          * PURCHASE QUANTITY
-         *
-         * Example:
-         * 1 Bag
+         * =================================================
          */
+
         $purchasedQuantity =
             $purchaseItem
             && isset(
@@ -1246,12 +2670,6 @@ class ProductController extends Controller
                 ->quantity
             : 0;
 
-        /*
-         * RECEIVED PURCHASE UNITS
-         *
-         * Example:
-         * 1 Bag
-         */
         $receivedPurchaseQuantity =
             $purchaseItem
             && isset(
@@ -1263,19 +2681,21 @@ class ProductController extends Controller
             : $purchasedQuantity;
 
         /*
-         * PHYSICAL QUANTITY RECEIVED
-         *
-         * Example:
-         * 100 Kg
+         * =================================================
+         * PHYSICAL RECEIVED
+         * =================================================
          */
+
         $batchReceivedQuantity =
             $batch->getAttribute(
                 'received_quantity',
             );
 
         if (
-            $batchReceivedQuantity !== null
-            && $batchReceivedQuantity !== ''
+            $batchReceivedQuantity
+            !== null
+            && $batchReceivedQuantity
+            !== ''
         ) {
             $receivedQuantity =
                 (float) $batchReceivedQuantity;
@@ -1287,12 +2707,15 @@ class ProductController extends Controller
                     ->base_received_quantity,
             )
             && $purchaseItem
-            ->base_received_quantity !== null
+            ->base_received_quantity
+            !== null
         ) {
             $receivedQuantity =
                 (float) $purchaseItem
                     ->base_received_quantity;
-        } elseif ($isDualUnit) {
+        } elseif (
+            $isDualUnit
+        ) {
             $receivedQuantity =
                 $receivedPurchaseQuantity
                 * $conversionFactor;
@@ -1308,11 +2731,11 @@ class ProductController extends Controller
             );
 
         /*
-         * CURRENT PHYSICAL STOCK
-         *
-         * Example after selling 5 Kg:
-         * 95 Kg
+         * =================================================
+         * AVAILABLE STOCK
+         * =================================================
          */
+
         $availableQuantity =
             round(
                 (float) $batch
@@ -1322,7 +2745,8 @@ class ProductController extends Controller
 
         if (
             $isDualUnit
-            && $conversionFactor > 0
+            && $conversionFactor
+            > 0
         ) {
             $fullUnitsAvailable =
                 (int) floor(
@@ -1350,8 +2774,14 @@ class ProductController extends Controller
                 $availableQuantity;
 
             $looseQuantityAvailable =
-                0;
+                0.0;
         }
+
+        /*
+         * =================================================
+         * DATES
+         * =================================================
+         */
 
         $purchaseManufacturedDate =
             $purchaseItem
@@ -1392,6 +2822,12 @@ class ProductController extends Controller
                 $availableQuantity,
                 $expiryDate,
             );
+
+        /*
+         * =================================================
+         * PURCHASE / SUPPLIER
+         * =================================================
+         */
 
         $supplierName =
             $this->firstObjectValue(
@@ -1442,29 +2878,25 @@ class ProductController extends Controller
             ?? $purchaseBatchNumber;
 
         /*
-         * CORRECT COST VALUE
-         *
-         * Dual:
-         * available Kg × cost/Kg
-         *
-         * Standard:
-         * available Bag × cost/Bag
+         * =================================================
+         * VALUES
+         * =================================================
          */
+
         $currentCostValue =
-            $baseUnitCost !== null
+            $baseUnitCost
+            !== null
             ? round(
                 $baseUnitCost
                     * $availableQuantity,
                 2,
             )
-            : 0;
+            : 0.0;
 
-        /*
-         * CORRECT EXPECTED SALE VALUE
-         */
         if (
             $isDualUnit
-            && $conversionFactor > 0
+            && $conversionFactor
+            > 0
         ) {
             $fullUnitSaleValue =
                 $fullUnitsAvailable
@@ -1496,8 +2928,15 @@ class ProductController extends Controller
                 );
         }
 
+        /*
+         * =================================================
+         * PROFIT
+         * =================================================
+         */
+
         $profitPerPrimaryUnit =
-            $unitCost !== null
+            $unitCost
+            !== null
             ? round(
                 $sellingPrice
                     - $unitCost,
@@ -1505,10 +2944,14 @@ class ProductController extends Controller
             )
             : null;
 
-        if ($baseUnitCost !== null) {
+        if (
+            $baseUnitCost
+            !== null
+        ) {
             if (
                 $isDualUnit
-                && $conversionFactor > 0
+                && $conversionFactor
+                > 0
             ) {
                 $physicalSellingPrice =
                     $secondarySellingPrice
@@ -1550,6 +2993,12 @@ class ProductController extends Controller
             'id' =>
             $batch->id,
 
+            'product_variant_id' =>
+            $productVariantId,
+
+            'variant' =>
+            $variantPayload,
+
             'purchase_item_id' =>
             $purchaseItemId,
 
@@ -1563,7 +3012,8 @@ class ProductController extends Controller
             $purchaseDate,
 
             'supplier' =>
-            $supplierId !== null
+            $supplierId
+                !== null
                 ? [
                     'id' =>
                     $supplierId,
@@ -1580,9 +3030,6 @@ class ProductController extends Controller
             'batch_number' =>
             $batchNumber,
 
-            /*
-             * UNIT INFORMATION
-             */
             'is_dual_unit' =>
             $isDualUnit,
 
@@ -1604,9 +3051,6 @@ class ProductController extends Controller
                 3,
             ),
 
-            /*
-             * PURCHASE QUANTITIES
-             */
             'purchased_quantity' =>
             round(
                 $purchasedQuantity,
@@ -1619,9 +3063,6 @@ class ProductController extends Controller
                 3,
             ),
 
-            /*
-             * PHYSICAL STOCK QUANTITIES
-             */
             'received_quantity' =>
             $receivedQuantity,
 
@@ -1634,9 +3075,6 @@ class ProductController extends Controller
             'loose_quantity_available' =>
             $looseQuantityAvailable,
 
-            /*
-             * COSTS
-             */
             'unit_cost' =>
             $unitCost,
 
@@ -1644,25 +3082,29 @@ class ProductController extends Controller
             $unitCost,
 
             'base_unit_cost' =>
-            $baseUnitCost !== null
+            $baseUnitCost
+                !== null
                 ? round(
                     $baseUnitCost,
                     4,
                 )
                 : null,
 
-            /*
-             * SELLING PRICES
-             */
             'selling_price' =>
-            $sellingPrice,
+            round(
+                $sellingPrice,
+                2,
+            ),
 
             'secondary_selling_price' =>
-            $secondarySellingPrice,
+            $secondarySellingPrice
+                !== null
+                ? round(
+                    $secondarySellingPrice,
+                    2,
+                )
+                : null,
 
-            /*
-             * PROFITS
-             */
             'profit_per_unit' =>
             $profitPerPrimaryUnit,
 
@@ -1714,6 +3156,67 @@ class ProductController extends Controller
         ];
     }
 
+    /*
+     * =====================================================
+     * BATCH VARIANT DATA
+     * =====================================================
+     */
+
+    /**
+     * Matches ProductBatchVariant in TypeScript.
+     *
+     * @return array<string, mixed>
+     */
+    private function batchVariantData(
+        ProductVariant $variant,
+    ): array {
+        return [
+            'id' =>
+            $variant->id,
+
+            'product_id' =>
+            $variant->product_id,
+
+            'display_name' =>
+            $variant
+                ->displayName(),
+
+            'size_value' =>
+            (float) $variant
+                ->size_value,
+
+            'size_unit' =>
+            $variant
+                ->size_unit,
+
+            'package_unit' =>
+            $variant
+                ->package_unit,
+
+            'sku' =>
+            $variant
+                ->sku,
+
+            'barcode' =>
+            $variant
+                ->barcode,
+
+            'is_active' =>
+            (bool) $variant
+                ->is_active,
+
+            'sort_order' =>
+            (int) $variant
+                ->sort_order,
+        ];
+    }
+
+    /*
+     * =====================================================
+     * PRICE OPTIONS
+     * =====================================================
+     */
+
     /**
      * @param Collection<int, array<string, mixed>> $batches
      *
@@ -1730,6 +3233,11 @@ class ProductController extends Controller
                     return implode(
                         '|',
                         [
+                            (string) (
+                                $batch['product_variant_id']
+                                ?? 'standard'
+                            ),
+
                             number_format(
                                 (float) $batch['selling_price'],
                                 2,
@@ -1770,7 +3278,8 @@ class ProductController extends Controller
                     Collection $priceBatches,
                 ): array {
                     $first =
-                        $priceBatches->first();
+                        $priceBatches
+                        ->first();
 
                     $costPrices =
                         $priceBatches
@@ -1792,6 +3301,14 @@ class ProductController extends Controller
                         ->values();
 
                     return [
+                        'product_variant_id' =>
+                        $first['product_variant_id']
+                            ?? null,
+
+                        'variant' =>
+                        $first['variant']
+                            ?? null,
+
                         'selling_price' =>
                         (float) $first['selling_price'],
 
@@ -1816,13 +3333,15 @@ class ProductController extends Controller
                         (float) $first['conversion_factor'],
 
                         'cost_price_min' =>
-                        $costPrices->isEmpty()
+                        $costPrices
+                            ->isEmpty()
                             ? null
                             : (float) $costPrices
                                 ->min(),
 
                         'cost_price_max' =>
-                        $costPrices->isEmpty()
+                        $costPrices
+                            ->isEmpty()
                             ? null
                             : (float) $costPrices
                                 ->max(),
@@ -1876,14 +3395,29 @@ class ProductController extends Controller
                 },
             )
             ->sortBy(
-                'selling_price',
+                function (
+                    array $option,
+                ): string {
+                    return sprintf(
+                        '%012d-%020.2f',
+                        (int) (
+                            $option['product_variant_id']
+                            ?? 0
+                        ),
+                        (float) $option['selling_price'],
+                    );
+                },
             )
             ->values();
     }
 
+    /*
+     * =====================================================
+     * STOCK SUMMARY BY UNIT
+     * =====================================================
+     */
+
     /**
-     * Product-details physical stock summary.
-     *
      * @param Collection<int, array<string, mixed>> $batches
      *
      * @return array<int, array<string, mixed>>
@@ -1913,7 +3447,10 @@ class ProductController extends Controller
                             (string) $unit,
                         );
 
-                    if ($unitName === '') {
+                    if (
+                        $unitName
+                        === ''
+                    ) {
                         $unitName =
                             'Unit';
                     }
@@ -1975,30 +3512,12 @@ class ProductController extends Controller
             ->all();
     }
 
-    /**
-     * Resolve the ACTUAL physical inventory unit.
-     *
-     * For normal stock:
-     *
-     * product.unit = Bottle
-     * stock_unit = Bottle
-     *
-     * Result:
-     * Bottle
-     *
-     * For dual stock:
-     *
-     * product.unit = Bag
-     * secondary_unit = Kg
-     * conversion_factor = 100
-     *
-     * Result:
-     * Kg
-     *
-     * We intentionally prefer the secondary unit for
-     * dual-unit stock because inventory quantities are
-     * stored in the base/physical unit.
+    /*
+     * =====================================================
+     * PHYSICAL STOCK UNIT
+     * =====================================================
      */
+
     private function resolvePhysicalStockUnit(
         Product $product,
         mixed $isDualUnitValue,
@@ -2027,52 +3546,44 @@ class ProductController extends Controller
                 $isDualUnitValue,
             );
 
-        /*
-         * Compatibility:
-         *
-         * Some old records may not have is_dual_unit set
-         * but still contain:
-         *
-         * secondary_unit = Kg
-         * conversion_factor = 100
-         */
         if (
             !$isDualUnit
-            && $secondaryUnit !== null
-            && $conversionFactor > 1
+            && $secondaryUnit
+            !== null
+            && $conversionFactor
+            > 1
         ) {
             $isDualUnit =
                 true;
         }
 
         /*
-         * CRITICAL:
+         * Bag -> Kg:
          *
-         * Dual-unit inventory is physically maintained in
-         * the secondary/base unit.
-         *
-         * Therefore:
-         *
-         * Bag -> Kg
-         * Piece -> Gram
-         *
-         * etc.
+         * product.unit = Bag
+         * stock unit    = Kg
          */
         if (
             $isDualUnit
-            && $secondaryUnit !== null
-            && $conversionFactor > 1
+            && $secondaryUnit
+            !== null
+            && $conversionFactor
+            > 1
         ) {
             return $secondaryUnit;
         }
 
-        if ($stockUnit !== null) {
+        if (
+            $stockUnit
+            !== null
+        ) {
             return $stockUnit;
         }
 
         $productUnit =
             trim(
-                (string) $product->unit,
+                (string) $product
+                    ->unit,
             );
 
         return $productUnit !== ''
@@ -2080,15 +3591,26 @@ class ProductController extends Controller
             : 'Unit';
     }
 
+    /*
+     * =====================================================
+     * BATCH STATUS
+     * =====================================================
+     */
+
     private function resolveBatchStatus(
         float $availableQuantity,
         ?string $expiryDate,
     ): string {
-        if ($availableQuantity <= 0) {
+        if (
+            $availableQuantity
+            <= 0
+        ) {
             return 'out_of_stock';
         }
 
-        if (!$expiryDate) {
+        if (
+            !$expiryDate
+        ) {
             return 'available';
         }
 
@@ -2096,7 +3618,8 @@ class ProductController extends Controller
             $expiry =
                 Carbon::parse(
                     $expiryDate,
-                )->startOfDay();
+                )
+                ->startOfDay();
 
             if (
                 $expiry->lt(
@@ -2110,17 +3633,26 @@ class ProductController extends Controller
                 $expiry->lte(
                     today()
                         ->copy()
-                        ->addDays(30),
+                        ->addDays(
+                            30,
+                        ),
                 )
             ) {
                 return 'expiring_soon';
             }
-        } catch (Throwable) {
+        } catch (
+            Throwable) {
             return 'available';
         }
 
         return 'available';
     }
+
+    /*
+     * =====================================================
+     * VALUE HELPERS
+     * =====================================================
+     */
 
     private function booleanValue(
         mixed $value,
@@ -2133,7 +3665,11 @@ class ProductController extends Controller
             return true;
         }
 
-        if (is_string($value)) {
+        if (
+            is_string(
+                $value,
+            )
+        ) {
             return in_array(
                 strtolower(
                     trim(
@@ -2158,11 +3694,10 @@ class ProductController extends Controller
         if (
             $value === null
             || $value === ''
+            || !is_numeric(
+                $value,
+            )
         ) {
-            return null;
-        }
-
-        if (!is_numeric($value)) {
             return null;
         }
 
@@ -2177,7 +3712,9 @@ class ProductController extends Controller
     private function cleanString(
         mixed $value,
     ): ?string {
-        if ($value === null) {
+        if (
+            $value === null
+        ) {
             return null;
         }
 
@@ -2190,6 +3727,12 @@ class ProductController extends Controller
             ? $cleaned
             : null;
     }
+
+    /*
+     * =====================================================
+     * DATE HELPERS
+     * =====================================================
+     */
 
     private function formatDateValue(
         mixed $value,
@@ -2216,7 +3759,8 @@ class ProductController extends Controller
             )->format(
                 'Y-m-d',
             );
-        } catch (Throwable) {
+        } catch (
+            Throwable) {
             return (string) $value;
         }
     }
@@ -2244,10 +3788,17 @@ class ProductController extends Controller
             return Carbon::parse(
                 (string) $value,
             )->toISOString();
-        } catch (Throwable) {
+        } catch (
+            Throwable) {
             return (string) $value;
         }
     }
+
+    /*
+     * =====================================================
+     * OBJECT VALUE HELPER
+     * =====================================================
+     */
 
     /**
      * @param array<int, string> $keys
@@ -2256,16 +3807,21 @@ class ProductController extends Controller
         ?object $record,
         array $keys,
     ): mixed {
-        if (!$record) {
+        if (
+            !$record
+        ) {
             return null;
         }
 
-        foreach ($keys as $key) {
+        foreach (
+            $keys as $key
+        ) {
             if (
                 isset(
                     $record->{$key},
                 )
-                && $record->{$key} !== ''
+                && $record->{$key}
+                !== ''
             ) {
                 return $record->{$key};
             }
@@ -2273,6 +3829,12 @@ class ProductController extends Controller
 
         return null;
     }
+
+    /*
+     * =====================================================
+     * BARCODE NORMALISATION
+     * =====================================================
+     */
 
     private function normaliseBarcode(
         mixed $barcode,
@@ -2290,6 +3852,12 @@ class ProductController extends Controller
             (string) $barcode,
         );
     }
+
+    /*
+     * =====================================================
+     * PRODUCT DELETE PROTECTION
+     * =====================================================
+     */
 
     private function productUsageMessage(
         Product $product,
@@ -2324,7 +3892,9 @@ class ProductController extends Controller
             }
 
             if (
-                DB::table($table)
+                DB::table(
+                    $table,
+                )
                 ->where(
                     'product_id',
                     $product->id,
@@ -2338,25 +3908,52 @@ class ProductController extends Controller
         return null;
     }
 
+    /*
+     * =====================================================
+     * PRODUCT LIST PAYLOAD
+     * =====================================================
+     */
+
     /**
-     * Product data used by the Products list page.
-     *
      * @return array<string, mixed>
      */
     private function productData(
         Product $product,
     ): array {
-        /*
-         * THIS WAS THE MISSING PART IN YOUR CURRENT CODE.
-         *
-         * Without this call the API never sends
-         * available_stock_by_unit, so the frontend falls
-         * back to product.unit and displays Bag.
-         */
         $availableStockByUnit =
             $this->buildAvailableStockByUnit(
                 $product,
             );
+
+        $variants =
+            $product->relationLoaded(
+                'variants',
+            )
+            ? $product
+            ->variants
+            : $product
+            ->variants()
+            ->orderBy(
+                'sort_order',
+            )
+            ->orderBy(
+                'id',
+            )
+            ->get();
+
+        $variantPayload =
+            $variants
+            ->map(
+                fn(
+                    ProductVariant $variant,
+                ): array =>
+                $this->variantData(
+                    $variant,
+                    $product,
+                ),
+            )
+            ->values()
+            ->all();
 
         return [
             'id' =>
@@ -2371,12 +3968,6 @@ class ProductController extends Controller
             'barcode' =>
             $product->barcode,
 
-            /*
-             * Main unit only.
-             *
-             * Example:
-             * Bag
-             */
             'unit' =>
             $product->unit,
 
@@ -2399,11 +3990,22 @@ class ProductController extends Controller
                 ]
                 : null,
 
+            'has_variants' =>
+            count(
+                $variantPayload,
+            ) > 0,
+
+            'variants' =>
+            $variantPayload,
+
             /*
-             * Legacy numeric total.
+             * Compatibility value.
              *
-             * Do not combine this with product.unit in
-             * frontend stock displays.
+             * For display use:
+             *
+             * available_stock_by_unit
+             *
+             * or variant.available_stock_by_unit
              */
             'total_available_quantity' =>
             round(
@@ -2412,17 +4014,14 @@ class ProductController extends Controller
                     ->total_available_quantity
                     ?? collect(
                         $availableStockByUnit,
-                    )->sum(
+                    )
+                    ->sum(
                         'available_quantity',
                     )
                 ),
                 3,
             ),
 
-            /*
-             * AUTHORITATIVE stock quantity + unit for the
-             * Products list page.
-             */
             'available_stock_by_unit' =>
             $availableStockByUnit,
 

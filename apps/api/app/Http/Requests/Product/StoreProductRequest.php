@@ -4,6 +4,7 @@ namespace App\Http\Requests\Product;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreProductRequest extends FormRequest
 {
@@ -14,12 +15,83 @@ class StoreProductRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $barcode = trim(
-            (string) $this->input(
-                'barcode',
-                '',
-            ),
-        );
+        $barcode =
+            trim(
+                (string) $this->input(
+                    'barcode',
+                    '',
+                ),
+            );
+
+        $variants =
+            collect(
+                $this->input(
+                    'variants',
+                    [],
+                ),
+            )
+            ->filter(
+                fn(
+                    mixed $variant,
+                ): bool =>
+                is_array(
+                    $variant,
+                ),
+            )
+            ->map(
+                function (
+                    array $variant,
+                ): array {
+                    return [
+                        'id' =>
+                        $variant['id']
+                            ?? null,
+
+                        'size_value' =>
+                        $variant['size_value']
+                            ?? null,
+
+                        'size_unit' =>
+                        trim(
+                            (string) (
+                                $variant['size_unit']
+                                ?? ''
+                            ),
+                        ),
+
+                        'package_unit' =>
+                        trim(
+                            (string) (
+                                $variant['package_unit']
+                                ?? ''
+                            ),
+                        ),
+
+                        'barcode' =>
+                        trim(
+                            (string) (
+                                $variant['barcode']
+                                ?? ''
+                            ),
+                        ) !== ''
+                            ? trim(
+                                (string) $variant['barcode'],
+                            )
+                            : null,
+
+                        'is_active' =>
+                        filter_var(
+                            $variant['is_active']
+                                ?? true,
+                            FILTER_VALIDATE_BOOL,
+                            FILTER_NULL_ON_FAILURE,
+                        )
+                            ?? true,
+                    ];
+                },
+            )
+            ->values()
+            ->all();
 
         $this->merge([
             'category_id' =>
@@ -47,18 +119,19 @@ class StoreProductRequest extends FormRequest
             $barcode === ''
                 ? null
                 : $barcode,
+
+            'variants' =>
+            $variants,
         ]);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function rules(): array
     {
         return [
             'category_id' => [
                 'required',
                 'integer',
+
                 Rule::exists(
                     'categories',
                     'id',
@@ -81,19 +154,153 @@ class StoreProductRequest extends FormRequest
             'barcode' => [
                 'nullable',
                 'string',
-                'max:64',
+                'max:120',
                 'regex:/^[\x20-\x7E]+$/',
+
                 Rule::unique(
                     'products',
                     'barcode',
                 ),
             ],
+
+            'variants' => [
+                'nullable',
+                'array',
+                'max:50',
+            ],
+
+            'variants.*.id' => [
+                'nullable',
+                'integer',
+            ],
+
+            'variants.*.size_value' => [
+                'required',
+                'numeric',
+                'gt:0',
+            ],
+
+            'variants.*.size_unit' => [
+                'required',
+                'string',
+                'max:40',
+            ],
+
+            'variants.*.package_unit' => [
+                'required',
+                'string',
+                'max:40',
+            ],
+
+            'variants.*.barcode' => [
+                'nullable',
+                'string',
+                'max:120',
+                'regex:/^[\x20-\x7E]+$/',
+            ],
+
+            'variants.*.is_active' => [
+                'required',
+                'boolean',
+            ],
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
+    public function withValidator(
+        Validator $validator,
+    ): void {
+        $validator->after(
+            function (
+                Validator $validator,
+            ): void {
+                $variants =
+                    $this->input(
+                        'variants',
+                        [],
+                    );
+
+                $signatures = [];
+
+                foreach (
+                    $variants as
+                    $index => $variant
+                ) {
+                    if (
+                        ! is_array(
+                            $variant,
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    $size =
+                        (float) (
+                            $variant['size_value']
+                            ?? 0
+                        );
+
+                    $sizeUnit =
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $variant['size_unit']
+                                    ?? ''
+                                ),
+                            ),
+                        );
+
+                    $packageUnit =
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $variant['package_unit']
+                                    ?? ''
+                                ),
+                            ),
+                        );
+
+                    if (
+                        $size <= 0
+                        || $sizeUnit === ''
+                        || $packageUnit === ''
+                    ) {
+                        continue;
+                    }
+
+                    $signature =
+                        number_format(
+                            $size,
+                            3,
+                            '.',
+                            '',
+                        )
+                        . '|'
+                        . $sizeUnit
+                        . '|'
+                        . $packageUnit;
+
+                    if (
+                        isset(
+                            $signatures[$signature],
+                        )
+                    ) {
+                        $validator
+                            ->errors()
+                            ->add(
+                                "variants.{$index}.size_value",
+                                'The same product variant has been entered more than once.',
+                            );
+
+                        continue;
+                    }
+
+                    $signatures[$signature] =
+                        true;
+                }
+            },
+        );
+    }
+
     public function messages(): array
     {
         return [
@@ -117,6 +324,24 @@ class StoreProductRequest extends FormRequest
 
             'barcode.regex' =>
             'The barcode contains unsupported characters.',
+
+            'variants.max' =>
+            'A maximum of 50 variants can be added to one product.',
+
+            'variants.*.size_value.required' =>
+            'Variant size is required.',
+
+            'variants.*.size_value.gt' =>
+            'Variant size must be greater than zero.',
+
+            'variants.*.size_unit.required' =>
+            'Variant measurement unit is required.',
+
+            'variants.*.package_unit.required' =>
+            'Variant package unit is required.',
+
+            'variants.*.barcode.regex' =>
+            'A variant barcode contains unsupported characters.',
         ];
     }
 }

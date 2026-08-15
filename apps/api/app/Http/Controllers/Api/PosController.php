@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\StockBatch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -21,9 +22,7 @@ class PosController extends Controller
                 'name',
             ])
             ->map(
-                fn(
-                    Category $category,
-                ): array => [
+                fn(Category $category): array => [
                     'id' => $category->id,
                     'name' => $category->name,
                 ],
@@ -85,6 +84,37 @@ class PosController extends Controller
             ->with([
                 'category:id,name',
 
+                /*
+                 * IMPORTANT:
+                 *
+                 * POS must know that a product has
+                 * variants before the modal opens.
+                 */
+                'variants' =>
+                function ($query): void {
+                    $query
+                        ->where(
+                            'is_active',
+                            true,
+                        )
+                        ->orderBy(
+                            'sort_order',
+                        )
+                        ->orderBy(
+                            'id',
+                        );
+                },
+
+                /*
+                 * Load available stock batches.
+                 *
+                 * product_variant_id is available
+                 * directly on stock_batches.
+                 *
+                 * purchaseItem.product_variant_id
+                 * is also loaded as a compatibility
+                 * fallback.
+                 */
                 'stockBatches' =>
                 function ($query): void {
                     $query
@@ -94,7 +124,7 @@ class PosController extends Controller
                             0,
                         )
                         ->with([
-                            'purchaseItem:id,product_id,unit_cost',
+                            'purchaseItem:id,product_id,product_variant_id,unit_cost',
                         ])
                         ->orderByRaw(
                             'expiry_date IS NULL',
@@ -102,7 +132,9 @@ class PosController extends Controller
                         ->orderBy(
                             'expiry_date',
                         )
-                        ->orderBy('id');
+                        ->orderBy(
+                            'id',
+                        );
                 },
             ])
             ->whereHas(
@@ -121,7 +153,8 @@ class PosController extends Controller
                 $categoryId !== null,
                 fn(
                     Builder $query,
-                ) => $query->where(
+                ) =>
+                $query->where(
                     'category_id',
                     $categoryId,
                 ),
@@ -130,11 +163,15 @@ class PosController extends Controller
                 $search !== '',
                 function (
                     Builder $query,
-                ) use ($search): void {
+                ) use (
+                    $search,
+                ): void {
                     $query->where(
                         function (
                             Builder $searchQuery,
-                        ) use ($search): void {
+                        ) use (
+                            $search,
+                        ): void {
                             $searchQuery
                                 ->where(
                                     'name',
@@ -160,19 +197,72 @@ class PosController extends Controller
                                     'category',
                                     fn(
                                         Builder $categoryQuery,
-                                    ) => $categoryQuery
+                                    ) =>
+                                    $categoryQuery
                                         ->where(
                                             'name',
                                             'like',
                                             "%{$search}%",
                                         ),
+                                )
+                                ->orWhereHas(
+                                    'variants',
+                                    function (
+                                        Builder $variantQuery,
+                                    ) use (
+                                        $search,
+                                    ): void {
+                                        $variantQuery
+                                            ->where(
+                                                'is_active',
+                                                true,
+                                            )
+                                            ->where(
+                                                function (
+                                                    Builder $variantSearchQuery,
+                                                ) use (
+                                                    $search,
+                                                ): void {
+                                                    $variantSearchQuery
+                                                        ->where(
+                                                            'sku',
+                                                            'like',
+                                                            "%{$search}%",
+                                                        )
+                                                        ->orWhere(
+                                                            'barcode',
+                                                            'like',
+                                                            "%{$search}%",
+                                                        )
+                                                        ->orWhere(
+                                                            'size_value',
+                                                            'like',
+                                                            "%{$search}%",
+                                                        )
+                                                        ->orWhere(
+                                                            'size_unit',
+                                                            'like',
+                                                            "%{$search}%",
+                                                        )
+                                                        ->orWhere(
+                                                            'package_unit',
+                                                            'like',
+                                                            "%{$search}%",
+                                                        );
+                                                },
+                                            );
+                                    },
                                 );
                         },
                     );
                 },
             )
-            ->orderBy('name')
-            ->paginate($perPage);
+            ->orderBy(
+                'name',
+            )
+            ->paginate(
+                $perPage,
+            );
 
         $data = collect(
             $products->items(),
@@ -188,26 +278,33 @@ class PosController extends Controller
             ->values();
 
         return response()->json([
-            'data' => $data,
+            'data' =>
+            $data,
 
             'meta' => [
                 'current_page' =>
-                $products->currentPage(),
+                $products
+                    ->currentPage(),
 
                 'last_page' =>
-                $products->lastPage(),
+                $products
+                    ->lastPage(),
 
                 'per_page' =>
-                $products->perPage(),
+                $products
+                    ->perPage(),
 
                 'total' =>
-                $products->total(),
+                $products
+                    ->total(),
 
                 'from' =>
-                $products->firstItem(),
+                $products
+                    ->firstItem(),
 
                 'to' =>
-                $products->lastItem(),
+                $products
+                    ->lastItem(),
             ],
         ]);
     }
@@ -218,6 +315,21 @@ class PosController extends Controller
         $product->load([
             'category:id,name',
 
+            'variants' =>
+            function ($query): void {
+                $query
+                    ->where(
+                        'is_active',
+                        true,
+                    )
+                    ->orderBy(
+                        'sort_order',
+                    )
+                    ->orderBy(
+                        'id',
+                    );
+            },
+
             'stockBatches' =>
             function ($query): void {
                 $query
@@ -227,7 +339,7 @@ class PosController extends Controller
                         0,
                     )
                     ->with([
-                        'purchaseItem:id,product_id,unit_cost',
+                        'purchaseItem:id,product_id,product_variant_id,unit_cost',
                     ])
                     ->orderByRaw(
                         'expiry_date IS NULL',
@@ -235,7 +347,9 @@ class PosController extends Controller
                     ->orderBy(
                         'expiry_date',
                     )
-                    ->orderBy('id');
+                    ->orderBy(
+                        'id',
+                    );
             },
         ]);
 
@@ -247,18 +361,104 @@ class PosController extends Controller
         ]);
     }
 
+    /*
+     * =====================================================
+     * PRODUCT DATA
+     * =====================================================
+     */
+
     private function productData(
         Product $product,
     ): array {
+        /*
+         * Active variants only.
+         */
+        $variants = $product
+            ->variants
+            ->filter(
+                fn(
+                    ProductVariant $variant,
+                ): bool =>
+                (bool) $variant
+                    ->is_active,
+            )
+            ->values();
+
+        $hasVariants =
+            $variants
+            ->isNotEmpty();
+
+        $activeVariantIds =
+            $variants
+            ->pluck(
+                'id',
+            )
+            ->map(
+                fn(
+                    mixed $id,
+                ): int =>
+                (int) $id,
+            )
+            ->all();
+
+        /*
+         * IMPORTANT:
+         *
+         * When product has variants,
+         * only stock associated with an
+         * active variant is exposed to POS.
+         *
+         * Therefore:
+         *
+         * 100g stock can never be mixed with
+         * 200g or 500g stock.
+         */
         $batches = $product
             ->stockBatches
             ->filter(
-                fn(
+                function (
                     StockBatch $batch,
-                ): bool =>
-                (float) $batch
-                    ->available_quantity
-                    > 0,
+                ) use (
+                    $hasVariants,
+                    $activeVariantIds,
+                ): bool {
+                    if (
+                        (float) $batch
+                            ->available_quantity
+                        <= 0
+                    ) {
+                        return false;
+                    }
+
+                    /*
+                     * Normal product:
+                     * keep original behaviour.
+                     */
+                    if (
+                        ! $hasVariants
+                    ) {
+                        return true;
+                    }
+
+                    /*
+                     * Variant product:
+                     * batch MUST belong to an
+                     * active variant.
+                     */
+                    $variantId =
+                        $this
+                        ->resolveBatchVariantId(
+                            $batch,
+                        );
+
+                    return $variantId
+                        !== null
+                        && in_array(
+                            $variantId,
+                            $activeVariantIds,
+                            true,
+                        );
+                },
             )
             ->values();
 
@@ -277,7 +477,8 @@ class PosController extends Controller
             ->values();
 
         $hasDualUnitBatch =
-            $batches->contains(
+            $batches
+            ->contains(
                 fn(
                     StockBatch $batch,
                 ): bool =>
@@ -288,20 +489,34 @@ class PosController extends Controller
         $stockUnits =
             $batches
             ->map(
-                fn(
+                function (
                     StockBatch $batch,
-                ): string =>
-                $this->batchStockUnit(
-                    $batch,
+                ) use (
                     $product,
-                ),
+                ): string {
+                    $variant =
+                        $this
+                        ->resolveBatchVariant(
+                            $product,
+                            $batch,
+                        );
+
+                    return $this
+                        ->batchStockUnit(
+                            $batch,
+                            $product,
+                            $variant,
+                        );
+                },
             )
             ->unique()
             ->values();
 
         $productStockUnit =
-            $stockUnits->count() === 1
-            ? (string) $stockUnits->first()
+            $stockUnits->count()
+            === 1
+            ? (string) $stockUnits
+                ->first()
             : $product->unit;
 
         $totalAvailableQuantity =
@@ -315,6 +530,24 @@ class PosController extends Controller
                 ),
                 3,
             );
+
+        /*
+         * Build the variant selector data
+         * required by BatchSelectionModal.
+         */
+        $variantData =
+            $variants
+            ->map(
+                fn(
+                    ProductVariant $variant,
+                ): array =>
+                $this->variantData(
+                    $product,
+                    $variant,
+                    $batches,
+                ),
+            )
+            ->values();
 
         return [
             'id' =>
@@ -344,27 +577,61 @@ class PosController extends Controller
             'is_dual_unit' =>
             $hasDualUnitBatch,
 
+            /*
+             * NEW
+             */
+            'has_variants' =>
+            $hasVariants,
+
+            /*
+             * NEW
+             *
+             * Example:
+             *
+             * [
+             *   100g Packet,
+             *   200g Packet,
+             *   500g Packet
+             * ]
+             */
+            'variants' =>
+            $variantData,
+
             'category' => [
                 'id' =>
-                $product->category->id,
+                $product
+                    ->category
+                    ->id,
 
                 'name' =>
-                $product->category->name,
+                $product
+                    ->category
+                    ->name,
             ],
 
             'total_available_quantity' =>
             $totalAvailableQuantity,
 
             'minimum_price' =>
-            $primaryPrices->isEmpty()
+            $primaryPrices
+                ->isEmpty()
                 ? null
-                : (float) $primaryPrices->min(),
+                : (float) $primaryPrices
+                    ->min(),
 
             'maximum_price' =>
-            $primaryPrices->isEmpty()
+            $primaryPrices
+                ->isEmpty()
                 ? null
-                : (float) $primaryPrices->max(),
+                : (float) $primaryPrices
+                    ->max(),
 
+            /*
+             * Every batch now contains:
+             *
+             * product_variant_id
+             * variant
+             */
             'batches' =>
             $batches
                 ->map(
@@ -380,10 +647,209 @@ class PosController extends Controller
         ];
     }
 
+    /*
+     * =====================================================
+     * VARIANT DATA
+     * =====================================================
+     */
+
+    private function variantData(
+        Product $product,
+        ProductVariant $variant,
+        $productBatches,
+    ): array {
+        /*
+         * Only batches belonging to THIS
+         * exact variant.
+         */
+        $variantBatches =
+            $productBatches
+            ->filter(
+                fn(
+                    StockBatch $batch,
+                ): bool =>
+                $this
+                    ->resolveBatchVariantId(
+                        $batch,
+                    )
+                    === (int) $variant
+                        ->id,
+            )
+            ->values();
+
+        /*
+         * Prices attached to this variant's
+         * received stock.
+         */
+        $prices =
+            $variantBatches
+            ->map(
+                fn(
+                    StockBatch $batch,
+                ): float =>
+                round(
+                    (float) $batch
+                        ->selling_price,
+                    2,
+                ),
+            )
+            ->values();
+
+        $stockUnits =
+            $variantBatches
+            ->map(
+                fn(
+                    StockBatch $batch,
+                ): string =>
+                $this
+                    ->batchStockUnit(
+                        $batch,
+                        $product,
+                        $variant,
+                    ),
+            )
+            ->unique()
+            ->values();
+
+        $stockUnit =
+            $stockUnits->count()
+            === 1
+            ? (string) $stockUnits
+                ->first()
+            : (
+                trim(
+                    (string) $variant
+                        ->package_unit,
+                ) !== ''
+                ? (string) $variant
+                    ->package_unit
+                : (string) $product
+                    ->unit
+            );
+
+        $totalAvailableQuantity =
+            round(
+                $variantBatches
+                    ->sum(
+                        fn(
+                            StockBatch $batch,
+                        ): float =>
+                        (float) $batch
+                            ->available_quantity,
+                    ),
+                3,
+            );
+
+        return [
+            'id' =>
+            $variant->id,
+
+            'product_id' =>
+            $product->id,
+
+            /*
+             * Example:
+             * 100g Packet
+             */
+            'display_name' =>
+            $variant
+                ->displayName(),
+
+            'size_value' =>
+            (float) $variant
+                ->size_value,
+
+            'size_unit' =>
+            $variant
+                ->size_unit,
+
+            'package_unit' =>
+            $variant
+                ->package_unit,
+
+            'sku' =>
+            $variant
+                ->sku,
+
+            'barcode' =>
+            $variant
+                ->barcode,
+
+            'is_active' =>
+            (bool) $variant
+                ->is_active,
+
+            'sort_order' =>
+            (int) $variant
+                ->sort_order,
+
+            /*
+             * Variant-specific stock.
+             */
+            'stock_unit' =>
+            $stockUnit,
+
+            'total_available_quantity' =>
+            $totalAvailableQuantity,
+
+            /*
+             * Variant-specific selling price.
+             *
+             * If multiple purchase batches have
+             * different prices, POS displays
+             * a range until the cashier selects
+             * the exact batch.
+             */
+            'minimum_price' =>
+            $prices
+                ->isEmpty()
+                ? null
+                : (float) $prices
+                    ->min(),
+
+            'maximum_price' =>
+            $prices
+                ->isEmpty()
+                ? null
+                : (float) $prices
+                    ->max(),
+
+            'batches_count' =>
+            $variantBatches
+                ->count(),
+
+            'has_stock' =>
+            $totalAvailableQuantity
+                > 0,
+        ];
+    }
+
+    /*
+     * =====================================================
+     * BATCH DATA
+     * =====================================================
+     */
+
     private function batchData(
         Product $product,
         StockBatch $batch,
     ): array {
+        /*
+         * Resolve exact product variant.
+         */
+        $variantId =
+            $this
+            ->resolveBatchVariantId(
+                $batch,
+            );
+
+        $variant =
+            $this
+            ->resolveBatchVariant(
+                $product,
+                $batch,
+            );
+
         $isDualUnit =
             (bool) $batch
                 ->is_dual_unit;
@@ -400,17 +866,45 @@ class PosController extends Controller
             )
             : 1.0;
 
+        /*
+         * Variant package unit becomes the
+         * primary unit for variant products.
+         *
+         * Example:
+         *
+         * Tomato Seeds
+         * 100g Packet
+         *
+         * primary_unit = Packet
+         */
+        $variantPackageUnit =
+            $variant
+            ? trim(
+                (string) $variant
+                    ->package_unit,
+            )
+            : '';
+
         $primaryUnit =
-            trim(
-                (string) $product->unit,
-            ) !== ''
-            ? $product->unit
-            : 'Unit';
+            $variantPackageUnit
+            !== ''
+            ? $variantPackageUnit
+            : (
+                trim(
+                    (string) $product
+                        ->unit,
+                ) !== ''
+                ? $product
+                ->unit
+                : 'Unit'
+            );
 
         $stockUnit =
-            $this->batchStockUnit(
+            $this
+            ->batchStockUnit(
                 $batch,
                 $product,
+                $variant,
             );
 
         $secondaryUnit =
@@ -451,6 +945,12 @@ class PosController extends Controller
             )
             : $availableStockQuantity;
 
+        /*
+         * IMPORTANT:
+         *
+         * This selling price belongs to the
+         * selected stock batch / variant.
+         */
         $primarySellingPrice =
             round(
                 (float) $batch
@@ -470,6 +970,9 @@ class PosController extends Controller
             )
             : null;
 
+        /*
+         * Exact purchase cost.
+         */
         $purchaseCost =
             $this->purchaseCost(
                 $batch,
@@ -482,6 +985,12 @@ class PosController extends Controller
                 $conversionFactor,
                 $isDualUnit,
             );
+
+        /*
+         * =================================================
+         * SALE OPTIONS
+         * =================================================
+         */
 
         $saleOptions = [];
 
@@ -497,6 +1006,9 @@ class PosController extends Controller
             'unit' =>
             $primaryUnit,
 
+            /*
+             * Correct selected variant batch price.
+             */
             'selling_price' =>
             $primarySellingPrice,
 
@@ -531,6 +1043,9 @@ class PosController extends Controller
             ! $isDualUnit,
         ];
 
+        /*
+         * Existing Bag + Kg support.
+         */
         if (
             $isDualUnit
             && $secondarySellingPrice
@@ -578,6 +1093,56 @@ class PosController extends Controller
         return [
             'id' =>
             $batch->id,
+
+            /*
+             * =================================================
+             * PRODUCT VARIANT
+             * =================================================
+             */
+
+            'product_variant_id' =>
+            $variantId,
+
+            'variant' =>
+            $variant
+                ? [
+                    'id' =>
+                    $variant->id,
+
+                    'product_id' =>
+                    $product->id,
+
+                    'display_name' =>
+                    $variant
+                        ->displayName(),
+
+                    'size_value' =>
+                    (float) $variant
+                        ->size_value,
+
+                    'size_unit' =>
+                    $variant
+                        ->size_unit,
+
+                    'package_unit' =>
+                    $variant
+                        ->package_unit,
+
+                    'sku' =>
+                    $variant
+                        ->sku,
+
+                    'barcode' =>
+                    $variant
+                        ->barcode,
+                ]
+                : null,
+
+            /*
+             * =================================================
+             * NORMAL BATCH DATA
+             * =================================================
+             */
 
             'batch_code' =>
             $batch->batch_code,
@@ -637,7 +1202,8 @@ class PosController extends Controller
                 ),
 
             'is_expired' =>
-            $batch->expiry_date
+            $batch
+                ->expiry_date
                 ? $batch
                 ->expiry_date
                 ->isBefore(
@@ -655,9 +1221,139 @@ class PosController extends Controller
         ];
     }
 
+    /*
+     * =====================================================
+     * RESOLVE BATCH VARIANT ID
+     * =====================================================
+     */
+
+    private function resolveBatchVariantId(
+        StockBatch $batch,
+    ): ?int {
+        /*
+         * Preferred source:
+         * stock_batches.product_variant_id
+         */
+        $batchVariantId =
+            $batch->getAttribute(
+                'product_variant_id',
+            );
+
+        if (
+            $batchVariantId
+            !== null
+            && (int) $batchVariantId
+            > 0
+        ) {
+            return (int) $batchVariantId;
+        }
+
+        /*
+         * Compatibility fallback:
+         *
+         * purchase_items.product_variant_id
+         */
+        if (
+            $batch
+            ->relationLoaded(
+                'purchaseItem',
+            )
+            && $batch
+            ->purchaseItem
+            && $batch
+            ->purchaseItem
+            ->getAttribute(
+                'product_variant_id',
+            )
+            !== null
+            && (int) $batch
+                ->purchaseItem
+                ->getAttribute(
+                    'product_variant_id',
+                )
+            > 0
+        ) {
+            return (int) $batch
+                ->purchaseItem
+                ->getAttribute(
+                    'product_variant_id',
+                );
+        }
+
+        return null;
+    }
+
+    /*
+     * =====================================================
+     * RESOLVE VARIANT MODEL
+     * =====================================================
+     */
+
+    private function resolveBatchVariant(
+        Product $product,
+        StockBatch $batch,
+    ): ?ProductVariant {
+        $variantId =
+            $this
+            ->resolveBatchVariantId(
+                $batch,
+            );
+
+        if (
+            $variantId
+            === null
+        ) {
+            return null;
+        }
+
+        /*
+         * Normally already loaded.
+         */
+        if (
+            $product
+            ->relationLoaded(
+                'variants',
+            )
+        ) {
+            $variant =
+                $product
+                ->variants
+                ->firstWhere(
+                    'id',
+                    $variantId,
+                );
+
+            return $variant
+                instanceof ProductVariant
+                ? $variant
+                : null;
+        }
+
+        return ProductVariant::query()
+            ->where(
+                'product_id',
+                $product->id,
+            )
+            ->whereKey(
+                $variantId,
+            )
+            ->where(
+                'is_active',
+                true,
+            )
+            ->first();
+    }
+
+    /*
+     * =====================================================
+     * STOCK UNIT
+     * =====================================================
+     */
+
     private function batchStockUnit(
         StockBatch $batch,
         Product $product,
+        ?ProductVariant $variant = null,
     ): string {
         $batchStockUnit =
             trim(
@@ -666,11 +1362,17 @@ class PosController extends Controller
             );
 
         if (
-            $batchStockUnit !== ''
+            $batchStockUnit
+            !== ''
         ) {
             return $batchStockUnit;
         }
 
+        /*
+         * Dual unit:
+         *
+         * Bag stock is physically stored as Kg.
+         */
         if (
             (bool) $batch
                 ->is_dual_unit
@@ -682,9 +1384,33 @@ class PosController extends Controller
                 );
 
             if (
-                $secondaryUnit !== ''
+                $secondaryUnit
+                !== ''
             ) {
                 return $secondaryUnit;
+            }
+        }
+
+        /*
+         * Variant:
+         *
+         * 100g Packet
+         * physical quantity = Packet
+         */
+        if (
+            $variant
+        ) {
+            $variantPackageUnit =
+                trim(
+                    (string) $variant
+                        ->package_unit,
+                );
+
+            if (
+                $variantPackageUnit
+                !== ''
+            ) {
+                return $variantPackageUnit;
             }
         }
 
@@ -699,11 +1425,22 @@ class PosController extends Controller
             : 'Unit';
     }
 
+    /*
+     * =====================================================
+     * EXACT PURCHASE COST
+     * =====================================================
+     */
+
     private function purchaseCost(
         StockBatch $batch,
     ): float {
+        /*
+         * Exact linked purchase item is the
+         * source of truth.
+         */
         if (
-            $batch->purchaseItem
+            $batch
+            ->purchaseItem
             && $batch
             ->purchaseItem
             ->unit_cost
@@ -724,13 +1461,21 @@ class PosController extends Controller
         );
     }
 
+    /*
+     * =====================================================
+     * BASE UNIT COST
+     * =====================================================
+     */
+
     private function baseUnitCost(
         StockBatch $batch,
         float $purchaseCost,
         float $conversionFactor,
         bool $isDualUnit,
     ): float {
-        if (! $isDualUnit) {
+        if (
+            ! $isDualUnit
+        ) {
             return round(
                 $purchaseCost,
                 4,
@@ -738,7 +1483,8 @@ class PosController extends Controller
         }
 
         if (
-            $batch->base_unit_cost
+            $batch
+            ->base_unit_cost
             !== null
         ) {
             return round(
@@ -749,7 +1495,8 @@ class PosController extends Controller
         }
 
         if (
-            $conversionFactor <= 0
+            $conversionFactor
+            <= 0
         ) {
             return 0;
         }

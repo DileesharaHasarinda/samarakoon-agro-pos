@@ -54,6 +54,7 @@ class StockBatch extends Model
         'batch_code',
 
         'product_id',
+        'product_variant_id',
         'purchase_item_id',
 
         'batch_number',
@@ -162,6 +163,9 @@ class StockBatch extends Model
             'product_id' =>
             'integer',
 
+            'product_variant_id' =>
+            'integer',
+
             'purchase_item_id' =>
             'integer',
 
@@ -218,6 +222,19 @@ class StockBatch extends Model
     {
         return $this->belongsTo(
             Product::class,
+        );
+    }
+
+    /**
+     * Exact product variant belonging to this batch.
+     *
+     * Normal products keep product_variant_id = null.
+     */
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(
+            ProductVariant::class,
+            'product_variant_id',
         );
     }
 
@@ -326,10 +343,30 @@ class StockBatch extends Model
         }
 
         /*
+         * Variant stock is an independent package
+         * stock pool.
+         *
+         * Example:
+         * Pumpkin Seeds -> 100g Packet
+         * physical stock unit = Packet.
+         */
+        $variantPackageUnit = trim(
+            (string) (
+                $this->productVariant
+                ?->package_unit
+                ?? ''
+            ),
+        );
+
+        if ($variantPackageUnit !== '') {
+            return $variantPackageUnit;
+        }
+
+        /*
          * Existing historical batches may not
          * have stock_unit populated.
          *
-         * Fall back to the product unit.
+         * Fall back to the parent product unit.
          */
         $productUnit = trim(
             (string) (
@@ -353,6 +390,18 @@ class StockBatch extends Model
      */
     public function primaryUnitValue(): string
     {
+        $variantPackageUnit = trim(
+            (string) (
+                $this->productVariant
+                ?->package_unit
+                ?? ''
+            ),
+        );
+
+        if ($variantPackageUnit !== '') {
+            return $variantPackageUnit;
+        }
+
         $productUnit = trim(
             (string) (
                 $this->product

@@ -47,7 +47,28 @@ type DualUnitItemField =
     | 'secondary_unit'
     | 'secondary_selling_price';
 
-type ExtendedPurchaseItem = PurchaseItemFormValues & Partial<Record<DualUnitItemField, string>>;
+type PurchaseItemExtensionField =
+    | DualUnitItemField
+    | 'product_variant_id';
+
+type ExtendedPurchaseItem = PurchaseItemFormValues
+    & Partial<Record<PurchaseItemExtensionField, string>>;
+
+interface PurchaseProductVariantRuntime {
+    id: number;
+    display_name: string;
+    size_value: number;
+    size_unit: string;
+    package_unit: string;
+    sku: string;
+    barcode: string | null;
+    is_active: boolean;
+}
+
+type PurchaseProductWithVariants = PurchaseProductOption & {
+    has_variants?: boolean;
+    variants?: PurchaseProductVariantRuntime[];
+};
 
 interface SearchableSelectOption {
     value: string;
@@ -295,7 +316,7 @@ function formatQuantity(value: number): string {
 
 function getExtendedItemValue(
     item: PurchaseItemFormValues,
-    field: DualUnitItemField,
+    field: PurchaseItemExtensionField,
     fallback = '',
 ): string {
     const extendedItem = item as ExtendedPurchaseItem;
@@ -1026,6 +1047,16 @@ const purchaseFormStyles = `
     white-space: nowrap !important;
 }
 
+#purchase-form-modal .pfm-mini-summary.variant {
+    color: #6941c6 !important;
+    background: #f4f3ff !important;
+    border-color: #d9d6fe !important;
+}
+
+#purchase-form-modal .pfm-mini-summary.variant strong {
+    color: #5925dc !important;
+}
+
 /* =========================================================
    COLLAPSED PRODUCT SUMMARY
    ========================================================= */
@@ -1147,6 +1178,25 @@ const purchaseFormStyles = `
         minmax(145px, 0.65fr) !important;
     gap: 11px !important;
     align-items: start !important;
+}
+
+#purchase-form-modal .pfm-item-main-grid.has-variant {
+    grid-template-columns:
+        minmax(220px, 1.25fr)
+        minmax(190px, 1.05fr)
+        minmax(105px, 0.5fr)
+        minmax(155px, 0.75fr)
+        minmax(155px, 0.75fr)
+        minmax(135px, 0.62fr) !important;
+}
+
+#purchase-form-modal .pfm-variant-help {
+    color: #5925dc !important;
+}
+
+#purchase-form-modal .pfm-variant-required-help {
+    color: var(--pfm-amber-800) !important;
+    font-weight: 750 !important;
 }
 
 /*
@@ -2029,12 +2079,36 @@ export default function PurchaseFormModal({
 
     const productSearchOptions = useMemo<SearchableSelectOption[]>(
         () =>
-            products.map((product) => ({
-                value: String(product.id),
-                label: product.name,
-                secondary: `${product.category.name} • ${product.unit}`,
-                searchText: `${product.name} ${product.category.name} ${product.unit} ${product.id}`,
-            })),
+            products.map((product) => {
+                const productWithVariants = product as PurchaseProductWithVariants;
+                const variants = productWithVariants.variants ?? [];
+
+                const variantSearchText = variants
+                    .map((variant) =>
+                        [
+                            variant.display_name,
+                            variant.size_value,
+                            variant.size_unit,
+                            variant.package_unit,
+                            variant.sku,
+                            variant.barcode,
+                        ]
+                            .filter(Boolean)
+                            .join(' '),
+                    )
+                    .join(' ');
+
+                return {
+                    value: String(product.id),
+                    label: product.name,
+                    secondary:
+                        variants.length > 0
+                            ? `${product.category.name} • ${variants.length} variant${variants.length === 1 ? '' : 's'}`
+                            : `${product.category.name} • ${product.unit}`,
+                    searchText:
+                        `${product.name} ${product.category.name} ${product.unit} ${product.id} ${variantSearchText}`,
+                };
+            }),
         [products],
     );
 
@@ -2137,7 +2211,7 @@ export default function PurchaseFormModal({
 
     const changeExtendedItemField = (
         index: number,
-        field: DualUnitItemField,
+        field: PurchaseItemExtensionField,
         value: string,
     ): void => {
         onItemChange(index, field as keyof PurchaseItemFormValues, value);
@@ -2150,7 +2224,30 @@ export default function PurchaseFormModal({
     ): void => {
         onItemChange(index, 'product_id', productId);
 
+        /*
+         * A newly selected parent product must never keep the
+         * previous product's variant or prices.
+         */
+        changeExtendedItemField(index, 'product_variant_id', '');
+        onItemChange(index, 'unit_cost', '');
+        onItemChange(index, 'selling_price', '');
+
         const nextProduct = products.find((product) => String(product.id) === productId);
+        const productWithVariants = nextProduct as PurchaseProductWithVariants | undefined;
+        const variants = productWithVariants?.variants ?? [];
+
+        /*
+         * Package variants are independent stock items. They are
+         * deliberately kept separate from the Bag -> Kg dual-unit
+         * conversion system.
+         */
+        if (variants.length > 0) {
+            changeExtendedItemField(index, 'is_dual_unit', '0');
+            changeExtendedItemField(index, 'conversion_factor', '');
+            changeExtendedItemField(index, 'secondary_unit', '');
+            changeExtendedItemField(index, 'secondary_selling_price', '');
+            return;
+        }
 
         if (!isBagUnit(nextProduct?.unit)) {
             changeExtendedItemField(index, 'is_dual_unit', '0');
@@ -2163,6 +2260,21 @@ export default function PurchaseFormModal({
         if (!getExtendedItemValue(currentItem, 'secondary_unit')) {
             changeExtendedItemField(index, 'secondary_unit', 'Kg');
         }
+    };
+
+    const handleVariantChange = (
+        index: number,
+        variantId: string,
+    ): void => {
+        changeExtendedItemField(index, 'product_variant_id', variantId);
+
+        /*
+         * Each package size has its own purchase and selling price.
+         * Clearing these values prevents a price from a previously
+         * selected size being accidentally reused.
+         */
+        onItemChange(index, 'unit_cost', '');
+        onItemChange(index, 'selling_price', '');
     };
 
     const handleDualUnitToggle = (
@@ -2495,10 +2607,57 @@ export default function PurchaseFormModal({
                                                 (product) => String(product.id) === item.product_id,
                                             );
 
+                                            const selectedProductWithVariants =
+                                                selectedProduct as PurchaseProductWithVariants | undefined;
+
+                                            const productVariants =
+                                                selectedProductWithVariants?.variants ?? [];
+
+                                            const hasVariants = productVariants.length > 0;
+
+                                            const selectedVariantId = getExtendedItemValue(
+                                                item,
+                                                'product_variant_id',
+                                            );
+
+                                            const selectedVariant = productVariants.find(
+                                                (variant) => String(variant.id) === selectedVariantId,
+                                            ) ?? null;
+
+                                            const variantSearchOptions: SearchableSelectOption[] =
+                                                productVariants.map((variant) => ({
+                                                    value: String(variant.id),
+                                                    label: variant.display_name,
+                                                    secondary: [
+                                                        variant.package_unit,
+                                                        variant.sku ? `SKU: ${variant.sku}` : '',
+                                                        variant.barcode ? `Barcode: ${variant.barcode}` : '',
+                                                        !variant.is_active ? 'Inactive' : '',
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' • '),
+                                                    searchText: `${variant.display_name} ${variant.size_value} ${variant.size_unit} ${variant.package_unit} ${variant.sku ?? ''} ${variant.barcode ?? ''}`,
+                                                }));
+
                                             const productUnit = selectedProduct?.unit ?? '';
                                             const productCategory =
                                                 selectedProduct?.category?.name ?? 'No category';
-                                            const isBagProduct = isBagUnit(productUnit);
+
+                                            const effectiveUnit =
+                                                selectedVariant?.package_unit || productUnit;
+
+                                            const priceUnitLabel =
+                                                selectedVariant?.display_name || effectiveUnit || 'Unit';
+
+                                            const requiresVariantSelection =
+                                                hasVariants && !selectedVariant;
+
+                                            /*
+                                             * Variant packages and dual-unit Bag conversion are
+                                             * separate inventory concepts.
+                                             */
+                                            const isBagProduct =
+                                                !hasVariants && isBagUnit(productUnit);
 
                                             const dualUnitEnabled = isEnabledFlag(
                                                 getExtendedItemValue(item, 'is_dual_unit', '0'),
@@ -2536,6 +2695,9 @@ export default function PurchaseFormModal({
 
                                             const productError = getFieldError(
                                                 `items.${index}.product_id`,
+                                            );
+                                            const variantError = getFieldError(
+                                                `items.${index}.product_variant_id`,
                                             );
                                             const quantityError = getFieldError(
                                                 `items.${index}.quantity`,
@@ -2588,16 +2750,29 @@ export default function PurchaseFormModal({
                                                                     <Icon
                                                                         name={isBagProduct ? 'bag' : 'package'}
                                                                     />
-                                                                    {productUnit || 'Unit'}
+                                                                    {selectedVariant
+                                                                        ? selectedVariant.display_name
+                                                                        : hasVariants
+                                                                            ? `${productVariants.length} Variants`
+                                                                            : productUnit || 'Unit'}
                                                                 </span>
                                                             )}
 
                                                             {!isExpanded && selectedProduct && (
                                                                 <div className="pfm-collapsed-summary">
+                                                                    {selectedVariant && (
+                                                                        <span className="pfm-mini-summary variant">
+                                                                            Variant:
+                                                                            <strong>
+                                                                                {selectedVariant.display_name}
+                                                                            </strong>
+                                                                        </span>
+                                                                    )}
+
                                                                     <span className="pfm-mini-summary">
                                                                         Qty:
                                                                         <strong>
-                                                                            {formatQuantity(quantity)} {productUnit}
+                                                                            {formatQuantity(quantity)} {effectiveUnit}
                                                                         </strong>
                                                                     </span>
 
@@ -2669,7 +2844,7 @@ export default function PurchaseFormModal({
 
                                                     {isExpanded && (
                                                         <div className="pfm-item-body">
-                                                            <div className="pfm-item-main-grid">
+                                                            <div className={hasVariants ? 'pfm-item-main-grid has-variant' : 'pfm-item-main-grid'}>
                                                                 {/* PRODUCT */}
 
                                                                 <div className="pfm-field">
@@ -2709,13 +2884,62 @@ export default function PurchaseFormModal({
                                                                     </div>
                                                                 </div>
 
+                                                                {/* PRODUCT VARIANT */}
+
+                                                                {hasVariants && (
+                                                                    <div className="pfm-field">
+                                                                        <span className="pfm-label pfm-main-field-label">
+                                                                            Package Variant
+                                                                            <span className="pfm-required"> *</span>
+                                                                        </span>
+
+                                                                        <SearchableSelect
+                                                                            value={selectedVariantId}
+                                                                            options={variantSearchOptions}
+                                                                            placeholder="Select package size"
+                                                                            searchPlaceholder="Search size, SKU or barcode..."
+                                                                            emptyMessage="No variant matches your search."
+                                                                            disabled={isSubmitting || !selectedProduct}
+                                                                            hasError={Boolean(variantError)}
+                                                                            ariaLabel={`Select package variant for item ${index + 1}`}
+                                                                            onChange={(variantId) => {
+                                                                                handleVariantChange(
+                                                                                    index,
+                                                                                    variantId,
+                                                                                );
+                                                                            }}
+                                                                        />
+
+                                                                        <div className="pfm-main-field-feedback">
+                                                                            {variantError ? (
+                                                                                <p className="pfm-field-error">
+                                                                                    {variantError}
+                                                                                </p>
+                                                                            ) : selectedVariant ? (
+                                                                                <span className="pfm-help pfm-variant-help">
+                                                                                    <strong>{selectedVariant.display_name}</strong>
+                                                                                    {' • '}
+                                                                                    {selectedVariant.package_unit}
+                                                                                    {selectedVariant.sku
+                                                                                        ? ` • ${selectedVariant.sku}`
+                                                                                        : ''}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="pfm-help pfm-variant-required-help">
+                                                                                    Select a package size before entering quantity and prices.
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+
                                                                 {/* QUANTITY */}
 
                                                                 <label className="pfm-field">
                                                                     <span className="pfm-label pfm-main-field-label">
                                                                         Quantity
-                                                                        {productUnit && (
-                                                                            <> ({productUnit})</>
+                                                                        {effectiveUnit && (
+                                                                            <> ({effectiveUnit})</>
                                                                         )}
                                                                         <span className="pfm-required"> *</span>
                                                                     </span>
@@ -2731,7 +2955,7 @@ export default function PurchaseFormModal({
                                                                         min="0.001"
                                                                         step="0.001"
                                                                         value={item.quantity}
-                                                                        disabled={isSubmitting}
+                                                                        disabled={isSubmitting || requiresVariantSelection}
                                                                         required
                                                                         placeholder="0"
                                                                         onChange={(event) => {
@@ -2756,7 +2980,7 @@ export default function PurchaseFormModal({
 
                                                                 <label className="pfm-field">
                                                                     <span className="pfm-label pfm-main-field-label">
-                                                                        Purchase Cost per {productUnit || 'Unit'}
+                                                                        Purchase Cost per {priceUnitLabel}
                                                                         <span className="pfm-required"> *</span>
                                                                     </span>
 
@@ -2775,7 +2999,7 @@ export default function PurchaseFormModal({
                                                                             min="0"
                                                                             step="0.01"
                                                                             value={item.unit_cost}
-                                                                            disabled={isSubmitting}
+                                                                            disabled={isSubmitting || requiresVariantSelection}
                                                                             required
                                                                             placeholder="0.00"
                                                                             onChange={(event) => {
@@ -2801,7 +3025,7 @@ export default function PurchaseFormModal({
 
                                                                 <label className="pfm-field">
                                                                     <span className="pfm-label pfm-main-field-label">
-                                                                        Selling Price per {productUnit || 'Unit'}
+                                                                        Selling Price per {priceUnitLabel}
                                                                         <span className="pfm-required"> *</span>
                                                                     </span>
 
@@ -2820,7 +3044,7 @@ export default function PurchaseFormModal({
                                                                             min="0"
                                                                             step="0.01"
                                                                             value={item.selling_price}
-                                                                            disabled={isSubmitting}
+                                                                            disabled={isSubmitting || requiresVariantSelection}
                                                                             required
                                                                             placeholder="0.00"
                                                                             onChange={(event) => {
@@ -3251,7 +3475,8 @@ export default function PurchaseFormModal({
 
                                                 <span className="pfm-receive-description">
                                                     Creates stock batches and makes quantities available
-                                                    immediately. Dual-unit Bag stock will be converted
+                                                    immediately. Variant products are received against the
+                                                    selected package size, while dual-unit Bag stock is converted
                                                     into Kg.
                                                 </span>
                                             </span>
@@ -3266,8 +3491,7 @@ export default function PurchaseFormModal({
                         <footer className="pfm-actions">
                             <span className="pfm-action-note">
                                 <Icon name="info" />
-                                Completed product rows automatically minimize when a new product is
-                                added.
+                                Variant products require a package size before quantity, purchase cost and selling price can be entered.
                             </span>
 
                             <div className="pfm-action-buttons">

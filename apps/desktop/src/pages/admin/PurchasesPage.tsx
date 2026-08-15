@@ -271,6 +271,9 @@ function createEmptyItem():
         product_id:
             '',
 
+        product_variant_id:
+            '',
+
         quantity:
             '1',
 
@@ -2847,6 +2850,19 @@ export default function PurchasesPage() {
                                                 .product_id,
                                         ),
 
+                                    product_variant_id:
+                                        item
+                                            .product_variant_id
+                                            !== null
+                                            && item
+                                                .product_variant_id
+                                            !== undefined
+                                            ? String(
+                                                item
+                                                    .product_variant_id,
+                                            )
+                                            : '',
+
                                     quantity:
                                         String(
                                             item
@@ -3116,6 +3132,76 @@ export default function PurchasesPage() {
                                 ];
                         }
 
+                        const activeVariants =
+                            selectedProduct
+                                ?.variants
+                                ?.filter(
+                                    (
+                                        variant,
+                                    ) =>
+                                        variant
+                                            .is_active
+                                        !== false,
+                                )
+                            ?? [];
+
+                        const selectedProductHasVariants =
+                            Boolean(
+                                selectedProduct
+                                    ?.has_variants,
+                            )
+                            || activeVariants
+                                .length > 0;
+
+                        if (
+                            selectedProduct
+                            && selectedProductHasVariants
+                        ) {
+                            if (
+                                !item
+                                    .product_variant_id
+                            ) {
+                                errors[
+                                    `items.${index}.product_variant_id`
+                                ] = [
+                                        `Select a variant for ${selectedProduct.name}.`,
+                                    ];
+                            } else {
+                                const selectedVariant =
+                                    activeVariants
+                                        .find(
+                                            (
+                                                variant,
+                                            ) =>
+                                                String(
+                                                    variant.id,
+                                                )
+                                                === item
+                                                    .product_variant_id,
+                                        );
+
+                                if (
+                                    !selectedVariant
+                                ) {
+                                    errors[
+                                        `items.${index}.product_variant_id`
+                                    ] = [
+                                            'The selected product variant is invalid or inactive.',
+                                        ];
+                                }
+                            }
+                        } else if (
+                            selectedProduct
+                            && item
+                                .product_variant_id
+                        ) {
+                            errors[
+                                `items.${index}.product_variant_id`
+                            ] = [
+                                    'This product does not use variants.',
+                                ];
+                        }
+
                         if (
                             !isPositiveNumber(
                                 item.quantity,
@@ -3231,6 +3317,16 @@ export default function PurchasesPage() {
                         if (
                             dualUnit
                         ) {
+                            if (
+                                selectedProductHasVariants
+                            ) {
+                                errors[
+                                    `items.${index}.is_dual_unit`
+                                ] = [
+                                        'Variant products use independent stock pools and cannot use Bag-to-Kg dual-unit conversion in this purchase flow.',
+                                    ];
+                            }
+
                             if (
                                 !selectedProduct
                             ) {
@@ -3687,10 +3783,11 @@ export default function PurchasesPage() {
 
                     <p className="pur-subtitle">
                         Record supplier purchases,
-                        set selling prices and receive
-                        stock. Bag products can also
-                        be configured for full Bag and
-                        loose Kg selling.
+                        select exact product variants,
+                        set batch selling prices and
+                        receive stock. Bag products can
+                        also be configured for full Bag
+                        and loose Kg selling.
                     </p>
                 </div>
 

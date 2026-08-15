@@ -7,6 +7,7 @@ use App\Http\Requests\Purchase\ReceivePurchaseRequest;
 use App\Http\Requests\Purchase\StorePurchaseRequest;
 use App\Http\Requests\Purchase\UpdatePurchaseRequest;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\StockBatch;
@@ -609,6 +610,24 @@ class PurchaseController extends Controller
 
         $products =
             Product::query()
+            ->with([
+                'variants' =>
+                fn($query) =>
+                $query
+                    ->select([
+                        'id',
+                        'product_id',
+                        'size_value',
+                        'size_unit',
+                        'package_unit',
+                        'sku',
+                        'barcode',
+                        'is_active',
+                        'sort_order',
+                    ])
+                    ->orderBy('sort_order')
+                    ->orderBy('id'),
+            ])
             ->whereIn(
                 'id',
                 $productIds->all(),
@@ -643,6 +662,59 @@ class PurchaseController extends Controller
                 ]);
             }
 
+            $variantId =
+                isset($item['product_variant_id'])
+                && $item['product_variant_id'] !== null
+                && $item['product_variant_id'] !== ''
+                ? (int) $item['product_variant_id']
+                : null;
+
+            $hasVariantConfiguration =
+                $product
+                ->variants
+                ->isNotEmpty();
+
+            $activeVariants =
+                $product
+                ->variants
+                ->filter(
+                    fn(ProductVariant $variant): bool =>
+                    (bool) $variant->is_active,
+                )
+                ->values();
+
+            $selectedVariant = null;
+
+            if ($hasVariantConfiguration) {
+                if ($variantId === null) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.product_variant_id" => [
+                            "Please select a variant for {$product->name}.",
+                        ],
+                    ]);
+                }
+
+                $selectedVariant =
+                    $activeVariants->firstWhere(
+                        'id',
+                        $variantId,
+                    );
+
+                if (!$selectedVariant instanceof ProductVariant) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.product_variant_id" => [
+                            'The selected product variant is invalid or inactive.',
+                        ],
+                    ]);
+                }
+            } elseif ($variantId !== null) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.product_variant_id" => [
+                        'This product does not use variants.',
+                    ],
+                ]);
+            }
+
             $quantity = round(
                 (float) $item['quantity'],
                 3,
@@ -671,6 +743,17 @@ class PurchaseController extends Controller
                     $item['is_dual_unit']
                         ?? false,
                 );
+
+            if (
+                $selectedVariant instanceof ProductVariant
+                && $isDualUnit
+            ) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.is_dual_unit" => [
+                        'Variant products use independent stock pools and cannot use Bag-to-Kg dual-unit conversion in this purchase flow.',
+                    ],
+                ]);
+            }
 
             $secondaryUnit = null;
             $conversionFactor = 1.0;
@@ -774,6 +857,9 @@ class PurchaseController extends Controller
                 ->create([
                     'product_id' =>
                     $productId,
+
+                    'product_variant_id' =>
+                    $selectedVariant?->id,
 
                     'quantity' =>
                     $quantity,
@@ -896,6 +982,7 @@ class PurchaseController extends Controller
             ->with([
                 'stockBatch',
                 'product:id,name,unit',
+                'productVariant:id,product_id,size_value,size_unit,package_unit,sku,barcode,is_active,sort_order',
             ])
             ->lockForUpdate()
             ->get();
@@ -963,6 +1050,31 @@ class PurchaseController extends Controller
                         'The purchase item product could not be loaded.',
                     ],
                 ]);
+            }
+
+            if (
+                $purchaseItem->product_variant_id !== null
+            ) {
+                if (
+                    !$purchaseItem->productVariant
+                    || (int) $purchaseItem->productVariant->product_id
+                    !== (int) $purchaseItem->product_id
+                    || !(bool) $purchaseItem->productVariant->is_active
+                ) {
+                    throw ValidationException::withMessages([
+                        'items' => [
+                            "The selected variant for {$purchaseItem->product->name} is invalid or inactive.",
+                        ],
+                    ]);
+                }
+
+                if ($purchaseItem->usesDualUnit()) {
+                    throw ValidationException::withMessages([
+                        'items' => [
+                            "{$purchaseItem->product->name} uses product variants, so Bag-to-Kg dual-unit conversion cannot be used for this purchase item.",
+                        ],
+                    ]);
+                }
             }
 
             $remainingQuantity =
@@ -1045,20 +1157,41 @@ class PurchaseController extends Controller
                 )
                 : (
                     trim(
-                        (string) $purchaseItem
+                        (string) (
+                            $purchaseItem
+                            ->productVariant
+                            ?->package_unit
+                            ?? $purchaseItem
                             ->product
-                            ->unit,
+                            ->unit
+                        ),
                     )
                     ?: 'Unit'
                 );
 
-            $existingBatches =
+            $existingBatchesQuery =
                 StockBatch::query()
                 ->where(
                     'product_id',
                     $purchaseItem
                         ->product_id,
-                )
+                );
+
+            if (
+                $purchaseItem->product_variant_id !== null
+            ) {
+                $existingBatchesQuery->where(
+                    'product_variant_id',
+                    $purchaseItem->product_variant_id,
+                );
+            } else {
+                $existingBatchesQuery->whereNull(
+                    'product_variant_id',
+                );
+            }
+
+            $existingBatches =
+                $existingBatchesQuery
                 ->lockForUpdate()
                 ->get();
 
@@ -1202,6 +1335,10 @@ class PurchaseController extends Controller
                     'product_id' =>
                     $purchaseItem
                         ->product_id,
+
+                    'product_variant_id' =>
+                    $purchaseItem
+                        ->product_variant_id,
 
                     'purchase_item_id' =>
                     $purchaseItem
@@ -1506,7 +1643,9 @@ class PurchaseController extends Controller
 
             'items.product:id,category_id,name,sku,barcode,unit',
             'items.product.category:id,name',
+            'items.productVariant:id,product_id,size_value,size_unit,package_unit,sku,barcode,is_active,sort_order',
             'items.stockBatch',
+            'items.stockBatch.productVariant:id,product_id,size_value,size_unit,package_unit,sku,barcode,is_active,sort_order',
         ]);
     }
 
@@ -1665,6 +1804,55 @@ class PurchaseController extends Controller
                         $item
                             ->product_id,
 
+                        'product_variant_id' =>
+                        $item
+                            ->product_variant_id,
+
+                        'variant' =>
+                        $item->productVariant
+                            ? [
+                                'id' =>
+                                $item
+                                    ->productVariant
+                                    ->id,
+
+                                'product_id' =>
+                                $item
+                                    ->productVariant
+                                    ->product_id,
+
+                                'display_name' =>
+                                $item
+                                    ->productVariant
+                                    ->displayName(),
+
+                                'size_value' =>
+                                (float) $item
+                                    ->productVariant
+                                    ->size_value,
+
+                                'size_unit' =>
+                                $item
+                                    ->productVariant
+                                    ->size_unit,
+
+                                'package_unit' =>
+                                $item
+                                    ->productVariant
+                                    ->package_unit,
+
+                                'sku' =>
+                                $item
+                                    ->productVariant
+                                    ->sku,
+
+                                'barcode' =>
+                                $item
+                                    ->productVariant
+                                    ->barcode,
+                            ]
+                            : null,
+
                         'quantity' =>
                         (float) $item
                             ->quantity,
@@ -1801,6 +1989,66 @@ class PurchaseController extends Controller
                                 $item
                                     ->stockBatch
                                     ->id,
+
+                                'product_variant_id' =>
+                                $item
+                                    ->stockBatch
+                                    ->product_variant_id,
+
+                                'variant' =>
+                                $item
+                                    ->stockBatch
+                                    ->productVariant
+                                    ? [
+                                        'id' =>
+                                        $item
+                                            ->stockBatch
+                                            ->productVariant
+                                            ->id,
+
+                                        'product_id' =>
+                                        $item
+                                            ->stockBatch
+                                            ->productVariant
+                                            ->product_id,
+
+                                        'display_name' =>
+                                        $item
+                                            ->stockBatch
+                                            ->productVariant
+                                            ->displayName(),
+
+                                        'size_value' =>
+                                        (float) $item
+                                            ->stockBatch
+                                            ->productVariant
+                                            ->size_value,
+
+                                        'size_unit' =>
+                                        $item
+                                            ->stockBatch
+                                            ->productVariant
+                                            ->size_unit,
+
+                                        'package_unit' =>
+                                        $item
+                                            ->stockBatch
+                                            ->productVariant
+                                            ->package_unit,
+
+                                        'sku' =>
+                                        $item
+                                            ->stockBatch
+                                            ->productVariant
+                                            ->sku,
+
+                                        'barcode' =>
+                                        $item
+                                            ->stockBatch
+                                            ->productVariant
+                                            ->barcode,
+                                    ]
+                                    : null,
 
                                 'batch_code' =>
                                 $item

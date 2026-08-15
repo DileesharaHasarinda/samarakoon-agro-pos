@@ -12,15 +12,6 @@ class Product extends Model
 {
     use HasFactory;
 
-    /**
-     * These values may be set internally by
-     * ProductController.
-     *
-     * The frontend product form still sends
-     * only name, unit and optional barcode.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'category_id',
         'name',
@@ -30,11 +21,9 @@ class Product extends Model
         'is_active',
     ];
 
-    /**
-     * @var array<string, string>
-     */
     protected $casts = [
-        'is_active' => 'boolean',
+        'is_active' =>
+        'boolean',
     ];
 
     public function category(): BelongsTo
@@ -42,6 +31,29 @@ class Product extends Model
         return $this->belongsTo(
             Category::class,
         );
+    }
+
+    /**
+     * Optional package variants.
+     *
+     * Example:
+     *
+     * Tomato Seeds
+     * - 100g Packet
+     * - 200g Packet
+     * - 500g Packet
+     */
+    public function variants(): HasMany
+    {
+        return $this->hasMany(
+            ProductVariant::class,
+        )
+            ->orderBy(
+                'sort_order',
+            )
+            ->orderBy(
+                'id',
+            );
     }
 
     public function purchaseItems(): HasMany
@@ -72,5 +84,22 @@ class Product extends Model
             'is_active',
             true,
         );
+    }
+
+    public function hasVariants(): bool
+    {
+        if (
+            $this->relationLoaded(
+                'variants',
+            )
+        ) {
+            return $this
+                ->variants
+                ->isNotEmpty();
+        }
+
+        return $this
+            ->variants()
+            ->exists();
     }
 }

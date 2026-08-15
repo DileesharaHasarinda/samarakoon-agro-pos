@@ -31,11 +31,37 @@ function buildProductQuery(filters: ProductListFilters): string {
   return query ? `/products?${query}` : "/products";
 }
 
+function buildProductPayload(values: ProductInput) {
+  return {
+    category_id: values.category_id,
+
+    name: values.name.trim(),
+
+    unit: values.unit.trim(),
+
+    barcode: values.barcode.trim() || null,
+
+    variants: values.variants.map((variant) => ({
+      id: variant.id,
+
+      size_value: Number(variant.size_value),
+
+      size_unit: variant.size_unit.trim(),
+
+      package_unit: variant.package_unit.trim(),
+
+      barcode: variant.barcode.trim() || null,
+
+      is_active: variant.is_active,
+    })),
+  };
+}
+
 export function getProducts(
   token: string,
   filters: ProductListFilters = {}
 ): Promise<ProductListResponse> {
-  return apiRequest<ProductListResponse>(buildProductQuery(filters), {
+  return apiRequest(buildProductQuery(filters), {
     method: "GET",
     token,
   });
@@ -45,7 +71,7 @@ export function getProductDetails(
   token: string,
   productId: number
 ): Promise<ProductDetailsResponse> {
-  return apiRequest<ProductDetailsResponse>(`/products/${productId}`, {
+  return apiRequest(`/products/${productId}`, {
     method: "GET",
     token,
   });
@@ -54,7 +80,7 @@ export function getProductDetails(
 export function getProductOptions(
   token: string
 ): Promise<ProductOptionsResponse> {
-  return apiRequest<ProductOptionsResponse>("/products/options", {
+  return apiRequest("/products/options", {
     method: "GET",
     token,
   });
@@ -63,7 +89,7 @@ export function getProductOptions(
 export function getProductCategoryOptions(
   token: string
 ): Promise<ProductCategoryOptionsResponse> {
-  return apiRequest<ProductCategoryOptionsResponse>("/categories/options", {
+  return apiRequest("/categories/options", {
     method: "GET",
     token,
   });
@@ -73,19 +99,11 @@ export function createProduct(
   token: string,
   values: ProductInput
 ): Promise<ProductResponse> {
-  return apiRequest<ProductResponse>("/products", {
+  return apiRequest("/products", {
     method: "POST",
     token,
 
-    body: JSON.stringify({
-      category_id: values.category_id,
-
-      name: values.name.trim(),
-
-      unit: values.unit.trim(),
-
-      barcode: values.barcode.trim() || null,
-    }),
+    body: JSON.stringify(buildProductPayload(values)),
   });
 }
 
@@ -94,19 +112,11 @@ export function updateProduct(
   productId: number,
   values: ProductInput
 ): Promise<ProductResponse> {
-  return apiRequest<ProductResponse>(`/products/${productId}`, {
+  return apiRequest(`/products/${productId}`, {
     method: "PUT",
     token,
 
-    body: JSON.stringify({
-      category_id: values.category_id,
-
-      name: values.name.trim(),
-
-      unit: values.unit.trim(),
-
-      barcode: values.barcode.trim() || null,
-    }),
+    body: JSON.stringify(buildProductPayload(values)),
   });
 }
 
@@ -114,7 +124,7 @@ export function deleteProduct(
   token: string,
   productId: number
 ): Promise<ProductDeleteResponse> {
-  return apiRequest<ProductDeleteResponse>(`/products/${productId}`, {
+  return apiRequest(`/products/${productId}`, {
     method: "DELETE",
     token,
   });

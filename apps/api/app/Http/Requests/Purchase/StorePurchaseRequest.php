@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Purchase;
 
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -100,6 +101,12 @@ class StorePurchaseRequest extends FormRequest
                 'required',
                 'integer',
                 'exists:products,id',
+            ],
+
+            'items.*.product_variant_id' => [
+                'nullable',
+                'integer',
+                'exists:product_variants,id',
             ],
 
             'items.*.purchase_unit_name' => [
@@ -217,6 +224,24 @@ class StorePurchaseRequest extends FormRequest
                     ->values();
 
                 $products = Product::query()
+                    ->with([
+                        'variants' =>
+                        fn($query) =>
+                        $query
+                            ->select([
+                                'id',
+                                'product_id',
+                                'size_value',
+                                'size_unit',
+                                'package_unit',
+                                'sku',
+                                'barcode',
+                                'is_active',
+                                'sort_order',
+                            ])
+                            ->orderBy('sort_order')
+                            ->orderBy('id'),
+                    ])
                     ->whereIn(
                         'id',
                         $productIds,
@@ -307,10 +332,6 @@ class StorePurchaseRequest extends FormRequest
                             ?? false
                         );
 
-                    if (! $isDualUnit) {
-                        continue;
-                    }
-
                     $productId =
                         (int) (
                             $item['product_id']
@@ -321,6 +342,76 @@ class StorePurchaseRequest extends FormRequest
                         $products->get(
                             $productId,
                         );
+
+                    $variantId =
+                        isset($item['product_variant_id'])
+                        && $item['product_variant_id'] !== null
+                        && $item['product_variant_id'] !== ''
+                        ? (int) $item['product_variant_id']
+                        : null;
+
+                    if ($product) {
+                        $hasVariantConfiguration =
+                            $product
+                            ->variants
+                            ->isNotEmpty();
+
+                        $activeVariants =
+                            $product
+                            ->variants
+                            ->filter(
+                                fn(ProductVariant $variant): bool =>
+                                (bool) $variant->is_active,
+                            )
+                            ->values();
+
+                        if ($hasVariantConfiguration) {
+                            if ($variantId === null) {
+                                $validator
+                                    ->errors()
+                                    ->add(
+                                        "items.{$index}.product_variant_id",
+                                        "Please select a variant for {$product->name}.",
+                                    );
+                            } else {
+                                $selectedVariant =
+                                    $activeVariants
+                                    ->firstWhere(
+                                        'id',
+                                        $variantId,
+                                    );
+
+                                if (!$selectedVariant instanceof ProductVariant) {
+                                    $validator
+                                        ->errors()
+                                        ->add(
+                                            "items.{$index}.product_variant_id",
+                                            'The selected product variant is invalid or inactive.',
+                                        );
+                                }
+                            }
+
+                            if ($isDualUnit) {
+                                $validator
+                                    ->errors()
+                                    ->add(
+                                        "items.{$index}.is_dual_unit",
+                                        'Variant products use independent stock pools and cannot use Bag-to-Kg dual-unit conversion in this purchase flow.',
+                                    );
+                            }
+                        } elseif ($variantId !== null) {
+                            $validator
+                                ->errors()
+                                ->add(
+                                    "items.{$index}.product_variant_id",
+                                    'This product does not use variants.',
+                                );
+                        }
+                    }
+
+                    if (! $isDualUnit) {
+                        continue;
+                    }
 
                     if ($product) {
                         $productUnit =
@@ -461,6 +552,12 @@ class StorePurchaseRequest extends FormRequest
             'items.*.product_id.exists' =>
             'The selected product does not exist.',
 
+            'items.*.product_variant_id.integer' =>
+            'The selected product variant is invalid.',
+
+            'items.*.product_variant_id.exists' =>
+            'The selected product variant does not exist.',
+
             'items.*.quantity.required' =>
             'Please enter the quantity.',
 
@@ -529,8 +626,27 @@ class StorePurchaseRequest extends FormRequest
             )
             : null;
 
+        $productVariantId =
+            $item['product_variant_id']
+            ?? null;
+
+        if (
+            $productVariantId === ''
+            || $productVariantId === null
+        ) {
+            $productVariantId = null;
+        } elseif (
+            is_numeric($productVariantId)
+        ) {
+            $productVariantId =
+                (int) $productVariantId;
+        }
+
         return [
             ...$item,
+
+            'product_variant_id' =>
+            $productVariantId,
 
             'purchase_unit_name' =>
             $this->nullableString(

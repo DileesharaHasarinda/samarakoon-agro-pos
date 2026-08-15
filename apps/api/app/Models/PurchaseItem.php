@@ -15,6 +15,7 @@ class PurchaseItem extends Model
     protected $fillable = [
         'purchase_id',
         'product_id',
+        'product_variant_id',
         'quantity',
         'received_quantity',
         'unit_cost',
@@ -37,6 +38,12 @@ class PurchaseItem extends Model
      * @var array<string, string>
      */
     protected $casts = [
+        'product_id' =>
+        'integer',
+
+        'product_variant_id' =>
+        'integer',
+
         'quantity' =>
         'decimal:3',
 
@@ -89,13 +96,29 @@ class PurchaseItem extends Model
     }
 
     /**
-     * Product being purchased.
+     * Parent product being purchased.
      */
     public function product(): BelongsTo
     {
         return $this->belongsTo(
             Product::class,
             'product_id',
+        );
+    }
+
+    /**
+     * Exact product variant being purchased.
+     *
+     * Normal products keep product_variant_id = null.
+     *
+     * Variant example:
+     * Pumpkin Seeds -> 100g Packet.
+     */
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(
+            ProductVariant::class,
+            'product_variant_id',
         );
     }
 
@@ -123,7 +146,6 @@ class PurchaseItem extends Model
             'purchase_item_id',
         );
     }
-
 
     public function usesDualUnit(): bool
     {
@@ -200,7 +222,6 @@ class PurchaseItem extends Model
             ),
         );
     }
-
 
     public function secondarySellingPriceValue(): ?float
     {

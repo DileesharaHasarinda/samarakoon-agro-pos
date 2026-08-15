@@ -78,6 +78,17 @@ function createPurchasePayload(values: PurchaseFormValues) {
       return {
         product_id: Number(item.product_id),
 
+        /*
+         * CRITICAL VARIANT LINK.
+         *
+         * Normal product -> null
+         * Variant product -> exact variant id
+         */
+        product_variant_id:
+          item.product_variant_id.trim() !== ""
+            ? Number(item.product_variant_id)
+            : null,
+
         quantity: Number(item.quantity),
 
         unit_cost: Number(item.unit_cost),
@@ -142,7 +153,6 @@ export async function createPurchase(
   return apiRequest("/purchases", {
     method: "POST",
     token,
-
     body: JSON.stringify(createPurchasePayload(values)),
   });
 }
@@ -155,7 +165,6 @@ export async function updatePurchase(
   return apiRequest(`/purchases/${purchaseId}`, {
     method: "PUT",
     token,
-
     body: JSON.stringify(createPurchasePayload(values)),
   });
 }
@@ -168,7 +177,6 @@ export async function receivePurchase(
   return apiRequest(`/purchases/${purchaseId}/receive`, {
     method: "POST",
     token,
-
     body: JSON.stringify({
       items: items.map((item) => ({
         purchase_item_id: item.purchase_item_id,

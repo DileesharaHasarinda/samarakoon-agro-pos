@@ -33,16 +33,11 @@ import type {
     ProductPriceOption,
 } from '../../types/product';
 
-/* =========================================================
-   TYPES
-   ========================================================= */
-
 type ProductBatch =
     ProductPriceOption['batches'][number];
 
-/* =========================================================
-   FORMATTERS
-   ========================================================= */
+type ProductVariant =
+    ProductDetails['variants'][number];
 
 const currencyFormatter =
     new Intl.NumberFormat(
@@ -65,31 +60,18 @@ const quantityFormatter =
     );
 
 function formatCurrency(
-    value:
-        | number
-        | null
-        | undefined,
+    value: number | null | undefined,
 ): string {
     if (
         value === null
         || value === undefined
-    ) {
-        return 'Not available';
-    }
-
-    const numericValue =
-        Number(value);
-
-    if (
-        !Number.isFinite(
-            numericValue,
-        )
+        || !Number.isFinite(Number(value))
     ) {
         return 'Not available';
     }
 
     return currencyFormatter.format(
-        numericValue,
+        Number(value),
     );
 }
 
@@ -101,18 +83,10 @@ function formatQuantity(
         | undefined,
 ): string {
     const numericValue =
-        Number(
-            value ?? 0,
-        );
+        Number(value ?? 0);
 
-    if (
-        !Number.isFinite(
-            numericValue,
-        )
-    ) {
-        return String(
-            value ?? 0,
-        );
+    if (!Number.isFinite(numericValue)) {
+        return String(value ?? 0);
     }
 
     return quantityFormatter.format(
@@ -121,31 +95,18 @@ function formatQuantity(
 }
 
 function formatDate(
-    value:
-        | string
-        | null
-        | undefined,
+    value: string | null | undefined,
 ): string {
     if (!value) {
         return 'Not provided';
     }
 
-    const dateOnly =
-        value.substring(
-            0,
-            10,
-        );
-
     const date =
         new Date(
-            `${dateOnly}T00:00:00`,
+            `${value.substring(0, 10)}T00:00:00`,
         );
 
-    if (
-        Number.isNaN(
-            date.getTime(),
-        )
-    ) {
+    if (Number.isNaN(date.getTime())) {
         return value;
     }
 
@@ -160,10 +121,7 @@ function formatDate(
 }
 
 function formatDateTime(
-    value:
-        | string
-        | null
-        | undefined,
+    value: string | null | undefined,
 ): string {
     if (!value) {
         return 'Not provided';
@@ -172,11 +130,7 @@ function formatDateTime(
     const date =
         new Date(value);
 
-    if (
-        Number.isNaN(
-            date.getTime(),
-        )
-    ) {
+    if (Number.isNaN(date.getTime())) {
         return value;
     }
 
@@ -192,539 +146,54 @@ function formatDateTime(
     ).format(date);
 }
 
-/* =========================================================
-   RUNTIME HELPERS
-   ========================================================= */
-
-function runtimeString(
-    source: unknown,
-    key: string,
-): string | null {
-    if (
-        typeof source !== 'object'
-        || source === null
-    ) {
-        return null;
-    }
-
-    const record =
-        source as Record<
-            string,
-            unknown
-        >;
-
-    const value =
-        record[key];
-
-    if (
-        typeof value !== 'string'
-    ) {
-        return null;
-    }
-
-    const cleaned =
-        value.trim();
-
-    return cleaned || null;
-}
-
-function runtimeNumber(
-    source: unknown,
-    key: string,
-): number | null {
-    if (
-        typeof source !== 'object'
-        || source === null
-    ) {
-        return null;
-    }
-
-    const record =
-        source as Record<
-            string,
-            unknown
-        >;
-
-    const value =
-        record[key];
-
-    if (
-        value === null
-        || value === undefined
-        || value === ''
-    ) {
-        return null;
-    }
-
-    const numericValue =
-        Number(value);
-
-    return Number.isFinite(
-        numericValue,
-    )
-        ? numericValue
-        : null;
-}
-
-function runtimeBoolean(
-    source: unknown,
-    key: string,
-): boolean {
-    if (
-        typeof source !== 'object'
-        || source === null
-    ) {
-        return false;
-    }
-
-    const record =
-        source as Record<
-            string,
-            unknown
-        >;
-
-    const value =
-        record[key];
-
-    return (
-        value === true
-        || value === 1
-        || value === '1'
-        || value === 'true'
-    );
-}
-
-/* =========================================================
-   UNIT HELPERS
-
-   IMPORTANT:
-   For a dual-unit Bag -> Kg batch:
-   - product.unit = Bag
-   - customer can sell Bag or Kg
-   - stock quantity is physically stored in Kg
-   - stock_unit should therefore be Kg
-
-   We do NOT blindly use product.unit for stock quantities.
-   ========================================================= */
-
-function isDualUnitBatch(
-    batch: ProductBatch,
-): boolean {
-    if (
-        runtimeBoolean(
-            batch,
-            'is_dual_unit',
-        )
-    ) {
-        return true;
-    }
-
-    const secondaryUnit =
-        runtimeString(
-            batch,
-            'secondary_unit',
-        );
-
-    const conversionFactor =
-        runtimeNumber(
-            batch,
-            'conversion_factor',
-        );
-
-    return Boolean(
-        secondaryUnit
-        && conversionFactor
-        && conversionFactor > 1,
-    );
-}
-
 function getStockUnit(
     batch: ProductBatch,
     fallbackUnit: string,
 ): string {
-    /*
-     * Best source:
-     * stock_batches.stock_unit
-     *
-     * Dual Bag -> Kg stock should contain:
-     * stock_unit = Kg
-     */
     const stockUnit =
-        runtimeString(
-            batch,
-            'stock_unit',
-        );
+        String(
+            batch.stock_unit
+            ?? '',
+        ).trim();
 
     if (stockUnit) {
         return stockUnit;
     }
 
-    /*
-     * Backward-compatible fallback.
-     *
-     * Some API responses may not yet include stock_unit.
-     * If the batch is dual-unit, the physical quantity is
-     * stored using secondary_unit.
-     */
     if (
-        isDualUnitBatch(
-            batch,
-        )
+        batch.is_dual_unit
+        && batch.secondary_unit
     ) {
-        const secondaryUnit =
-            runtimeString(
-                batch,
-                'secondary_unit',
-            );
-
-        if (secondaryUnit) {
-            return secondaryUnit;
-        }
+        return batch.secondary_unit;
     }
 
-    return fallbackUnit;
+    return fallbackUnit || 'Unit';
 }
 
-function getPrimarySaleUnit(
+function getPrimaryUnit(
     batch: ProductBatch,
     fallbackUnit: string,
 ): string {
     return (
-        runtimeString(
-            batch,
-            'purchase_unit_name',
-        )
-        ?? fallbackUnit
+        batch.purchase_unit_name
+        || batch.primary_unit
+        || fallbackUnit
+        || 'Unit'
     );
 }
 
-/* =========================================================
-   GROUP QUANTITY HELPERS
-
-   A product may contain:
-   - normal Bag stock
-   - dual-unit Kg stock
-
-   We cannot mathematically add:
-       5 Bag + 95 Kg = 100 Bag
-
-   So we group quantities by their physical unit.
-   ========================================================= */
-
-function groupAvailableQuantity(
-    batches: ProductBatch[],
-    fallbackUnit: string,
+function getBatchReference(
+    batch: ProductBatch,
 ): string {
-    const totals =
-        new Map<
-            string,
-            number
-        >();
-
-    batches.forEach(
-        (batch) => {
-            const unit =
-                getStockUnit(
-                    batch,
-                    fallbackUnit,
-                );
-
-            const quantity =
-                Number(
-                    batch
-                        .available_quantity
-                    ?? 0,
-                );
-
-            if (
-                !Number.isFinite(
-                    quantity,
-                )
-            ) {
-                return;
-            }
-
-            totals.set(
-                unit,
-                (
-                    totals.get(
-                        unit,
-                    )
-                    ?? 0
-                )
-                + quantity,
-            );
-        },
+    return (
+        batch.batch_number
+        || batch.batch_code
+        || `Stock #${batch.id}`
     );
-
-    if (
-        totals.size === 0
-    ) {
-        return `0 ${fallbackUnit}`;
-    }
-
-    return Array
-        .from(
-            totals.entries(),
-        )
-        .map(
-            (
-                [
-                    unit,
-                    quantity,
-                ],
-            ) =>
-                `${formatQuantity(
-                    quantity,
-                )} ${unit}`,
-        )
-        .join(' + ');
 }
-
-function groupSaleableQuantity(
-    batches: ProductBatch[],
-    fallbackUnit: string,
-): string {
-    const totals =
-        new Map<
-            string,
-            number
-        >();
-
-    batches.forEach(
-        (batch) => {
-            if (
-                batch.status
-                === 'expired'
-                || batch.status
-                === 'out_of_stock'
-            ) {
-                return;
-            }
-
-            const unit =
-                getStockUnit(
-                    batch,
-                    fallbackUnit,
-                );
-
-            const quantity =
-                Number(
-                    batch
-                        .available_quantity
-                    ?? 0,
-                );
-
-            if (
-                !Number.isFinite(
-                    quantity,
-                )
-            ) {
-                return;
-            }
-
-            totals.set(
-                unit,
-                (
-                    totals.get(
-                        unit,
-                    )
-                    ?? 0
-                )
-                + quantity,
-            );
-        },
-    );
-
-    if (
-        totals.size === 0
-    ) {
-        return `0 ${fallbackUnit}`;
-    }
-
-    return Array
-        .from(
-            totals.entries(),
-        )
-        .map(
-            (
-                [
-                    unit,
-                    quantity,
-                ],
-            ) =>
-                `${formatQuantity(
-                    quantity,
-                )} ${unit}`,
-        )
-        .join(' + ');
-}
-
-function groupReceivedPurchaseQuantity(
-    batches: ProductBatch[],
-    fallbackUnit: string,
-): string {
-    const totals =
-        new Map<
-            string,
-            number
-        >();
-
-    batches.forEach(
-        (batch) => {
-            /*
-             * Total Received should use the PURCHASE unit,
-             * not the physical stock unit.
-             *
-             * Example:
-             *
-             * received_purchase_quantity = 1
-             * primary_unit = Bag
-             *
-             * Even though physical stock received was:
-             * 100 Kg
-             */
-            const unit =
-                batch.primary_unit
-                || batch.purchase_unit_name
-                || fallbackUnit;
-
-            const quantity =
-                Number(
-                    batch.received_purchase_quantity
-                    ?? batch.purchased_quantity
-                    ?? 0,
-                );
-
-            if (
-                !Number.isFinite(
-                    quantity,
-                )
-            ) {
-                return;
-            }
-
-            totals.set(
-                unit,
-                (
-                    totals.get(
-                        unit,
-                    )
-                    ?? 0
-                )
-                + quantity,
-            );
-        },
-    );
-
-    if (
-        totals.size === 0
-    ) {
-        return `0 ${fallbackUnit}`;
-    }
-
-    return Array
-        .from(
-            totals.entries(),
-        )
-        .map(
-            (
-                [
-                    unit,
-                    quantity,
-                ],
-            ) =>
-                `${formatQuantity(
-                    quantity,
-                )} ${unit}`,
-        )
-        .join(' + ');
-}
-
-function groupExpiredQuantity(
-    batches: ProductBatch[],
-    fallbackUnit: string,
-): string {
-    const totals =
-        new Map<
-            string,
-            number
-        >();
-
-    batches.forEach(
-        (batch) => {
-            if (
-                batch.status
-                !== 'expired'
-            ) {
-                return;
-            }
-
-            const unit =
-                getStockUnit(
-                    batch,
-                    fallbackUnit,
-                );
-
-            const quantity =
-                Number(
-                    batch
-                        .available_quantity
-                    ?? 0,
-                );
-
-            if (
-                !Number.isFinite(
-                    quantity,
-                )
-            ) {
-                return;
-            }
-
-            totals.set(
-                unit,
-                (
-                    totals.get(
-                        unit,
-                    )
-                    ?? 0
-                )
-                + quantity,
-            );
-        },
-    );
-
-    if (
-        totals.size === 0
-    ) {
-        return `0 ${fallbackUnit}`;
-    }
-
-    return Array
-        .from(
-            totals.entries(),
-        )
-        .map(
-            (
-                [
-                    unit,
-                    quantity,
-                ],
-            ) =>
-                `${formatQuantity(
-                    quantity,
-                )} ${unit}`,
-        )
-        .join(' + ');
-}
-
-/* =========================================================
-   STATUS
-   ========================================================= */
 
 function getStatusLabel(
-    status:
-        ProductBatchStatus,
+    status: ProductBatchStatus,
 ): string {
     switch (status) {
         case 'expiring_soon':
@@ -743,17 +212,170 @@ function getStatusLabel(
 }
 
 function getStatusClass(
-    status:
-        ProductBatchStatus,
+    status: ProductBatchStatus,
 ): string {
-    return (
-        `pdp-status pdp-status-${status}`
-    );
+    return `pdp-status pdp-status-${status}`;
 }
 
-/* =========================================================
-   ICONS
-   ========================================================= */
+function formatStockEntries(
+    entries:
+        Array<{
+            unit: string;
+            available_quantity: number;
+        }>,
+    fallbackUnit: string,
+): string {
+    if (
+        !Array.isArray(entries)
+        || entries.length === 0
+    ) {
+        return `0 ${fallbackUnit}`;
+    }
+
+    const nonZero =
+        entries.filter(
+            (entry) =>
+                Math.abs(
+                    Number(
+                        entry.available_quantity,
+                    ),
+                ) > 0.000001,
+        );
+
+    const displayEntries =
+        nonZero.length > 0
+            ? nonZero
+            : entries;
+
+    return displayEntries
+        .map(
+            (entry) =>
+                `${formatQuantity(
+                    entry.available_quantity,
+                )} ${entry.unit || fallbackUnit}`,
+        )
+        .join(' + ');
+}
+
+function groupBatchStock(
+    batches: ProductBatch[],
+    fallbackUnit: string,
+    saleableOnly = false,
+): string {
+    const totals =
+        new Map<string, number>();
+
+    batches.forEach(
+        (batch) => {
+            if (
+                saleableOnly
+                && (
+                    batch.status === 'expired'
+                    || batch.status === 'out_of_stock'
+                )
+            ) {
+                return;
+            }
+
+            const unit =
+                getStockUnit(
+                    batch,
+                    fallbackUnit,
+                );
+
+            const quantity =
+                Number(
+                    batch.available_quantity
+                    ?? 0,
+                );
+
+            if (!Number.isFinite(quantity)) {
+                return;
+            }
+
+            totals.set(
+                unit,
+                (
+                    totals.get(unit)
+                    ?? 0
+                )
+                + quantity,
+            );
+        },
+    );
+
+    if (totals.size === 0) {
+        return `0 ${fallbackUnit}`;
+    }
+
+    return Array
+        .from(
+            totals.entries(),
+        )
+        .map(
+            (
+                [
+                    unit,
+                    quantity,
+                ],
+            ) =>
+                `${formatQuantity(
+                    quantity,
+                )} ${unit}`,
+        )
+        .join(' + ');
+}
+
+function formatPriceRange(
+    values:
+        Array<
+            number
+            | null
+            | undefined
+        >,
+): string {
+    const prices =
+        values
+            .map(Number)
+            .filter(Number.isFinite)
+            .sort(
+                (
+                    left,
+                    right,
+                ) =>
+                    left - right,
+            );
+
+    if (
+        prices.length === 0
+    ) {
+        return 'Not available';
+    }
+
+    const minimum =
+        prices[0];
+
+    const maximum =
+        prices[
+        prices.length - 1
+        ];
+
+    if (
+        Math.abs(
+            maximum - minimum,
+        ) < 0.001
+    ) {
+        return formatCurrency(
+            minimum,
+        );
+    }
+
+    return `${formatCurrency(
+        minimum,
+    )} - ${formatCurrency(
+        maximum,
+    )}`;
+}
 
 type IconName =
     | 'alert'
@@ -771,29 +393,20 @@ type IconName =
     | 'tag'
     | 'truck';
 
-interface IconProps {
-    name: IconName;
-    className?: string;
-}
-
 function Icon({
     name,
-    className = '',
-}: IconProps) {
+}: {
+    name: IconName;
+}) {
     const props = {
-        className,
         viewBox: '0 0 24 24',
         fill: 'none',
         stroke: 'currentColor',
         strokeWidth: 2,
-        strokeLinecap:
-            'round' as const,
-        strokeLinejoin:
-            'round' as const,
-        'aria-hidden':
-            true,
-        focusable:
-            false,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+        'aria-hidden': true,
+        focusable: false,
     };
 
     switch (name) {
@@ -816,12 +429,7 @@ function Icon({
         case 'barcode':
             return (
                 <svg {...props}>
-                    <path d="M3 5v14" />
-                    <path d="M7 5v14" />
-                    <path d="M11 5v14" />
-                    <path d="M15 5v14" />
-                    <path d="M19 5v14" />
-                    <path d="M21 5v14" />
+                    <path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14M21 5v14" />
                 </svg>
             );
 
@@ -836,9 +444,7 @@ function Icon({
                         rx="2"
                     />
 
-                    <path d="M16 3v4" />
-                    <path d="M8 3v4" />
-                    <path d="M3 11h18" />
+                    <path d="M16 3v4M8 3v4M3 11h18" />
                 </svg>
             );
 
@@ -882,8 +488,7 @@ function Icon({
         case 'close':
             return (
                 <svg {...props}>
-                    <path d="m6 6 12 12" />
-                    <path d="m18 6-12 12" />
+                    <path d="m6 6 12 12M18 6 6 18" />
                 </svg>
             );
 
@@ -904,8 +509,7 @@ function Icon({
             return (
                 <svg {...props}>
                     <path d="m12 2 9 5-9 5-9-5 9-5Z" />
-                    <path d="m3 12 9 5 9-5" />
-                    <path d="m3 17 9 5 9-5" />
+                    <path d="m3 12 9 5 9-5M3 17l9 5 9-5" />
                 </svg>
             );
 
@@ -920,26 +524,21 @@ function Icon({
                         rx="2"
                     />
 
-                    <path d="M7 10h.01" />
-                    <path d="M17 14h.01" />
-                    <path d="M12 9v6" />
+                    <path d="M7 10h.01M17 14h.01M12 9v6" />
                 </svg>
             );
 
         case 'refresh':
             return (
                 <svg {...props}>
-                    <path d="M20 11a8 8 0 1 0 2 5" />
-                    <path d="M20 4v7h-7" />
+                    <path d="M20 11a8 8 0 1 0 2 5M20 4v7h-7" />
                 </svg>
             );
 
         case 'stock':
             return (
                 <svg {...props}>
-                    <path d="M4 20V8l8-4 8 4v12" />
-                    <path d="M8 20v-7h8v7" />
-                    <path d="M2 20h20" />
+                    <path d="M4 20V8l8-4 8 4v12M8 20v-7h8v7M2 20h20" />
                 </svg>
             );
 
@@ -954,8 +553,7 @@ function Icon({
         case 'truck':
             return (
                 <svg {...props}>
-                    <path d="M3 6h11v10H3Z" />
-                    <path d="M14 10h4l3 3v3h-7Z" />
+                    <path d="M3 6h11v10H3ZM14 10h4l3 3v3h-7Z" />
 
                     <circle
                         cx="7"
@@ -976,78 +574,62 @@ function Icon({
             return (
                 <svg {...props}>
                     <path d="m21 8-9 5-9-5 9-5 9 5Z" />
-                    <path d="m3 8 9 5 9-5" />
-                    <path d="M3 8v8l9 5 9-5V8" />
-                    <path d="M12 13v8" />
+                    <path d="m3 8 9 5 9-5M3 8v8l9 5 9-5V8M12 13v8" />
                 </svg>
             );
     }
 }
-
-/* =========================================================
-   STYLES
-   ========================================================= */
 
 const pageStyles = `
 #product-details-page,
 #product-details-page *,
 #product-details-page *::before,
 #product-details-page *::after,
-#product-batch-details-modal,
-#product-batch-details-modal *,
-#product-batch-details-modal *::before,
-#product-batch-details-modal *::after {
+#product-detail-modal,
+#product-detail-modal *,
+#product-detail-modal *::before,
+#product-detail-modal *::after {
     box-sizing: border-box !important;
 }
 
 #product-details-page,
-#product-batch-details-modal {
-    --pdp-green-950: #052e16;
-    --pdp-green-900: #14532d;
-    --pdp-green-800: #166534;
-    --pdp-green-700: #15803d;
-    --pdp-green-600: #16a34a;
-    --pdp-green-100: #dcfce7;
-    --pdp-green-50: #f0fdf4;
+#product-detail-modal {
+    --green-950: #052e16;
+    --green-900: #14532d;
+    --green-800: #166534;
+    --green-700: #15803d;
+    --green-100: #dcfce7;
+    --green-50: #f0fdf4;
 
-    --pdp-blue-800: #1849a9;
-    --pdp-blue-700: #175cd3;
-    --pdp-blue-100: #d1e9ff;
-    --pdp-blue-50: #eff8ff;
+    --blue-800: #1849a9;
+    --blue-700: #175cd3;
+    --blue-100: #d1e9ff;
+    --blue-50: #eff8ff;
 
-    --pdp-amber-800: #93370d;
-    --pdp-amber-700: #b54708;
-    --pdp-amber-50: #fffaeb;
+    --amber-800: #93370d;
+    --amber-50: #fffaeb;
 
-    --pdp-red-800: #912018;
-    --pdp-red-700: #b42318;
-    --pdp-red-50: #fef3f2;
+    --red-700: #b42318;
+    --red-50: #fef3f2;
 
-    --pdp-text: #101828;
-    --pdp-text-2: #344054;
-    --pdp-text-3: #475467;
-    --pdp-muted: #667085;
+    --text: #101828;
+    --text-2: #344054;
+    --muted: #667085;
 
-    --pdp-border: #d0d9d2;
-    --pdp-border-soft: #e5ebe6;
-    --pdp-border-strong: #aebdb2;
+    --border: #d0d9d2;
+    --border-soft: #e5ebe6;
 
-    --pdp-white: #ffffff;
-    --pdp-soft: #f8faf9;
-    --pdp-page: #f4f7f5;
+    --page: #f4f7f5;
 
-    color: var(--pdp-text) !important;
+    color: var(--text) !important;
 
     font-family:
         -apple-system,
         BlinkMacSystemFont,
         "Segoe UI",
         Roboto,
-        Helvetica,
         Arial,
         sans-serif !important;
-
-    -webkit-font-smoothing: antialiased !important;
 }
 
 #product-details-page {
@@ -1060,121 +642,38 @@ const pageStyles = `
 
     gap: 16px !important;
 
-    margin: 0 !important;
     padding: 0 4px 28px !important;
-
-    overflow-x: hidden !important;
 
     font-size: 14px !important;
     line-height: 1.5 !important;
 
-    background: transparent !important;
-
-    isolation: isolate !important;
-}
-
-#product-details-page button,
-#product-batch-details-modal button {
-    font: inherit !important;
-    text-transform: none !important;
-    letter-spacing: normal !important;
+    overflow-x: hidden !important;
 }
 
 #product-details-page h1,
 #product-details-page h2,
 #product-details-page h3,
 #product-details-page p,
-#product-batch-details-modal h2,
-#product-batch-details-modal h3,
-#product-batch-details-modal p {
+#product-detail-modal h2,
+#product-detail-modal h3,
+#product-detail-modal p {
     margin: 0 !important;
 }
 
-/* =========================================================
-   BUTTONS
-   ========================================================= */
-
-#product-details-page .pdp-button {
-    display: inline-flex !important;
-
-    min-height: 40px !important;
-
-    align-items: center !important;
-    justify-content: center !important;
-
-    gap: 7px !important;
-
-    padding: 7px 12px !important;
-
-    color: var(--pdp-text-2) !important;
-
-    font-size: 13px !important;
-    font-weight: 750 !important;
-
-    white-space: nowrap !important;
-
-    background: #ffffff !important;
-
-    border: 1px solid var(--pdp-border-strong) !important;
-
-    border-radius: 9px !important;
-
-    cursor: pointer !important;
+#product-details-page button,
+#product-detail-modal button {
+    font: inherit !important;
 }
 
-#product-details-page .pdp-button:hover:not(:disabled) {
-    color: var(--pdp-green-900) !important;
+#product-details-page svg,
+#product-detail-modal svg {
+    display: block !important;
 
-    background: var(--pdp-green-50) !important;
-
-    border-color: #94cda5 !important;
+    width: 18px !important;
+    height: 18px !important;
 }
 
-#product-details-page .pdp-button:disabled {
-    opacity: 0.55 !important;
-
-    cursor: not-allowed !important;
-}
-
-#product-details-page .pdp-button svg {
-    width: 17px !important;
-    height: 17px !important;
-
-    flex: 0 0 17px !important;
-}
-
-#product-details-page .pdp-view-button {
-    width: 100% !important;
-
-    min-height: 36px !important;
-
-    padding: 6px 9px !important;
-
-    color: var(--pdp-blue-700) !important;
-
-    font-size: 11px !important;
-    font-weight: 800 !important;
-
-    background: var(--pdp-blue-50) !important;
-
-    border: 1px solid #b7d6fb !important;
-
-    border-radius: 7px !important;
-}
-
-#product-details-page .pdp-view-button:hover {
-    color: #ffffff !important;
-
-    background: var(--pdp-blue-700) !important;
-
-    border-color: var(--pdp-blue-700) !important;
-}
-
-/* =========================================================
-   TOP
-   ========================================================= */
-
-#product-details-page .pdp-top-row {
+#product-details-page .pdp-top {
     display: flex !important;
 
     align-items: center !important;
@@ -1183,16 +682,41 @@ const pageStyles = `
     gap: 12px !important;
 }
 
-#product-details-page .pdp-product-id {
-    color: var(--pdp-muted) !important;
+#product-details-page .pdp-button {
+    display: inline-flex !important;
 
-    font-size: 12px !important;
-    font-weight: 650 !important;
+    min-height: 42px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    gap: 7px !important;
+
+    padding: 8px 13px !important;
+
+    color: var(--text-2) !important;
+
+    font-size: 13px !important;
+    font-weight: 800 !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        #aebdb2 !important;
+
+    border-radius: 9px !important;
+
+    cursor: pointer !important;
 }
 
-/* =========================================================
-   HERO
-   ========================================================= */
+#product-details-page .pdp-button:hover {
+    color: var(--green-900) !important;
+
+    background: var(--green-50) !important;
+
+    border-color: #94cda5 !important;
+}
 
 #product-details-page .pdp-hero {
     display: grid !important;
@@ -1203,31 +727,36 @@ const pageStyles = `
 
     align-items: center !important;
 
-    gap: 20px !important;
+    gap: 18px !important;
 
-    padding: 19px 21px !important;
+    padding: 20px !important;
 
     background:
         linear-gradient(
             135deg,
             #ffffff 0%,
-            #ffffff 65%,
-            #f0faf3 100%
+            #ffffff 68%,
+            #effaf2 100%
         ) !important;
 
     border:
         1px solid
-        var(--pdp-border) !important;
+        var(--border) !important;
 
     border-left:
         5px solid
-        var(--pdp-green-700) !important;
+        var(--green-700) !important;
 
     border-radius: 14px !important;
 
     box-shadow:
         0 1px 3px
-        rgba(16, 24, 40, 0.06) !important;
+        rgba(
+            16,
+            24,
+            40,
+            0.06
+        ) !important;
 }
 
 #product-details-page .pdp-hero-main {
@@ -1243,10 +772,10 @@ const pageStyles = `
 #product-details-page .pdp-product-icon {
     display: grid !important;
 
-    width: 54px !important;
-    height: 54px !important;
+    width: 56px !important;
+    height: 56px !important;
 
-    min-width: 54px !important;
+    min-width: 56px !important;
 
     place-items: center !important;
 
@@ -1255,79 +784,58 @@ const pageStyles = `
     background:
         linear-gradient(
             145deg,
-            var(--pdp-green-950),
-            var(--pdp-green-700)
+            var(--green-950),
+            var(--green-700)
         ) !important;
 
     border-radius: 12px !important;
 }
 
-#product-details-page .pdp-product-icon svg {
-    width: 25px !important;
-    height: 25px !important;
-}
+#product-details-page .pdp-title {
+    color: var(--text) !important;
 
-#product-details-page .pdp-hero-copy {
-    min-width: 0 !important;
+    font-size: 27px !important;
+    font-weight: 900 !important;
+
+    line-height: 1.2 !important;
 }
 
 #product-details-page .pdp-eyebrow {
     display: block !important;
 
-    margin-bottom: 2px !important;
-
-    color: var(--pdp-green-700) !important;
+    color: var(--green-700) !important;
 
     font-size: 11px !important;
-    font-weight: 800 !important;
-
-    letter-spacing: 0.05em !important;
+    font-weight: 850 !important;
 
     text-transform: uppercase !important;
 }
 
-#product-details-page .pdp-title {
-    overflow: hidden !important;
-
-    color: var(--pdp-text) !important;
-
-    font-size: 25px !important;
-    font-weight: 850 !important;
-
-    line-height: 1.2 !important;
-
-    letter-spacing: -0.02em !important;
-
-    text-overflow: ellipsis !important;
-
-    white-space: nowrap !important;
-}
-
-#product-details-page .pdp-meta-list {
+#product-details-page .pdp-meta {
     display: flex !important;
 
     flex-wrap: wrap !important;
 
-    gap: 6px !important;
+    gap: 7px !important;
 
-    margin-top: 7px !important;
+    margin-top: 8px !important;
 }
 
-#product-details-page .pdp-meta-chip {
+#product-details-page .pdp-chip {
     display: inline-flex !important;
 
-    min-height: 27px !important;
+    min-height: 29px !important;
 
     align-items: center !important;
 
     gap: 5px !important;
 
-    padding: 4px 8px !important;
+    padding: 4px 9px !important;
 
-    color: var(--pdp-text-2) !important;
+    color: var(--text-2) !important;
 
-    font-size: 11px !important;
-    font-weight: 650 !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
 
     background: #ffffff !important;
 
@@ -1338,54 +846,49 @@ const pageStyles = `
     border-radius: 999px !important;
 }
 
-#product-details-page .pdp-meta-chip svg {
-    width: 13px !important;
-    height: 13px !important;
+#product-details-page .pdp-chip svg {
+    width: 14px !important;
+    height: 14px !important;
 
-    color: var(--pdp-green-700) !important;
+    color: var(--green-700) !important;
 }
 
-#product-details-page .pdp-product-status {
+#product-details-page .pdp-active,
+#product-details-page .pdp-inactive {
     display: inline-flex !important;
 
-    min-height: 35px !important;
+    min-height: 36px !important;
 
     align-items: center !important;
     justify-content: center !important;
 
-    padding: 6px 10px !important;
+    padding: 6px 11px !important;
 
     font-size: 11px !important;
-    font-weight: 800 !important;
-
-    white-space: nowrap !important;
+    font-weight: 850 !important;
 
     border-radius: 999px !important;
 }
 
-#product-details-page .pdp-product-status.active {
-    color: var(--pdp-green-900) !important;
+#product-details-page .pdp-active {
+    color: var(--green-900) !important;
 
-    background: var(--pdp-green-50) !important;
+    background: var(--green-50) !important;
 
     border:
         1px solid
         #b8dfc3 !important;
 }
 
-#product-details-page .pdp-product-status.inactive {
-    color: var(--pdp-amber-800) !important;
+#product-details-page .pdp-inactive {
+    color: var(--amber-800) !important;
 
-    background: var(--pdp-amber-50) !important;
+    background: var(--amber-50) !important;
 
     border:
         1px solid
         #efd696 !important;
 }
-
-/* =========================================================
-   SUMMARY
-   ========================================================= */
 
 #product-details-page .pdp-summary-grid {
     display: grid !important;
@@ -1404,33 +907,28 @@ const pageStyles = `
 
     display: flex !important;
 
-    min-width: 0 !important;
-    min-height: 96px !important;
+    min-height: 100px !important;
 
     flex-direction: column !important;
     justify-content: center !important;
 
-    gap: 3px !important;
+    gap: 4px !important;
 
     padding:
-        13px
         14px
-        13px
-        18px !important;
-
-    overflow: hidden !important;
+        15px
+        14px
+        19px !important;
 
     background: #ffffff !important;
 
     border:
         1px solid
-        var(--pdp-border) !important;
+        var(--border) !important;
 
     border-radius: 10px !important;
 
-    box-shadow:
-        0 1px 2px
-        rgba(16, 24, 40, 0.04) !important;
+    overflow: hidden !important;
 }
 
 #product-details-page .pdp-summary-card::before {
@@ -1444,52 +942,54 @@ const pageStyles = `
 
     width: 4px !important;
 
-    content: "" !important;
+    background: var(--green-700) !important;
 
-    background: var(--pdp-green-700) !important;
+    content: "" !important;
 }
 
 #product-details-page .pdp-summary-card.blue::before {
-    background: var(--pdp-blue-700) !important;
+    background: var(--blue-700) !important;
 }
 
 #product-details-page .pdp-summary-card.amber::before {
-    background: var(--pdp-amber-700) !important;
+    background: #b54708 !important;
 }
 
 #product-details-page .pdp-summary-label {
-    color: var(--pdp-muted) !important;
+    color: var(--muted) !important;
 
-    font-size: 9px !important;
-    font-weight: 800 !important;
-
-    letter-spacing: 0.04em !important;
+    font-size: 10px !important;
+    font-weight: 850 !important;
 
     text-transform: uppercase !important;
 }
 
 #product-details-page .pdp-summary-value {
+    color: var(--green-900) !important;
+
+    font-size: 19px !important;
+    font-weight: 900 !important;
+
     overflow-wrap: anywhere !important;
-
-    color: var(--pdp-green-900) !important;
-
-    font-size: 18px !important;
-    font-weight: 850 !important;
-
-    line-height: 1.25 !important;
 }
 
 #product-details-page .pdp-summary-card.blue .pdp-summary-value {
-    color: var(--pdp-blue-700) !important;
+    color: var(--blue-700) !important;
 }
 
 #product-details-page .pdp-summary-card.amber .pdp-summary-value {
-    color: var(--pdp-amber-800) !important;
+    color: var(--amber-800) !important;
 }
 
-/* =========================================================
-   PANEL
-   ========================================================= */
+#product-details-page .pdp-two-col {
+    display: grid !important;
+
+    grid-template-columns:
+        minmax(0, 1.25fr)
+        minmax(0, 1fr) !important;
+
+    gap: 12px !important;
+}
 
 #product-details-page .pdp-panel {
     min-width: 0 !important;
@@ -1500,16 +1000,21 @@ const pageStyles = `
 
     border:
         1px solid
-        var(--pdp-border) !important;
+        var(--border) !important;
 
     border-radius: 11px !important;
 
     box-shadow:
         0 1px 3px
-        rgba(16, 24, 40, 0.05) !important;
+        rgba(
+            16,
+            24,
+            40,
+            0.05
+        ) !important;
 }
 
-#product-details-page .pdp-panel-heading {
+#product-details-page .pdp-panel-head {
     display: flex !important;
 
     align-items: flex-start !important;
@@ -1517,88 +1022,50 @@ const pageStyles = `
 
     gap: 12px !important;
 
-    padding: 14px 15px !important;
-
-    background: #ffffff !important;
+    padding: 15px 16px !important;
 
     border-bottom:
         1px solid
-        var(--pdp-border-soft) !important;
+        var(--border-soft) !important;
 }
 
 #product-details-page .pdp-panel-title {
-    color: var(--pdp-text) !important;
+    color: var(--text) !important;
 
-    font-size: 16px !important;
-    font-weight: 800 !important;
+    font-size: 17px !important;
+    font-weight: 850 !important;
 }
 
-#product-details-page .pdp-panel-description {
+#product-details-page .pdp-panel-desc {
     margin-top: 3px !important;
 
-    color: var(--pdp-muted) !important;
+    color: var(--muted) !important;
 
-    font-size: 11px !important;
+    font-size: 12px !important;
 }
 
-#product-details-page .pdp-panel-badges {
-    display: flex !important;
-
-    align-items: center !important;
-
-    flex-wrap: wrap !important;
-
-    gap: 6px !important;
-}
-
-#product-details-page .pdp-count-badge {
+#product-details-page .pdp-badge {
     display: inline-flex !important;
 
-    min-height: 28px !important;
+    min-height: 29px !important;
 
     align-items: center !important;
     justify-content: center !important;
 
-    padding: 4px 8px !important;
+    padding: 4px 9px !important;
 
-    color: var(--pdp-green-900) !important;
+    color: var(--green-900) !important;
 
     font-size: 10px !important;
-    font-weight: 800 !important;
+    font-weight: 850 !important;
 
-    white-space: nowrap !important;
-
-    background: var(--pdp-green-50) !important;
+    background: var(--green-50) !important;
 
     border:
         1px solid
         #b8dfc3 !important;
 
     border-radius: 999px !important;
-}
-
-#product-details-page .pdp-count-badge.blue {
-    color: var(--pdp-blue-700) !important;
-
-    background: var(--pdp-blue-50) !important;
-
-    border-color: #bddaff !important;
-}
-
-/* =========================================================
-   PRODUCT INFO + STOCK OVERVIEW
-   ========================================================= */
-
-#product-details-page .pdp-upper-info-grid {
-    display: grid !important;
-
-    grid-template-columns:
-        minmax(0, 1.3fr)
-        minmax(0, 1fr) !important;
-
-    align-items: stretch !important;
-
-    gap: 12px !important;
 }
 
 #product-details-page .pdp-info-grid {
@@ -1612,49 +1079,42 @@ const pageStyles = `
 
     gap: 1px !important;
 
-    background: var(--pdp-border-soft) !important;
+    background: var(--border-soft) !important;
 }
 
-#product-details-page .pdp-info-item {
+#product-details-page .pdp-info {
     display: flex !important;
 
-    min-width: 0 !important;
-    min-height: 65px !important;
+    min-height: 72px !important;
 
     flex-direction: column !important;
     justify-content: center !important;
 
-    gap: 3px !important;
+    gap: 4px !important;
 
-    padding: 10px 11px !important;
+    padding: 11px 12px !important;
 
     background: #ffffff !important;
 }
 
-#product-details-page .pdp-info-label {
-    color: var(--pdp-muted) !important;
+#product-details-page .pdp-info span,
+#product-details-page .pdp-overview span {
+    color: var(--muted) !important;
 
-    font-size: 8px !important;
-    font-weight: 800 !important;
-
-    letter-spacing: 0.04em !important;
+    font-size: 9px !important;
+    font-weight: 850 !important;
 
     text-transform: uppercase !important;
 }
 
-#product-details-page .pdp-info-value {
-    overflow: hidden !important;
+#product-details-page .pdp-info strong,
+#product-details-page .pdp-overview strong {
+    color: var(--text-2) !important;
 
-    color: var(--pdp-text-2) !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
 
-    font-size: 11px !important;
-    font-weight: 750 !important;
-
-    line-height: 1.35 !important;
-
-    text-overflow: ellipsis !important;
-
-    white-space: nowrap !important;
+    overflow-wrap: anywhere !important;
 }
 
 #product-details-page .pdp-overview-grid {
@@ -1668,261 +1128,441 @@ const pageStyles = `
 
     gap: 8px !important;
 
-    padding: 11px !important;
+    padding: 12px !important;
 }
 
-#product-details-page .pdp-overview-card {
+#product-details-page .pdp-overview {
     display: flex !important;
 
-    min-width: 0 !important;
-    min-height: 66px !important;
+    min-height: 70px !important;
 
     flex-direction: column !important;
     justify-content: center !important;
 
-    gap: 3px !important;
+    gap: 4px !important;
 
-    padding: 9px 10px !important;
+    padding: 10px 11px !important;
 
-    background: var(--pdp-soft) !important;
+    background: #f8faf9 !important;
 
     border:
         1px solid
-        var(--pdp-border-soft) !important;
+        var(--border-soft) !important;
 
     border-radius: 8px !important;
 }
 
-#product-details-page .pdp-overview-card.highlight {
-    background: var(--pdp-green-50) !important;
+#product-details-page .pdp-overview.highlight {
+    background: var(--green-50) !important;
 
     border-color: #b8dfc3 !important;
 }
 
-#product-details-page .pdp-overview-card span {
-    color: var(--pdp-muted) !important;
-
-    font-size: 9px !important;
-    font-weight: 700 !important;
+#product-details-page .pdp-overview.highlight strong {
+    color: var(--green-900) !important;
 }
 
-#product-details-page .pdp-overview-card strong {
-    overflow-wrap: anywhere !important;
-
-    color: var(--pdp-text) !important;
-
-    font-size: 12px !important;
-    font-weight: 850 !important;
-}
-
-#product-details-page .pdp-overview-card.highlight strong {
-    color: var(--pdp-green-900) !important;
-
-    font-size: 13px !important;
-}
-
-/* =========================================================
-   STOCK LIST
-   ========================================================= */
-
-#product-details-page .pdp-stock-list {
+#product-details-page .pdp-variant-wrap,
+#product-details-page .pdp-stock-wrap {
     padding: 12px !important;
 
-    background: var(--pdp-page) !important;
+    background: var(--page) !important;
 }
 
-#product-details-page .pdp-stock-grid {
+#product-details-page .pdp-variant-grid {
     display: grid !important;
 
     grid-template-columns:
-        minmax(0, 1.35fr)
-        minmax(0, 0.75fr)
-        minmax(0, 0.9fr)
-        minmax(0, 0.9fr)
-        minmax(0, 0.78fr)
-        minmax(0, 0.92fr)
-        minmax(0, 1.05fr)
-        112px !important;
+        repeat(
+            auto-fit,
+            minmax(
+                260px,
+                1fr
+            )
+        ) !important;
+
+    gap: 11px !important;
+}
+
+#product-details-page .pdp-variant-card {
+    display: flex !important;
+
+    min-width: 0 !important;
+
+    flex-direction: column !important;
+
+    gap: 11px !important;
+
+    padding: 14px !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        var(--border) !important;
+
+    border-radius: 10px !important;
+}
+
+#product-details-page .pdp-variant-card:hover {
+    border-color: #aacdb3 !important;
+
+    box-shadow:
+        0 3px 10px
+        rgba(
+            16,
+            24,
+            40,
+            0.07
+        ) !important;
+}
+
+#product-details-page .pdp-variant-head {
+    display: flex !important;
+
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+
+    gap: 10px !important;
+}
+
+#product-details-page .pdp-variant-title {
+    color: var(--text) !important;
+
+    font-size: 17px !important;
+    font-weight: 900 !important;
+}
+
+#product-details-page .pdp-variant-sub {
+    display: block !important;
+
+    margin-top: 3px !important;
+
+    color: var(--muted) !important;
+
+    font-size: 11px !important;
+    font-weight: 700 !important;
+}
+
+#product-details-page .pdp-variant-status {
+    display: inline-flex !important;
+
+    min-height: 26px !important;
 
     align-items: center !important;
 
-    column-gap: 10px !important;
-}
-
-#product-details-page .pdp-stock-header {
-    min-height: 42px !important;
-
-    padding: 8px 12px !important;
-
-    color: var(--pdp-text-2) !important;
+    padding: 3px 8px !important;
 
     font-size: 9px !important;
-    font-weight: 800 !important;
+    font-weight: 850 !important;
 
-    letter-spacing: 0.035em !important;
+    border-radius: 999px !important;
+}
 
+#product-details-page .pdp-variant-status.active {
+    color: var(--green-900) !important;
+
+    background: var(--green-50) !important;
+
+    border:
+        1px solid
+        #b8dfc3 !important;
+}
+
+#product-details-page .pdp-variant-status.inactive {
+    color: var(--muted) !important;
+
+    background: #f2f4f7 !important;
+
+    border:
+        1px solid
+        #d0d5dd !important;
+}
+
+#product-details-page .pdp-variant-stock-grid {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            2,
+            minmax(0, 1fr)
+        ) !important;
+
+    gap: 8px !important;
+}
+
+#product-details-page .pdp-variant-stock {
+    display: flex !important;
+
+    min-height: 72px !important;
+
+    flex-direction: column !important;
+    justify-content: center !important;
+
+    gap: 4px !important;
+
+    padding: 10px !important;
+
+    background: #f8faf9 !important;
+
+    border:
+        1px solid
+        var(--border-soft) !important;
+
+    border-radius: 8px !important;
+}
+
+#product-details-page .pdp-variant-stock.highlight {
+    background: var(--green-50) !important;
+
+    border-color: #b8dfc3 !important;
+}
+
+#product-details-page .pdp-variant-stock span {
+    color: var(--muted) !important;
+
+    font-size: 9px !important;
+    font-weight: 850 !important;
+
+    text-transform: uppercase !important;
+}
+
+#product-details-page .pdp-variant-stock strong {
+    color: var(--text) !important;
+
+    font-size: 14px !important;
+    font-weight: 900 !important;
+
+    overflow-wrap: anywhere !important;
+}
+
+#product-details-page .pdp-variant-stock.highlight strong {
+    color: var(--green-900) !important;
+}
+
+#product-details-page .pdp-variant-button {
+    display: inline-flex !important;
+
+    width: 100% !important;
+    min-height: 44px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    gap: 7px !important;
+
+    padding: 8px 11px !important;
+
+    color: #ffffff !important;
+
+    font-size: 12px !important;
+    font-weight: 850 !important;
+
+    background: var(--blue-700) !important;
+
+    border:
+        1px solid
+        var(--blue-700) !important;
+
+    border-radius: 8px !important;
+
+    cursor: pointer !important;
+}
+
+#product-details-page .pdp-variant-button:hover {
+    background: var(--blue-800) !important;
+
+    border-color: var(--blue-800) !important;
+}
+
+#product-details-page .pdp-variant-meta {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            2,
+            minmax(0, 1fr)
+        ) !important;
+
+    gap: 8px !important;
+}
+
+#product-details-page .pdp-variant-meta div {
+    min-width: 0 !important;
+}
+
+#product-details-page .pdp-variant-meta span {
+    display: block !important;
+
+    color: var(--muted) !important;
+
+    font-size: 9px !important;
+    font-weight: 850 !important;
+
+    text-transform: uppercase !important;
+}
+
+#product-details-page .pdp-variant-meta strong {
+    display: block !important;
+
+    margin-top: 2px !important;
+
+    overflow: hidden !important;
+
+    color: var(--text-2) !important;
+
+    font-size: 10px !important;
+    font-weight: 750 !important;
+
+    text-overflow: ellipsis !important;
+
+    white-space: nowrap !important;
+}
+
+#product-details-page .pdp-variant-footer {
+    display: flex !important;
+
+    align-items: center !important;
+    justify-content: space-between !important;
+
+    gap: 8px !important;
+
+    margin-top: auto !important;
+
+    padding-top: 8px !important;
+
+    border-top:
+        1px solid
+        var(--border-soft) !important;
+
+    color: var(--muted) !important;
+
+    font-size: 10px !important;
+    font-weight: 750 !important;
+}
+
+#product-details-page .pdp-stock-table-wrap {
+    width: 100% !important;
+
+    overflow-x: auto !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        #d7e0d9 !important;
+
+    border-radius: 9px !important;
+}
+
+#product-details-page .pdp-stock-table {
+    width: 100% !important;
+
+    min-width: 1050px !important;
+
+    border-collapse: collapse !important;
+}
+
+#product-details-page .pdp-stock-table th {
+    padding: 10px 11px !important;
+
+    color: var(--text-2) !important;
+
+    font-size: 9px !important;
+    font-weight: 850 !important;
+
+    text-align: left !important;
     text-transform: uppercase !important;
 
     background: #eef3ef !important;
 
-    border:
-        1px solid
-        #d7e0d9 !important;
-
-    border-radius:
-        8px
-        8px
-        0
-        0 !important;
-}
-
-#product-details-page .pdp-stock-rows {
-    overflow: hidden !important;
-
-    background: #ffffff !important;
-
-    border:
-        1px solid
-        #d7e0d9 !important;
-
-    border-top: 0 !important;
-
-    border-radius:
-        0
-        0
-        8px
-        8px !important;
-}
-
-#product-details-page .pdp-stock-row {
-    min-height: 66px !important;
-
-    padding: 9px 12px !important;
-
-    background: #ffffff !important;
-
     border-bottom:
         1px solid
-        #e7ece8 !important;
-
-    transition:
-        background
-        120ms ease !important;
+        #d7e0d9 !important;
 }
 
-#product-details-page .pdp-stock-row:last-child {
-    border-bottom: 0 !important;
-}
+#product-details-page .pdp-stock-table td {
+    padding: 11px !important;
 
-#product-details-page .pdp-stock-row:hover {
-    background: #f9fcfa !important;
-}
-
-#product-details-page .pdp-stock-cell {
-    min-width: 0 !important;
-}
-
-#product-details-page .pdp-cell-label {
-    display: none !important;
-
-    color: var(--pdp-muted) !important;
-
-    font-size: 8px !important;
-    font-weight: 800 !important;
-
-    text-transform: uppercase !important;
-}
-
-#product-details-page .pdp-cell-text {
-    display: block !important;
-
-    overflow: hidden !important;
-
-    color: var(--pdp-text-2) !important;
+    color: var(--text-2) !important;
 
     font-size: 11px !important;
     font-weight: 700 !important;
 
-    line-height: 1.35 !important;
+    vertical-align: middle !important;
 
-    text-overflow: ellipsis !important;
-
-    white-space: nowrap !important;
+    border-bottom:
+        1px solid
+        #e7ece8 !important;
 }
 
-#product-details-page .pdp-reference {
-    display: block !important;
-
-    overflow: hidden !important;
-
-    color: var(--pdp-text) !important;
-
-    font-size: 11px !important;
-    font-weight: 850 !important;
-
-    text-overflow: ellipsis !important;
-
-    white-space: nowrap !important;
-}
-
-#product-details-page .pdp-reference-sub {
-    display: block !important;
-
-    margin-top: 2px !important;
-
-    overflow: hidden !important;
-
-    color: var(--pdp-muted) !important;
-
-    font-size: 9px !important;
-    font-weight: 600 !important;
-
-    text-overflow: ellipsis !important;
-
-    white-space: nowrap !important;
+#product-details-page .pdp-stock-table tbody tr:last-child td {
+    border-bottom: 0 !important;
 }
 
 #product-details-page .pdp-cost {
-    color: var(--pdp-blue-700) !important;
+    color: var(--blue-700) !important;
 
-    font-size: 11px !important;
-    font-weight: 800 !important;
+    font-weight: 900 !important;
 }
 
-#product-details-page .pdp-selling {
-    color: var(--pdp-green-900) !important;
+#product-details-page .pdp-selling,
+#product-details-page .pdp-stock-qty {
+    color: var(--green-900) !important;
 
-    font-size: 12px !important;
-    font-weight: 850 !important;
+    font-weight: 900 !important;
 }
 
-#product-details-page .pdp-stock-quantity {
-    color: var(--pdp-green-900) !important;
-
-    font-size: 12px !important;
-    font-weight: 850 !important;
-}
-
-#product-details-page .pdp-price-unit {
+#product-details-page .pdp-sub {
     display: block !important;
 
     margin-top: 2px !important;
 
-    color: var(--pdp-muted) !important;
+    color: var(--muted) !important;
 
-    font-size: 8px !important;
+    font-size: 9px !important;
     font-weight: 650 !important;
 }
 
-/* =========================================================
-   STATUS
-   ========================================================= */
-
-#product-details-page .pdp-status,
-#product-batch-details-modal .pdp-status {
+#product-details-page .pdp-view {
     display: inline-flex !important;
 
-    min-height: 25px !important;
+    min-height: 34px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    gap: 5px !important;
+
+    padding: 5px 9px !important;
+
+    color: var(--blue-700) !important;
+
+    font-size: 10px !important;
+    font-weight: 850 !important;
+
+    background: var(--blue-50) !important;
+
+    border:
+        1px solid
+        #bddaff !important;
+
+    border-radius: 7px !important;
+
+    cursor: pointer !important;
+}
+
+#product-details-page .pdp-view:hover {
+    color: #ffffff !important;
+
+    background: var(--blue-700) !important;
+}
+
+#product-details-page .pdp-status,
+#product-detail-modal .pdp-status {
+    display: inline-flex !important;
+
+    min-height: 26px !important;
 
     align-items: center !important;
     justify-content: center !important;
@@ -1930,18 +1570,18 @@ const pageStyles = `
     padding: 3px 7px !important;
 
     font-size: 9px !important;
-    font-weight: 800 !important;
-
-    white-space: nowrap !important;
+    font-weight: 850 !important;
 
     border-radius: 999px !important;
+
+    white-space: nowrap !important;
 }
 
 #product-details-page .pdp-status-available,
-#product-batch-details-modal .pdp-status-available {
-    color: var(--pdp-green-900) !important;
+#product-detail-modal .pdp-status-available {
+    color: var(--green-900) !important;
 
-    background: var(--pdp-green-50) !important;
+    background: var(--green-50) !important;
 
     border:
         1px solid
@@ -1949,10 +1589,10 @@ const pageStyles = `
 }
 
 #product-details-page .pdp-status-expiring_soon,
-#product-batch-details-modal .pdp-status-expiring_soon {
-    color: var(--pdp-amber-800) !important;
+#product-detail-modal .pdp-status-expiring_soon {
+    color: var(--amber-800) !important;
 
-    background: var(--pdp-amber-50) !important;
+    background: var(--amber-50) !important;
 
     border:
         1px solid
@@ -1961,20 +1601,16 @@ const pageStyles = `
 
 #product-details-page .pdp-status-expired,
 #product-details-page .pdp-status-out_of_stock,
-#product-batch-details-modal .pdp-status-expired,
-#product-batch-details-modal .pdp-status-out_of_stock {
-    color: var(--pdp-red-700) !important;
+#product-detail-modal .pdp-status-expired,
+#product-detail-modal .pdp-status-out_of_stock {
+    color: var(--red-700) !important;
 
-    background: var(--pdp-red-50) !important;
+    background: var(--red-50) !important;
 
     border:
         1px solid
         #efbbb6 !important;
 }
-
-/* =========================================================
-   AUDIT
-   ========================================================= */
 
 #product-details-page .pdp-audit {
     display: grid !important;
@@ -1989,16 +1625,16 @@ const pageStyles = `
 
     overflow: hidden !important;
 
-    background: var(--pdp-border) !important;
+    background: var(--border) !important;
 
     border:
         1px solid
-        var(--pdp-border) !important;
+        var(--border) !important;
 
     border-radius: 9px !important;
 }
 
-#product-details-page .pdp-audit-item {
+#product-details-page .pdp-audit div {
     display: flex !important;
 
     align-items: center !important;
@@ -2006,32 +1642,24 @@ const pageStyles = `
 
     gap: 10px !important;
 
-    min-width: 0 !important;
-
-    padding: 9px 11px !important;
+    padding: 10px 12px !important;
 
     background: #ffffff !important;
 }
 
-#product-details-page .pdp-audit-item span {
-    color: var(--pdp-muted) !important;
+#product-details-page .pdp-audit span {
+    color: var(--muted) !important;
 
-    font-size: 9px !important;
+    font-size: 10px !important;
     font-weight: 700 !important;
 }
 
-#product-details-page .pdp-audit-item strong {
-    color: var(--pdp-text-2) !important;
+#product-details-page .pdp-audit strong {
+    color: var(--text-2) !important;
 
-    font-size: 9px !important;
-    font-weight: 750 !important;
-
-    text-align: right !important;
+    font-size: 10px !important;
+    font-weight: 800 !important;
 }
-
-/* =========================================================
-   STATE
-   ========================================================= */
 
 #product-details-page .pdp-state {
     display: flex !important;
@@ -2043,11 +1671,11 @@ const pageStyles = `
 
     flex-direction: column !important;
 
-    gap: 8px !important;
+    gap: 9px !important;
 
     padding: 28px !important;
 
-    color: var(--pdp-muted) !important;
+    color: var(--muted) !important;
 
     text-align: center !important;
 
@@ -2055,85 +1683,54 @@ const pageStyles = `
 
     border:
         1px solid
-        var(--pdp-border) !important;
+        var(--border) !important;
 
     border-radius: 12px !important;
 }
 
 #product-details-page .pdp-state.error {
-    color: var(--pdp-red-700) !important;
+    color: var(--red-700) !important;
 
-    background: var(--pdp-red-50) !important;
+    background: var(--red-50) !important;
 
     border-color: #efbbb6 !important;
 }
 
-#product-details-page .pdp-state-icon {
-    display: grid !important;
-
-    width: 50px !important;
-    height: 50px !important;
-
-    place-items: center !important;
-
-    color: var(--pdp-green-700) !important;
-
-    background: var(--pdp-green-50) !important;
-
-    border:
-        1px solid
-        #b8dfc3 !important;
-
-    border-radius: 12px !important;
+#product-details-page .pdp-state strong {
+    font-size: 18px !important;
+    font-weight: 850 !important;
 }
 
-#product-details-page .pdp-state-icon svg {
-    width: 24px !important;
-    height: 24px !important;
-}
+#product-details-page .pdp-state span {
+    max-width: 500px !important;
 
-#product-details-page .pdp-state-title {
-    color: inherit !important;
-
-    font-size: 17px !important;
-    font-weight: 800 !important;
-}
-
-#product-details-page .pdp-state-message {
-    max-width: 470px !important;
-
-    color: inherit !important;
-
-    font-size: 12px !important;
+    font-size: 13px !important;
 }
 
 #product-details-page .pdp-state-actions {
     display: flex !important;
 
-    align-items: center !important;
-    justify-content: center !important;
-
     gap: 8px !important;
 
-    margin-top: 4px !important;
+    margin-top: 5px !important;
 }
 
 #product-details-page .pdp-spinner {
-    width: 38px !important;
-    height: 38px !important;
+    width: 40px !important;
+    height: 40px !important;
 
     border:
         4px solid
-        var(--pdp-green-100) !important;
+        var(--green-100) !important;
 
     border-top-color:
-        var(--pdp-green-700) !important;
+        var(--green-700) !important;
 
     border-radius: 50% !important;
 
     animation:
         pdp-spin
-        700ms
+        0.7s
         linear
         infinite !important;
 }
@@ -2144,11 +1741,7 @@ const pageStyles = `
     }
 }
 
-/* =========================================================
-   MODAL
-   ========================================================= */
-
-#product-batch-details-modal {
+#product-detail-modal {
     position: fixed !important;
 
     inset: 0 !important;
@@ -2173,15 +1766,16 @@ const pageStyles = `
             0.72
         ) !important;
 
-    backdrop-filter: blur(5px) !important;
+    backdrop-filter:
+        blur(5px) !important;
 }
 
-#product-batch-details-modal .pdm-dialog {
+#product-detail-modal .pdm-dialog {
     display: flex !important;
 
     width:
         min(
-            960px,
+            1050px,
             100%
         ) !important;
 
@@ -2212,7 +1806,7 @@ const pageStyles = `
         ) !important;
 }
 
-#product-batch-details-modal .pdm-header {
+#product-detail-modal .pdm-header {
     display: flex !important;
 
     flex: 0 0 auto !important;
@@ -2222,20 +1816,20 @@ const pageStyles = `
 
     gap: 18px !important;
 
-    padding: 17px 19px !important;
+    padding: 18px 20px !important;
 
     color: #ffffff !important;
 
     background:
         linear-gradient(
             135deg,
-            #052e16,
-            #166534,
-            #15803d
+            var(--green-950),
+            var(--green-800),
+            var(--green-700)
         ) !important;
 }
 
-#product-batch-details-modal .pdm-header-main {
+#product-detail-modal .pdm-header-main {
     display: flex !important;
 
     min-width: 0 !important;
@@ -2245,33 +1839,24 @@ const pageStyles = `
     gap: 12px !important;
 }
 
-#product-batch-details-modal .pdm-header-icon {
+#product-detail-modal .pdm-icon {
     display: grid !important;
 
-    width: 43px !important;
-    height: 43px !important;
+    width: 44px !important;
+    height: 44px !important;
 
-    min-width: 43px !important;
+    min-width: 44px !important;
 
     place-items: center !important;
 
-    color: var(--pdp-green-900) !important;
+    color: var(--green-900) !important;
 
     background: #ffffff !important;
 
     border-radius: 10px !important;
 }
 
-#product-batch-details-modal .pdm-header-icon svg {
-    width: 21px !important;
-    height: 21px !important;
-}
-
-#product-batch-details-modal .pdm-header-copy {
-    min-width: 0 !important;
-}
-
-#product-batch-details-modal .pdm-kicker {
+#product-detail-modal .pdm-kicker {
     display: block !important;
 
     color:
@@ -2283,58 +1868,44 @@ const pageStyles = `
         ) !important;
 
     font-size: 10px !important;
-    font-weight: 800 !important;
-
-    letter-spacing: 0.05em !important;
+    font-weight: 850 !important;
 
     text-transform: uppercase !important;
 }
 
-#product-batch-details-modal .pdm-title {
+#product-detail-modal .pdm-title {
     margin-top: 2px !important;
-
-    overflow: hidden !important;
 
     color: #ffffff !important;
 
-    font-size: 19px !important;
-    font-weight: 850 !important;
-
-    text-overflow: ellipsis !important;
-
-    white-space: nowrap !important;
+    font-size: 21px !important;
+    font-weight: 900 !important;
 }
 
-#product-batch-details-modal .pdm-product-name {
+#product-detail-modal .pdm-subtitle {
     display: block !important;
 
     margin-top: 2px !important;
-
-    overflow: hidden !important;
 
     color:
         rgba(
             255,
             255,
             255,
-            0.78
+            0.8
         ) !important;
 
-    font-size: 11px !important;
-    font-weight: 600 !important;
-
-    text-overflow: ellipsis !important;
-
-    white-space: nowrap !important;
+    font-size: 12px !important;
+    font-weight: 650 !important;
 }
 
-#product-batch-details-modal .pdm-close {
+#product-detail-modal .pdm-close {
     display: grid !important;
 
-    width: 40px !important;
-    height: 40px !important;
+    width: 42px !important;
+    height: 42px !important;
 
-    min-width: 40px !important;
+    min-width: 42px !important;
 
     place-items: center !important;
 
@@ -2356,7 +1927,7 @@ const pageStyles = `
             255,
             255,
             255,
-            0.24
+            0.28
         ) !important;
 
     border-radius: 9px !important;
@@ -2364,12 +1935,7 @@ const pageStyles = `
     cursor: pointer !important;
 }
 
-#product-batch-details-modal .pdm-close svg {
-    width: 18px !important;
-    height: 18px !important;
-}
-
-#product-batch-details-modal .pdm-body {
+#product-detail-modal .pdm-body {
     min-height: 0 !important;
 
     flex: 1 !important;
@@ -2378,10 +1944,10 @@ const pageStyles = `
 
     overflow-y: auto !important;
 
-    background: #f4f7f5 !important;
+    background: var(--page) !important;
 }
 
-#product-batch-details-modal .pdm-summary {
+#product-detail-modal .pdm-summary {
     display: grid !important;
 
     grid-template-columns:
@@ -2395,11 +1961,10 @@ const pageStyles = `
     margin-bottom: 13px !important;
 }
 
-#product-batch-details-modal .pdm-summary-card {
+#product-detail-modal .pdm-summary-card {
     display: flex !important;
 
-    min-width: 0 !important;
-    min-height: 81px !important;
+    min-height: 86px !important;
 
     flex-direction: column !important;
     justify-content: center !important;
@@ -2417,52 +1982,52 @@ const pageStyles = `
     border-radius: 9px !important;
 }
 
-#product-batch-details-modal .pdm-summary-card.green {
-    background: var(--pdp-green-50) !important;
+#product-detail-modal .pdm-summary-card.green {
+    background: var(--green-50) !important;
 
     border-color: #b8dfc3 !important;
 }
 
-#product-batch-details-modal .pdm-summary-card.blue {
-    background: var(--pdp-blue-50) !important;
+#product-detail-modal .pdm-summary-card.blue {
+    background: var(--blue-50) !important;
 
     border-color: #bddaff !important;
 }
 
-#product-batch-details-modal .pdm-summary-label {
-    color: var(--pdp-muted) !important;
+#product-detail-modal .pdm-summary-card span {
+    color: var(--muted) !important;
 
-    font-size: 8px !important;
-    font-weight: 800 !important;
+    font-size: 9px !important;
+    font-weight: 850 !important;
 
     text-transform: uppercase !important;
 }
 
-#product-batch-details-modal .pdm-summary-value {
-    overflow-wrap: anywhere !important;
-
-    color: var(--pdp-text) !important;
+#product-detail-modal .pdm-summary-card strong {
+    color: var(--text) !important;
 
     font-size: 15px !important;
-    font-weight: 850 !important;
+    font-weight: 900 !important;
+
+    overflow-wrap: anywhere !important;
 }
 
-#product-batch-details-modal .pdm-summary-card.green .pdm-summary-value {
-    color: var(--pdp-green-900) !important;
+#product-detail-modal .pdm-summary-card.green strong {
+    color: var(--green-900) !important;
 }
 
-#product-batch-details-modal .pdm-summary-card.blue .pdm-summary-value {
-    color: var(--pdp-blue-700) !important;
+#product-detail-modal .pdm-summary-card.blue strong {
+    color: var(--blue-700) !important;
 }
 
-#product-batch-details-modal .pdm-summary-help {
-    color: var(--pdp-muted) !important;
+#product-detail-modal .pdm-summary-card small {
+    color: var(--muted) !important;
 
-    font-size: 8px !important;
+    font-size: 9px !important;
     font-weight: 650 !important;
 }
 
-#product-batch-details-modal .pdm-section {
+#product-detail-modal .pdm-section {
     overflow: hidden !important;
 
     margin-top: 11px !important;
@@ -2476,14 +2041,14 @@ const pageStyles = `
     border-radius: 10px !important;
 }
 
-#product-batch-details-modal .pdm-section-header {
+#product-detail-modal .pdm-section-head {
     display: flex !important;
 
     align-items: center !important;
 
     gap: 8px !important;
 
-    padding: 10px 12px !important;
+    padding: 11px 13px !important;
 
     background: #f8faf9 !important;
 
@@ -2492,21 +2057,18 @@ const pageStyles = `
         #e3e9e4 !important;
 }
 
-#product-batch-details-modal .pdm-section-header svg {
-    width: 17px !important;
-    height: 17px !important;
-
-    color: var(--pdp-green-700) !important;
+#product-detail-modal .pdm-section-head svg {
+    color: var(--green-700) !important;
 }
 
-#product-batch-details-modal .pdm-section-title {
-    color: var(--pdp-text) !important;
+#product-detail-modal .pdm-section-head h3 {
+    color: var(--text) !important;
 
-    font-size: 12px !important;
-    font-weight: 850 !important;
+    font-size: 13px !important;
+    font-weight: 900 !important;
 }
 
-#product-batch-details-modal .pdm-detail-grid {
+#product-detail-modal .pdm-grid {
     display: grid !important;
 
     grid-template-columns:
@@ -2520,63 +2082,173 @@ const pageStyles = `
     background: #e7ece8 !important;
 }
 
-#product-batch-details-modal .pdm-detail-item {
+#product-detail-modal .pdm-item {
     display: flex !important;
 
-    min-width: 0 !important;
-    min-height: 68px !important;
+    min-height: 72px !important;
 
     flex-direction: column !important;
     justify-content: center !important;
 
-    gap: 3px !important;
+    gap: 4px !important;
 
     padding: 10px 11px !important;
 
     background: #ffffff !important;
 }
 
-#product-batch-details-modal .pdm-detail-item.wide {
-    grid-column:
-        1 / -1 !important;
-}
+#product-detail-modal .pdm-item span {
+    color: var(--muted) !important;
 
-#product-batch-details-modal .pdm-detail-label {
-    color: var(--pdp-muted) !important;
-
-    font-size: 8px !important;
-    font-weight: 800 !important;
+    font-size: 9px !important;
+    font-weight: 850 !important;
 
     text-transform: uppercase !important;
 }
 
-#product-batch-details-modal .pdm-detail-value {
-    overflow-wrap: anywhere !important;
-
-    color: var(--pdp-text-2) !important;
+#product-detail-modal .pdm-item strong {
+    color: var(--text-2) !important;
 
     font-size: 11px !important;
-    font-weight: 750 !important;
+    font-weight: 800 !important;
 
-    line-height: 1.4 !important;
+    overflow-wrap: anywhere !important;
 }
 
-#product-batch-details-modal .pdm-notes {
-    min-height: 58px !important;
+#product-detail-modal .pdm-table-wrap {
+    width: 100% !important;
 
-    padding: 11px 12px !important;
+    overflow-x: auto !important;
+}
 
-    color: var(--pdp-text-2) !important;
+#product-detail-modal .pdm-table {
+    width: 100% !important;
+
+    min-width: 900px !important;
+
+    border-collapse: collapse !important;
+}
+
+#product-detail-modal .pdm-table th {
+    padding: 10px 11px !important;
+
+    color: var(--text-2) !important;
+
+    font-size: 9px !important;
+    font-weight: 850 !important;
+
+    text-align: left !important;
+    text-transform: uppercase !important;
+
+    background: #eef3ef !important;
+
+    border-bottom:
+        1px solid
+        #d7e0d9 !important;
+}
+
+#product-detail-modal .pdm-table td {
+    padding: 11px !important;
+
+    color: var(--text-2) !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+
+    vertical-align: middle !important;
+
+    border-bottom:
+        1px solid
+        #e7ece8 !important;
+}
+
+#product-detail-modal .pdm-table tbody tr:last-child td {
+    border-bottom: 0 !important;
+}
+
+#product-detail-modal .pdm-cost {
+    color: var(--blue-700) !important;
+
+    font-weight: 900 !important;
+}
+
+#product-detail-modal .pdm-sale,
+#product-detail-modal .pdm-stock {
+    color: var(--green-900) !important;
+
+    font-weight: 900 !important;
+}
+
+#product-detail-modal .pdm-table-sub {
+    display: block !important;
+
+    margin-top: 2px !important;
+
+    color: var(--muted) !important;
+
+    font-size: 8px !important;
+    font-weight: 650 !important;
+}
+
+#product-detail-modal .pdm-row-button {
+    display: inline-flex !important;
+
+    min-height: 32px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    gap: 5px !important;
+
+    padding: 5px 8px !important;
+
+    color: var(--blue-700) !important;
+
+    font-size: 9px !important;
+    font-weight: 850 !important;
+
+    background: var(--blue-50) !important;
+
+    border:
+        1px solid
+        #bddaff !important;
+
+    border-radius: 6px !important;
+
+    cursor: pointer !important;
+}
+
+#product-detail-modal .pdm-empty {
+    display: flex !important;
+
+    min-height: 150px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    flex-direction: column !important;
+
+    gap: 7px !important;
+
+    padding: 20px !important;
+
+    color: var(--muted) !important;
+
+    text-align: center !important;
+}
+
+#product-detail-modal .pdm-notes {
+    padding: 12px !important;
+
+    color: var(--text-2) !important;
 
     font-size: 11px !important;
     font-weight: 650 !important;
 
     line-height: 1.55 !important;
-
-    background: #ffffff !important;
 }
 
-#product-batch-details-modal .pdm-footer {
+#product-detail-modal .pdm-footer {
     display: flex !important;
 
     flex: 0 0 auto !important;
@@ -2593,57 +2265,34 @@ const pageStyles = `
         #dfe6e1 !important;
 }
 
-#product-batch-details-modal .pdm-footer-button {
-    display: inline-flex !important;
+#product-detail-modal .pdm-footer button {
+    min-height: 42px !important;
 
-    min-height: 40px !important;
-
-    align-items: center !important;
-    justify-content: center !important;
-
-    padding: 8px 17px !important;
+    padding: 8px 18px !important;
 
     color: #ffffff !important;
 
     font-size: 12px !important;
-    font-weight: 800 !important;
+    font-weight: 850 !important;
 
-    background: var(--pdp-green-700) !important;
+    background: var(--green-700) !important;
 
     border:
         1px solid
-        var(--pdp-green-700) !important;
+        var(--green-700) !important;
 
     border-radius: 8px !important;
 
     cursor: pointer !important;
 }
 
-/* =========================================================
-   RESPONSIVE
-   ========================================================= */
-
-@media (max-width: 1100px) {
-    #product-details-page .pdp-upper-info-grid {
+@media (max-width: 1050px) {
+    #product-details-page .pdp-two-col {
         grid-template-columns:
             1fr !important;
     }
 
-    #product-details-page .pdp-stock-grid {
-        grid-template-columns:
-            minmax(0, 1.25fr)
-            minmax(0, 0.7fr)
-            minmax(0, 0.8fr)
-            minmax(0, 0.8fr)
-            minmax(0, 0.7fr)
-            minmax(0, 0.8fr)
-            minmax(0, 1fr)
-            100px !important;
-
-        column-gap: 7px !important;
-    }
-
-    #product-batch-details-modal .pdm-detail-grid {
+    #product-detail-modal .pdm-grid {
         grid-template-columns:
             repeat(
                 3,
@@ -2652,8 +2301,9 @@ const pageStyles = `
     }
 }
 
-@media (max-width: 900px) {
-    #product-details-page .pdp-summary-grid {
+@media (max-width: 850px) {
+    #product-details-page .pdp-summary-grid,
+    #product-detail-modal .pdm-summary {
         grid-template-columns:
             repeat(
                 2,
@@ -2661,62 +2311,7 @@ const pageStyles = `
             ) !important;
     }
 
-    #product-details-page .pdp-stock-header {
-        display: none !important;
-    }
-
-    #product-details-page .pdp-stock-rows {
-        display: grid !important;
-
-        gap: 8px !important;
-
-        padding: 8px !important;
-
-        background: transparent !important;
-
-        border: 0 !important;
-    }
-
-    #product-details-page .pdp-stock-row {
-        grid-template-columns:
-            repeat(
-                2,
-                minmax(0, 1fr)
-            ) !important;
-
-        row-gap: 10px !important;
-
-        min-height: 0 !important;
-
-        padding: 12px !important;
-
-        border:
-            1px solid
-            #d7e0d9 !important;
-
-        border-radius: 9px !important;
-    }
-
-    #product-details-page .pdp-cell-label {
-        display: block !important;
-
-        margin-bottom: 2px !important;
-    }
-
-    #product-details-page .pdp-stock-cell.action {
-        grid-column:
-            1 / -1 !important;
-    }
-
-    #product-batch-details-modal .pdm-summary {
-        grid-template-columns:
-            repeat(
-                2,
-                minmax(0, 1fr)
-            ) !important;
-    }
-
-    #product-batch-details-modal .pdm-detail-grid {
+    #product-detail-modal .pdm-grid {
         grid-template-columns:
             repeat(
                 2,
@@ -2726,7 +2321,7 @@ const pageStyles = `
 }
 
 @media (max-width: 700px) {
-    #product-details-page .pdp-top-row {
+    #product-details-page .pdp-top {
         align-items: stretch !important;
 
         flex-direction: column !important;
@@ -2736,25 +2331,13 @@ const pageStyles = `
         width: 100% !important;
     }
 
-    #product-details-page .pdp-product-id {
-        text-align: center !important;
-    }
-
     #product-details-page .pdp-hero {
         grid-template-columns:
             1fr !important;
     }
 
     #product-details-page .pdp-title {
-        white-space: normal !important;
-    }
-
-    #product-details-page .pdp-product-status {
-        width: 100% !important;
-    }
-
-    #product-details-page .pdp-panel-heading {
-        flex-direction: column !important;
+        font-size: 23px !important;
     }
 
     #product-details-page .pdp-info-grid {
@@ -2765,13 +2348,13 @@ const pageStyles = `
             ) !important;
     }
 
-    #product-batch-details-modal {
+    #product-detail-modal {
         align-items: flex-end !important;
 
         padding: 0 !important;
     }
 
-    #product-batch-details-modal .pdm-dialog {
+    #product-detail-modal .pdm-dialog {
         width: 100% !important;
 
         max-height: 94dvh !important;
@@ -2788,32 +2371,16 @@ const pageStyles = `
     #product-details-page .pdp-summary-grid,
     #product-details-page .pdp-info-grid,
     #product-details-page .pdp-overview-grid,
-    #product-details-page .pdp-stock-row {
-        grid-template-columns:
-            1fr !important;
-    }
-
-    #product-details-page .pdp-stock-cell.action {
-        grid-column: auto !important;
-    }
-
-    #product-details-page .pdp-hero-main {
-        align-items: flex-start !important;
-
-        flex-direction: column !important;
-    }
-
-    #product-batch-details-modal .pdm-summary,
-    #product-batch-details-modal .pdm-detail-grid {
+    #product-details-page .pdp-variant-stock-grid,
+    #product-details-page .pdp-variant-meta,
+    #product-detail-modal .pdm-summary,
+    #product-detail-modal .pdm-grid,
+    #product-details-page .pdp-audit {
         grid-template-columns:
             1fr !important;
     }
 }
 `;
-
-/* =========================================================
-   COMPONENT
-   ========================================================= */
 
 export default function ProductDetailsPage() {
     const navigate =
@@ -2872,14 +2439,21 @@ export default function ProductDetailsPage() {
             null,
         );
 
+    const [
+        selectedVariant,
+        setSelectedVariant,
+    ] =
+        useState<
+            ProductVariant
+            | null
+        >(
+            null,
+        );
+
     const numericProductId =
         Number(
             productId,
         );
-
-    /* =====================================================
-       LOAD PRODUCT
-       ===================================================== */
 
     const loadProduct =
         useCallback(
@@ -2923,6 +2497,10 @@ export default function ProductDetailsPage() {
                 );
 
                 setSelectedBatch(
+                    null,
+                );
+
+                setSelectedVariant(
                     null,
                 );
 
@@ -2987,13 +2565,12 @@ export default function ProductDetailsPage() {
         ],
     );
 
-    /* =====================================================
-       MODAL ESCAPE + SCROLL LOCK
-       ===================================================== */
-
     useEffect(
         () => {
-            if (!selectedBatch) {
+            if (
+                !selectedBatch
+                && !selectedVariant
+            ) {
                 return;
             }
 
@@ -3017,6 +2594,10 @@ export default function ProductDetailsPage() {
                         setSelectedBatch(
                             null,
                         );
+
+                        setSelectedVariant(
+                            null,
+                        );
                     }
                 };
 
@@ -3037,38 +2618,49 @@ export default function ProductDetailsPage() {
         },
         [
             selectedBatch,
+            selectedVariant,
         ],
     );
 
-    /* =====================================================
-       FLATTEN STOCK ENTRIES
-       ===================================================== */
-
     const stockRows =
         useMemo(
-            () => {
-                if (!product) {
-                    return [];
-                }
-
-                return product
-                    .price_options
-                    .flatMap(
-                        (
-                            priceOption,
-                        ) =>
-                            priceOption
-                                .batches,
-                    );
-            },
+            () =>
+                product
+                    ? product
+                        .price_options
+                        .flatMap(
+                            (
+                                option,
+                            ) =>
+                                option
+                                    .batches,
+                        )
+                    : [],
             [
                 product,
             ],
         );
 
-    /* =====================================================
-       ACTIONS
-       ===================================================== */
+    const selectedVariantBatches =
+        useMemo(
+            () =>
+                selectedVariant
+                    ? stockRows
+                        .filter(
+                            (
+                                batch,
+                            ) =>
+                                batch
+                                    .product_variant_id
+                                === selectedVariant
+                                    .id,
+                        )
+                    : [],
+            [
+                selectedVariant,
+                stockRows,
+            ],
+        );
 
     const goBackToProducts =
         (): void => {
@@ -3077,31 +2669,48 @@ export default function ProductDetailsPage() {
             );
         };
 
-    const closeBatchModal =
+    const closeModals =
         (): void => {
             setSelectedBatch(
                 null,
             );
+
+            setSelectedVariant(
+                null,
+            );
         };
 
-    /* =====================================================
-       ERROR
-       ===================================================== */
+    const openBatch =
+        (
+            batch:
+                ProductBatch,
+        ): void => {
+            setSelectedVariant(
+                null,
+            );
 
-    const visibleError =
-        errorMessage
-        || (
-            !isLoading
-                && !product
-                ? 'Product details were not found.'
-                : ''
-        );
+            setSelectedBatch(
+                batch,
+            );
+        };
 
-    /* =====================================================
-       LOADING
-       ===================================================== */
+    const openVariant =
+        (
+            variant:
+                ProductVariant,
+        ): void => {
+            setSelectedBatch(
+                null,
+            );
 
-    if (isLoading) {
+            setSelectedVariant(
+                variant,
+            );
+        };
+
+    if (
+        isLoading
+    ) {
         return (
             <div id="product-details-page">
                 <style>
@@ -3111,25 +2720,22 @@ export default function ProductDetailsPage() {
                 <section className="pdp-state">
                     <div className="pdp-spinner" />
 
-                    <strong className="pdp-state-title">
+                    <strong>
                         Loading Product Details
                     </strong>
 
-                    <span className="pdp-state-message">
+                    <span>
                         Retrieving product,
-                        stock and pricing information.
+                        stock and pricing
+                        information.
                     </span>
                 </section>
             </div>
         );
     }
 
-    /* =====================================================
-       ERROR
-       ===================================================== */
-
     if (
-        visibleError
+        errorMessage
         || !product
     ) {
         return (
@@ -3142,16 +2748,15 @@ export default function ProductDetailsPage() {
                     className="pdp-state error"
                     role="alert"
                 >
-                    <span className="pdp-state-icon">
-                        <Icon name="alert" />
-                    </span>
+                    <Icon name="alert" />
 
-                    <strong className="pdp-state-title">
+                    <strong>
                         Unable to Load Product
                     </strong>
 
-                    <span className="pdp-state-message">
-                        {visibleError}
+                    <span>
+                        {errorMessage
+                            || 'Product details were not found.'}
                     </span>
 
                     <div className="pdp-state-actions">
@@ -3184,658 +2789,786 @@ export default function ProductDetailsPage() {
         );
     }
 
-    /* =====================================================
-       CORRECT STOCK SUMMARY
+    const hasVariants =
+        product.has_variants
+        && product
+            .variants
+            .length > 0;
 
-       These are calculated from the physical batch units,
-       NOT product.unit.
-       ===================================================== */
+    const formatSummaryStock =
+        (
+            field:
+                | 'total_available_quantity'
+                | 'saleable_quantity'
+                | 'expired_quantity',
+        ): string => {
+            const entries =
+                product
+                    .summary
+                    .stock_by_unit
+                ?? [];
 
-    const formatStockSummary = (
-        field:
-            | 'total_received_quantity'
-            | 'total_available_quantity'
-            | 'saleable_quantity'
-            | 'expired_quantity',
-    ): string => {
-        const stockByUnit =
-            product.summary.stock_by_unit
-            ?? [];
+            const nonZero =
+                entries
+                    .filter(
+                        (
+                            entry,
+                        ) =>
+                            Math.abs(
+                                Number(
+                                    entry[
+                                    field
+                                    ],
+                                ),
+                            ) > 0.000001,
+                    );
 
-        /*
-         * Remove zero-value units when there is
-         * another unit that actually has stock.
-         *
-         * This prevents:
-         *
-         * 0 Bag + 10,095 Kg
-         *
-         * and shows:
-         *
-         * 10,095 Kg
-         */
-        const nonZeroEntries =
-            stockByUnit.filter(
-                (entry) =>
-                    Math.abs(
-                        Number(
-                            entry[field],
-                        ),
-                    ) > 0.000001,
-            );
+            const displayEntries =
+                nonZero.length > 0
+                    ? nonZero
+                    : entries;
 
-        const entries =
-            nonZeroEntries.length > 0
-                ? nonZeroEntries
-                : stockByUnit;
-
-        if (entries.length === 0) {
-            return `0 ${product.unit}`;
-        }
-
-        /*
-         * When everything is zero and multiple
-         * stock units exist, prefer a dual-unit
-         * physical stock unit such as Kg.
-         */
-        if (
-            nonZeroEntries.length === 0
-            && entries.length > 1
-        ) {
-            const dualBatch =
-                stockRows.find(
-                    (batch) =>
-                        batch.is_dual_unit,
-                );
-
-            if (dualBatch) {
-                return `0 ${dualBatch.stock_unit}`;
+            if (
+                displayEntries
+                    .length === 0
+            ) {
+                return `0 ${product.unit}`;
             }
-        }
 
-        return entries
-            .map(
-                (entry) =>
-                    `${formatQuantity(
-                        entry[field],
-                    )} ${entry.unit}`,
-            )
-            .join(' + ');
-    };
+            return displayEntries
+                .map(
+                    (
+                        entry,
+                    ) =>
+                        `${formatQuantity(
+                            entry[
+                            field
+                            ],
+                        )} ${entry.unit}`,
+                )
+                .join(' + ');
+        };
 
     const availableStockText =
-        formatStockSummary(
+        formatSummaryStock(
             'total_available_quantity',
         );
 
     const saleableStockText =
-        formatStockSummary(
+        formatSummaryStock(
             'saleable_quantity',
         );
 
-    const totalReceivedText =
-        groupReceivedPurchaseQuantity(
-            stockRows,
-            product.unit,
-        );
-
     const expiredStockText =
-        formatStockSummary(
+        formatSummaryStock(
             'expired_quantity',
         );
 
-    /* =====================================================
-       SELECTED BATCH VALUES
-       ===================================================== */
+    const receivedByPurchaseUnit =
+        (() => {
+            const totals =
+                new Map<
+                    string,
+                    number
+                >();
 
-    const selectedReference =
-        selectedBatch
-            ? (
-                selectedBatch
-                    .batch_number
-                || selectedBatch
-                    .batch_code
-                || `Stock #${selectedBatch.id}`
-            )
-            : '';
+            stockRows.forEach(
+                (
+                    batch,
+                ) => {
+                    const unit =
+                        getPrimaryUnit(
+                            batch,
+                            product.unit,
+                        );
 
-    const selectedStockUnit =
-        selectedBatch
-            ? getStockUnit(
-                selectedBatch,
-                product.unit,
-            )
-            : product.unit;
+                    const quantity =
+                        Number(
+                            batch
+                                .received_purchase_quantity
+                            ?? batch
+                                .purchased_quantity
+                            ?? 0,
+                        );
 
-    const selectedPrimaryUnit =
-        selectedBatch
-            ? getPrimarySaleUnit(
-                selectedBatch,
-                product.unit,
-            )
-            : product.unit;
+                    totals.set(
+                        unit,
+                        (
+                            totals.get(
+                                unit,
+                            )
+                            ?? 0
+                        )
+                        + (
+                            Number.isFinite(
+                                quantity,
+                            )
+                                ? quantity
+                                : 0
+                        ),
+                    );
+                },
+            );
 
-    const secondarySellingPrice =
-        selectedBatch
-            ? runtimeNumber(
-                selectedBatch,
-                'secondary_selling_price',
-            )
+            return totals.size
+                === 0
+                ? `0 ${product.unit}`
+                : Array
+                    .from(
+                        totals.entries(),
+                    )
+                    .map(
+                        (
+                            [
+                                unit,
+                                quantity,
+                            ],
+                        ) =>
+                            `${formatQuantity(
+                                quantity,
+                            )} ${unit}`,
+                    )
+                    .join(' + ');
+        })();
+
+    const getVariantSummary =
+        (
+            variantId:
+                number,
+        ) =>
+            product
+                .variant_stock
+                .find(
+                    (
+                        row,
+                    ) =>
+                        row
+                            .variant_id
+                        === variantId,
+                );
+
+    const variantModal =
+        selectedVariant
+            && typeof document
+            !== 'undefined'
+            ? (() => {
+                const fallbackUnit =
+                    selectedVariant
+                        .package_unit
+                    || product
+                        .unit
+                    || 'Unit';
+
+                const availableText =
+                    groupBatchStock(
+                        selectedVariantBatches,
+                        fallbackUnit,
+                    );
+
+                const saleableText =
+                    groupBatchStock(
+                        selectedVariantBatches,
+                        fallbackUnit,
+                        true,
+                    );
+
+                const costRange =
+                    formatPriceRange(
+                        selectedVariantBatches
+                            .map(
+                                (
+                                    batch,
+                                ) =>
+                                    batch
+                                        .unit_cost,
+                            ),
+                    );
+
+                const sellingRange =
+                    formatPriceRange(
+                        selectedVariantBatches
+                            .map(
+                                (
+                                    batch,
+                                ) =>
+                                    batch
+                                        .selling_price,
+                            ),
+                    );
+
+                return createPortal(
+                    <div
+                        id="product-detail-modal"
+                        role="presentation"
+                        onMouseDown={(event) => {
+                            if (
+                                event.target
+                                === event.currentTarget
+                            ) {
+                                closeModals();
+                            }
+                        }}
+                    >
+                        <section
+                            className="pdm-dialog"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="variant-modal-title"
+                            onMouseDown={(event) => {
+                                event.stopPropagation();
+                            }}
+                        >
+                            <header className="pdm-header">
+                                <div className="pdm-header-main">
+                                    <span className="pdm-icon">
+                                        <Icon name="money" />
+                                    </span>
+
+                                    <div>
+                                        <span className="pdm-kicker">
+                                            Variant Price &amp; Stock
+                                        </span>
+
+                                        <h2
+                                            id="variant-modal-title"
+                                            className="pdm-title"
+                                        >
+                                            {
+                                                selectedVariant
+                                                    .display_name
+                                            }
+                                        </h2>
+
+                                        <span className="pdm-subtitle">
+                                            {
+                                                product.name
+                                            }
+
+                                            {' • '}
+
+                                            {
+                                                selectedVariant
+                                                    .sku
+                                            }
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="pdm-close"
+                                    aria-label="Close variant details"
+                                    onClick={
+                                        closeModals
+                                    }
+                                >
+                                    <Icon name="close" />
+                                </button>
+                            </header>
+
+                            <div className="pdm-body">
+                                <section className="pdm-summary">
+                                    <article className="pdm-summary-card green">
+                                        <span>
+                                            Available Stock
+                                        </span>
+
+                                        <strong>
+                                            {
+                                                availableText
+                                            }
+                                        </strong>
+
+                                        <small>
+                                            Current physical stock
+                                        </small>
+                                    </article>
+
+                                    <article className="pdm-summary-card">
+                                        <span>
+                                            Saleable Stock
+                                        </span>
+
+                                        <strong>
+                                            {
+                                                saleableText
+                                            }
+                                        </strong>
+
+                                        <small>
+                                            Excludes expired stock
+                                        </small>
+                                    </article>
+
+                                    <article className="pdm-summary-card blue">
+                                        <span>
+                                            Cost Price
+                                        </span>
+
+                                        <strong>
+                                            {
+                                                costRange
+                                            }
+                                        </strong>
+
+                                        <small>
+                                            Batch cost range
+                                        </small>
+                                    </article>
+
+                                    <article className="pdm-summary-card green">
+                                        <span>
+                                            Selling Price
+                                        </span>
+
+                                        <strong>
+                                            {
+                                                sellingRange
+                                            }
+                                        </strong>
+
+                                        <small>
+                                            Batch selling range
+                                        </small>
+                                    </article>
+                                </section>
+
+                                <section className="pdm-section">
+                                    <header className="pdm-section-head">
+                                        <Icon name="money" />
+
+                                        <h3>
+                                            Cost, Selling Price &amp; Stock Availability
+                                        </h3>
+                                    </header>
+
+                                    {selectedVariantBatches
+                                        .length === 0 ? (
+                                        <div className="pdm-empty">
+                                            <Icon name="stock" />
+
+                                            <strong>
+                                                No Stock Records
+                                            </strong>
+
+                                            <span>
+                                                This variant has no purchase or stock batch records yet.
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <div className="pdm-table-wrap">
+                                            <table className="pdm-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>
+                                                            Stock Reference
+                                                        </th>
+
+                                                        <th>
+                                                            Cost Price
+                                                        </th>
+
+                                                        <th>
+                                                            Selling Price
+                                                        </th>
+
+                                                        <th>
+                                                            Available
+                                                        </th>
+
+                                                        <th>
+                                                            Status
+                                                        </th>
+
+                                                        <th>
+                                                            Expiry
+                                                        </th>
+
+                                                        <th>
+                                                            Supplier
+                                                        </th>
+
+                                                        <th>
+                                                            Details
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+
+                                                <tbody>
+                                                    {selectedVariantBatches
+                                                        .map(
+                                                            (
+                                                                batch,
+                                                            ) => {
+                                                                const unit =
+                                                                    getStockUnit(
+                                                                        batch,
+                                                                        fallbackUnit,
+                                                                    );
+
+                                                                const primaryUnit =
+                                                                    getPrimaryUnit(
+                                                                        batch,
+                                                                        fallbackUnit,
+                                                                    );
+
+                                                                return (
+                                                                    <tr
+                                                                        key={
+                                                                            batch.id
+                                                                        }
+                                                                    >
+                                                                        <td>
+                                                                            <strong>
+                                                                                {
+                                                                                    getBatchReference(
+                                                                                        batch,
+                                                                                    )
+                                                                                }
+                                                                            </strong>
+
+                                                                            <span className="pdm-table-sub">
+                                                                                Stock ID #{batch.id}
+                                                                            </span>
+                                                                        </td>
+
+                                                                        <td>
+                                                                            <span className="pdm-cost">
+                                                                                {formatCurrency(
+                                                                                    batch
+                                                                                        .unit_cost,
+                                                                                )}
+                                                                            </span>
+
+                                                                            <span className="pdm-table-sub">
+                                                                                per {primaryUnit}
+                                                                            </span>
+                                                                        </td>
+
+                                                                        <td>
+                                                                            <span className="pdm-sale">
+                                                                                {formatCurrency(
+                                                                                    batch
+                                                                                        .selling_price,
+                                                                                )}
+                                                                            </span>
+
+                                                                            <span className="pdm-table-sub">
+                                                                                per {primaryUnit}
+                                                                            </span>
+                                                                        </td>
+
+                                                                        <td>
+                                                                            <span className="pdm-stock">
+                                                                                {formatQuantity(
+                                                                                    batch
+                                                                                        .available_quantity,
+                                                                                )}
+
+                                                                                {' '}
+
+                                                                                {
+                                                                                    unit
+                                                                                }
+                                                                            </span>
+                                                                        </td>
+
+                                                                        <td>
+                                                                            <span
+                                                                                className={
+                                                                                    getStatusClass(
+                                                                                        batch
+                                                                                            .status,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                {getStatusLabel(
+                                                                                    batch
+                                                                                        .status,
+                                                                                )}
+                                                                            </span>
+                                                                        </td>
+
+                                                                        <td>
+                                                                            {formatDate(
+                                                                                batch
+                                                                                    .expiry_date,
+                                                                            )}
+                                                                        </td>
+
+                                                                        <td>
+                                                                            {batch
+                                                                                .supplier
+                                                                                ?.name
+                                                                                ?? 'Not available'}
+                                                                        </td>
+
+                                                                        <td>
+                                                                            <button
+                                                                                type="button"
+                                                                                className="pdm-row-button"
+                                                                                onClick={() => {
+                                                                                    openBatch(
+                                                                                        batch,
+                                                                                    );
+                                                                                }}
+                                                                            >
+                                                                                <Icon name="eye" />
+
+                                                                                View Batch
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            },
+                                                        )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </section>
+
+                                <section className="pdm-section">
+                                    <header className="pdm-section-head">
+                                        <Icon name="tag" />
+
+                                        <h3>
+                                            Variant Information
+                                        </h3>
+                                    </header>
+
+                                    <div className="pdm-grid">
+                                        <div className="pdm-item">
+                                            <span>
+                                                Variant
+                                            </span>
+
+                                            <strong>
+                                                {
+                                                    selectedVariant
+                                                        .display_name
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Package Unit
+                                            </span>
+
+                                            <strong>
+                                                {
+                                                    selectedVariant
+                                                        .package_unit
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                SKU
+                                            </span>
+
+                                            <strong>
+                                                {
+                                                    selectedVariant
+                                                        .sku
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Barcode
+                                            </span>
+
+                                            <strong>
+                                                {selectedVariant
+                                                    .barcode
+                                                    ?? 'Not assigned'}
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <footer className="pdm-footer">
+                                <button
+                                    type="button"
+                                    onClick={
+                                        closeModals
+                                    }
+                                >
+                                    Close
+                                </button>
+                            </footer>
+                        </section>
+                    </div>,
+                    document.body,
+                );
+            })()
             : null;
-
-    const secondaryUnit =
-        selectedBatch
-            ? runtimeString(
-                selectedBatch,
-                'secondary_unit',
-            )
-            : null;
-
-    const conversionFactor =
-        selectedBatch
-            ? runtimeNumber(
-                selectedBatch,
-                'conversion_factor',
-            )
-            : null;
-
-    const baseUnitCost =
-        selectedBatch
-            ? runtimeNumber(
-                selectedBatch,
-                'base_unit_cost',
-            )
-            : null;
-
-    const selectedIsDual =
-        selectedBatch
-            ? isDualUnitBatch(
-                selectedBatch,
-            )
-            : false;
-
-    /* =====================================================
-       BATCH MODAL
-       ===================================================== */
 
     const batchModal =
         selectedBatch
             && typeof document
             !== 'undefined'
-            ? createPortal(
-                <div
-                    id="product-batch-details-modal"
-                    role="presentation"
-                    onMouseDown={(event) => {
-                        if (
-                            event.target
-                            === event.currentTarget
-                        ) {
-                            closeBatchModal();
-                        }
-                    }}
-                >
-                    <section
-                        className="pdm-dialog"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="pdm-title"
+            ? (() => {
+                const reference =
+                    getBatchReference(
+                        selectedBatch,
+                    );
+
+                const stockUnit =
+                    getStockUnit(
+                        selectedBatch,
+                        product.unit,
+                    );
+
+                const primaryUnit =
+                    getPrimaryUnit(
+                        selectedBatch,
+                        product.unit,
+                    );
+
+                return createPortal(
+                    <div
+                        id="product-detail-modal"
+                        role="presentation"
                         onMouseDown={(event) => {
-                            event.stopPropagation();
+                            if (
+                                event.target
+                                === event.currentTarget
+                            ) {
+                                closeModals();
+                            }
                         }}
                     >
-                        {/* =============================
-                            MODAL HEADER
-                           ============================= */}
-
-                        <header className="pdm-header">
-                            <div className="pdm-header-main">
-                                <span className="pdm-header-icon">
-                                    <Icon name="layers" />
-                                </span>
-
-                                <div className="pdm-header-copy">
-                                    <span className="pdm-kicker">
-                                        Stock Batch Details
+                        <section
+                            className="pdm-dialog"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="batch-modal-title"
+                            onMouseDown={(event) => {
+                                event.stopPropagation();
+                            }}
+                        >
+                            <header className="pdm-header">
+                                <div className="pdm-header-main">
+                                    <span className="pdm-icon">
+                                        <Icon name="layers" />
                                     </span>
 
-                                    <h2
-                                        id="pdm-title"
-                                        className="pdm-title"
-                                    >
-                                        {
-                                            selectedReference
-                                        }
-                                    </h2>
-
-                                    <span className="pdm-product-name">
-                                        {
-                                            product.name
-                                        }
-                                    </span>
-                                </div>
-                            </div>
-
-                            <button
-                                type="button"
-                                className="pdm-close"
-                                aria-label="Close batch details"
-                                onClick={
-                                    closeBatchModal
-                                }
-                            >
-                                <Icon name="close" />
-                            </button>
-                        </header>
-
-                        {/* =============================
-                            BODY
-                           ============================= */}
-
-                        <div className="pdm-body">
-                            {/* QUICK SUMMARY */}
-
-                            <section className="pdm-summary">
-                                <article className="pdm-summary-card green">
-                                    <span className="pdm-summary-label">
-                                        Selling Price
-                                    </span>
-
-                                    <strong className="pdm-summary-value">
-                                        {formatCurrency(
-                                            selectedBatch
-                                                .selling_price,
-                                        )}
-                                    </strong>
-
-                                    <span className="pdm-summary-help">
-                                        per
-                                        {' '}
-                                        {
-                                            selectedPrimaryUnit
-                                        }
-                                    </span>
-                                </article>
-
-                                <article className="pdm-summary-card blue">
-                                    <span className="pdm-summary-label">
-                                        Purchase Cost
-                                    </span>
-
-                                    <strong className="pdm-summary-value">
-                                        {formatCurrency(
-                                            selectedBatch
-                                                .unit_cost,
-                                        )}
-                                    </strong>
-
-                                    <span className="pdm-summary-help">
-                                        per
-                                        {' '}
-                                        {
-                                            selectedPrimaryUnit
-                                        }
-                                    </span>
-                                </article>
-
-                                <article className="pdm-summary-card">
-                                    <span className="pdm-summary-label">
-                                        Profit Per Unit
-                                    </span>
-
-                                    <strong className="pdm-summary-value">
-                                        {formatCurrency(
-                                            selectedBatch
-                                                .profit_per_unit,
-                                        )}
-                                    </strong>
-
-                                    <span className="pdm-summary-help">
-                                        per
-                                        {' '}
-                                        {
-                                            selectedPrimaryUnit
-                                        }
-                                    </span>
-                                </article>
-
-                                <article className="pdm-summary-card green">
-                                    <span className="pdm-summary-label">
-                                        Physical Stock Available
-                                    </span>
-
-                                    <strong className="pdm-summary-value">
-                                        {formatQuantity(
-                                            selectedBatch
-                                                .available_quantity,
-                                        )}
-
-                                        {' '}
-
-                                        {
-                                            selectedStockUnit
-                                        }
-                                    </strong>
-                                </article>
-                            </section>
-
-                            {/* BATCH INFO */}
-
-                            <section className="pdm-section">
-                                <header className="pdm-section-header">
-                                    <Icon name="layers" />
-
-                                    <h3 className="pdm-section-title">
-                                        Batch Information
-                                    </h3>
-                                </header>
-
-                                <div className="pdm-detail-grid">
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Stock Reference
+                                    <div>
+                                        <span className="pdm-kicker">
+                                            Stock Batch Details
                                         </span>
 
-                                        <strong className="pdm-detail-value">
-                                            {
-                                                selectedReference
-                                            }
-                                        </strong>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Batch Code
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {selectedBatch
-                                                .batch_code
-                                                || 'Not provided'}
-                                        </strong>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Batch Number
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {selectedBatch
-                                                .batch_number
-                                                || 'Not provided'}
-                                        </strong>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Status
-                                        </span>
-
-                                        <span
-                                            className={
-                                                getStatusClass(
-                                                    selectedBatch
-                                                        .status,
-                                                )
-                                            }
+                                        <h2
+                                            id="batch-modal-title"
+                                            className="pdm-title"
                                         >
-                                            {getStatusLabel(
-                                                selectedBatch
-                                                    .status,
-                                            )}
-                                        </span>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Product / Purchase Unit
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
                                             {
-                                                selectedPrimaryUnit
+                                                reference
                                             }
-                                        </strong>
-                                    </div>
+                                        </h2>
 
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Physical Stock Unit
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
+                                        <span className="pdm-subtitle">
                                             {
-                                                selectedStockUnit
+                                                product.name
                                             }
-                                        </strong>
-                                    </div>
 
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Selling Mode
+                                            {selectedBatch
+                                                .variant
+                                                ? ` • ${selectedBatch.variant.display_name}`
+                                                : ''}
                                         </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {selectedIsDual
-                                                ? 'Full Unit + Loose Unit'
-                                                : 'Standard Unit'}
-                                        </strong>
                                     </div>
-
-                                    {selectedIsDual && (
-                                        <div className="pdm-detail-item">
-                                            <span className="pdm-detail-label">
-                                                Loose Unit
-                                            </span>
-
-                                            <strong className="pdm-detail-value">
-                                                {secondaryUnit
-                                                    ?? selectedStockUnit}
-                                            </strong>
-                                        </div>
-                                    )}
-
-                                    {selectedIsDual && (
-                                        <div className="pdm-detail-item">
-                                            <span className="pdm-detail-label">
-                                                Conversion
-                                            </span>
-
-                                            <strong className="pdm-detail-value">
-                                                1
-                                                {' '}
-                                                {
-                                                    selectedPrimaryUnit
-                                                }
-
-                                                {' = '}
-
-                                                {conversionFactor
-                                                    !== null
-                                                    ? formatQuantity(
-                                                        conversionFactor,
-                                                    )
-                                                    : 'Not provided'}
-
-                                                {' '}
-
-                                                {secondaryUnit
-                                                    ?? selectedStockUnit}
-                                            </strong>
-                                        </div>
-                                    )}
                                 </div>
-                            </section>
 
-                            {/* PRICING */}
+                                <button
+                                    type="button"
+                                    className="pdm-close"
+                                    aria-label="Close batch details"
+                                    onClick={
+                                        closeModals
+                                    }
+                                >
+                                    <Icon name="close" />
+                                </button>
+                            </header>
 
-                            <section className="pdm-section">
-                                <header className="pdm-section-header">
-                                    <Icon name="money" />
-
-                                    <h3 className="pdm-section-title">
-                                        Pricing Information
-                                    </h3>
-                                </header>
-
-                                <div className="pdm-detail-grid">
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Purchase Cost
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {formatCurrency(
-                                                selectedBatch
-                                                    .unit_cost,
-                                            )}
-
-                                            {' / '}
-
-                                            {
-                                                selectedPrimaryUnit
-                                            }
-                                        </strong>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
+                            <div className="pdm-body">
+                                <section className="pdm-summary">
+                                    <article className="pdm-summary-card green">
+                                        <span>
                                             Selling Price
                                         </span>
 
-                                        <strong className="pdm-detail-value">
+                                        <strong>
                                             {formatCurrency(
                                                 selectedBatch
                                                     .selling_price,
                                             )}
-
-                                            {' / '}
-
-                                            {
-                                                selectedPrimaryUnit
-                                            }
                                         </strong>
-                                    </div>
 
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
+                                        <small>
+                                            per
+                                            {' '}
+                                            {
+                                                primaryUnit
+                                            }
+                                        </small>
+                                    </article>
+
+                                    <article className="pdm-summary-card blue">
+                                        <span>
+                                            Purchase Cost
+                                        </span>
+
+                                        <strong>
+                                            {formatCurrency(
+                                                selectedBatch
+                                                    .unit_cost,
+                                            )}
+                                        </strong>
+
+                                        <small>
+                                            per
+                                            {' '}
+                                            {
+                                                primaryUnit
+                                            }
+                                        </small>
+                                    </article>
+
+                                    <article className="pdm-summary-card">
+                                        <span>
                                             Profit Per Unit
                                         </span>
 
-                                        <strong className="pdm-detail-value">
+                                        <strong>
                                             {formatCurrency(
                                                 selectedBatch
                                                     .profit_per_unit,
                                             )}
-
-                                            {' / '}
-
-                                            {
-                                                selectedPrimaryUnit
-                                            }
                                         </strong>
-                                    </div>
 
-                                    {selectedIsDual
-                                        && baseUnitCost !== null && (
-                                            <div className="pdm-detail-item">
-                                                <span className="pdm-detail-label">
-                                                    Cost Per Loose Unit
-                                                </span>
-
-                                                <strong className="pdm-detail-value">
-                                                    {formatCurrency(
-                                                        baseUnitCost,
-                                                    )}
-
-                                                    {' / '}
-
-                                                    {
-                                                        selectedStockUnit
-                                                    }
-                                                </strong>
-                                            </div>
-                                        )}
-
-                                    {selectedIsDual
-                                        && secondarySellingPrice !== null && (
-                                            <div className="pdm-detail-item">
-                                                <span className="pdm-detail-label">
-                                                    Loose Selling Price
-                                                </span>
-
-                                                <strong className="pdm-detail-value">
-                                                    {formatCurrency(
-                                                        secondarySellingPrice,
-                                                    )}
-
-                                                    {' / '}
-
-                                                    {secondaryUnit
-                                                        ?? selectedStockUnit}
-                                                </strong>
-                                            </div>
-                                        )}
-                                </div>
-                            </section>
-
-                            {/* STOCK */}
-
-                            <section className="pdm-section">
-                                <header className="pdm-section-header">
-                                    <Icon name="stock" />
-
-                                    <h3 className="pdm-section-title">
-                                        Stock Quantities
-                                    </h3>
-                                </header>
-
-                                <div className="pdm-detail-grid">
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Purchased Quantity
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {formatQuantity(
-                                                selectedBatch
-                                                    .purchased_quantity,
-                                            )}
-
+                                        <small>
+                                            per
                                             {' '}
-
                                             {
-                                                selectedPrimaryUnit
+                                                primaryUnit
                                             }
-                                        </strong>
-                                    </div>
+                                        </small>
+                                    </article>
 
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Received Physical Quantity
+                                    <article className="pdm-summary-card green">
+                                        <span>
+                                            Available Stock
                                         </span>
 
-                                        <strong className="pdm-detail-value">
-                                            {formatQuantity(
-                                                selectedBatch
-                                                    .received_quantity,
-                                            )}
-
-                                            {' '}
-
-                                            {
-                                                selectedStockUnit
-                                            }
-                                        </strong>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Available Physical Stock
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
+                                        <strong>
                                             {formatQuantity(
                                                 selectedBatch
                                                     .available_quantity,
@@ -3844,216 +3577,445 @@ export default function ProductDetailsPage() {
                                             {' '}
 
                                             {
-                                                selectedStockUnit
+                                                stockUnit
                                             }
                                         </strong>
-                                    </div>
 
-                                    {selectedIsDual
-                                        && conversionFactor
-                                        && conversionFactor > 0 && (
-                                            <div className="pdm-detail-item">
-                                                <span className="pdm-detail-label">
-                                                    Full Units Available
-                                                </span>
+                                        <small>
+                                            Physical stock
+                                        </small>
+                                    </article>
+                                </section>
 
-                                                <strong className="pdm-detail-value">
-                                                    {Math.floor(
-                                                        Number(
-                                                            selectedBatch
-                                                                .available_quantity,
-                                                        )
-                                                        / conversionFactor,
-                                                    )}
+                                <section className="pdm-section">
+                                    <header className="pdm-section-head">
+                                        <Icon name="layers" />
 
-                                                    {' '}
+                                        <h3>
+                                            Batch Information
+                                        </h3>
+                                    </header>
 
-                                                    {
-                                                        selectedPrimaryUnit
-                                                    }
+                                    <div className="pdm-grid">
+                                        <div className="pdm-item">
+                                            <span>
+                                                Reference
+                                            </span>
 
-                                                    {' + '}
+                                            <strong>
+                                                {
+                                                    reference
+                                                }
+                                            </strong>
+                                        </div>
 
-                                                    {formatQuantity(
-                                                        Number(
-                                                            selectedBatch
-                                                                .available_quantity,
-                                                        )
-                                                        % conversionFactor,
-                                                    )}
+                                        <div className="pdm-item">
+                                            <span>
+                                                Variant
+                                            </span>
 
-                                                    {' '}
+                                            <strong>
+                                                {selectedBatch
+                                                    .variant
+                                                    ?.display_name
+                                                    ?? 'Standard Product'}
+                                            </strong>
+                                        </div>
 
-                                                    {
-                                                        selectedStockUnit
-                                                    }
-                                                </strong>
-                                            </div>
-                                        )}
-                                </div>
-                            </section>
+                                        <div className="pdm-item">
+                                            <span>
+                                                Status
+                                            </span>
 
-                            {/* DATES */}
-
-                            <section className="pdm-section">
-                                <header className="pdm-section-header">
-                                    <Icon name="calendar" />
-
-                                    <h3 className="pdm-section-title">
-                                        Manufacturing &amp; Expiry
-                                    </h3>
-                                </header>
-
-                                <div className="pdm-detail-grid">
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Manufactured Date
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {formatDate(
-                                                selectedBatch
-                                                    .manufactured_date,
-                                            )}
-                                        </strong>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Expiry Date
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {formatDate(
-                                                selectedBatch
-                                                    .expiry_date,
-                                            )}
-                                        </strong>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Received At
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {formatDateTime(
-                                                selectedBatch
-                                                    .received_at,
-                                            )}
-                                        </strong>
-                                    </div>
-                                </div>
-                            </section>
-
-                            {/* PURCHASE */}
-
-                            <section className="pdm-section">
-                                <header className="pdm-section-header">
-                                    <Icon name="truck" />
-
-                                    <h3 className="pdm-section-title">
-                                        Purchase &amp; Supplier
-                                    </h3>
-                                </header>
-
-                                <div className="pdm-detail-grid">
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Supplier
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {selectedBatch
-                                                .supplier
-                                                ?.name
-                                                ?? 'Not available'}
-                                        </strong>
-                                    </div>
-
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Purchase Number
-                                        </span>
-
-                                        <strong className="pdm-detail-value">
-                                            {selectedBatch
-                                                .purchase_number
-                                                || (
+                                            <strong>
+                                                {getStatusLabel(
                                                     selectedBatch
-                                                        .purchase_id
-                                                        ? `Purchase #${selectedBatch.purchase_id}`
-                                                        : 'Not available'
+                                                        .status,
                                                 )}
-                                        </strong>
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Stock Unit
+                                            </span>
+
+                                            <strong>
+                                                {
+                                                    stockUnit
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Purchased Qty
+                                            </span>
+
+                                            <strong>
+                                                {formatQuantity(
+                                                    selectedBatch
+                                                        .purchased_quantity,
+                                                )}
+
+                                                {' '}
+
+                                                {
+                                                    primaryUnit
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Received Qty
+                                            </span>
+
+                                            <strong>
+                                                {formatQuantity(
+                                                    selectedBatch
+                                                        .received_quantity,
+                                                )}
+
+                                                {' '}
+
+                                                {
+                                                    stockUnit
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Available Qty
+                                            </span>
+
+                                            <strong>
+                                                {formatQuantity(
+                                                    selectedBatch
+                                                        .available_quantity,
+                                                )}
+
+                                                {' '}
+
+                                                {
+                                                    stockUnit
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Batch Number
+                                            </span>
+
+                                            <strong>
+                                                {selectedBatch
+                                                    .batch_number
+                                                    ?? 'Not provided'}
+                                            </strong>
+                                        </div>
                                     </div>
+                                </section>
 
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Purchase ID
-                                        </span>
+                                <section className="pdm-section">
+                                    <header className="pdm-section-head">
+                                        <Icon name="money" />
 
-                                        <strong className="pdm-detail-value">
-                                            {selectedBatch
-                                                .purchase_id
-                                                ? `#${selectedBatch.purchase_id}`
-                                                : 'Not available'}
-                                        </strong>
-                                    </div>
+                                        <h3>
+                                            Pricing Information
+                                        </h3>
+                                    </header>
 
-                                    <div className="pdm-detail-item">
-                                        <span className="pdm-detail-label">
-                                            Purchase Date
-                                        </span>
+                                    <div className="pdm-grid">
+                                        <div className="pdm-item">
+                                            <span>
+                                                Purchase Cost
+                                            </span>
 
-                                        <strong className="pdm-detail-value">
-                                            {formatDate(
-                                                selectedBatch
-                                                    .purchase_date,
+                                            <strong>
+                                                {formatCurrency(
+                                                    selectedBatch
+                                                        .unit_cost,
+                                                )}
+
+                                                {' / '}
+
+                                                {
+                                                    primaryUnit
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Selling Price
+                                            </span>
+
+                                            <strong>
+                                                {formatCurrency(
+                                                    selectedBatch
+                                                        .selling_price,
+                                                )}
+
+                                                {' / '}
+
+                                                {
+                                                    primaryUnit
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Profit Per Unit
+                                            </span>
+
+                                            <strong>
+                                                {formatCurrency(
+                                                    selectedBatch
+                                                        .profit_per_unit,
+                                                )}
+
+                                                {' / '}
+
+                                                {
+                                                    primaryUnit
+                                                }
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Current Cost Value
+                                            </span>
+
+                                            <strong>
+                                                {formatCurrency(
+                                                    selectedBatch
+                                                        .current_cost_value,
+                                                )}
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Current Sale Value
+                                            </span>
+
+                                            <strong>
+                                                {formatCurrency(
+                                                    selectedBatch
+                                                        .current_sale_value,
+                                                )}
+                                            </strong>
+                                        </div>
+
+                                        {selectedBatch
+                                            .is_dual_unit && (
+                                                <>
+                                                    <div className="pdm-item">
+                                                        <span>
+                                                            Loose Unit
+                                                        </span>
+
+                                                        <strong>
+                                                            {selectedBatch
+                                                                .secondary_unit
+                                                                ?? stockUnit}
+                                                        </strong>
+                                                    </div>
+
+                                                    <div className="pdm-item">
+                                                        <span>
+                                                            Conversion
+                                                        </span>
+
+                                                        <strong>
+                                                            1
+                                                            {' '}
+
+                                                            {
+                                                                primaryUnit
+                                                            }
+
+                                                            {' = '}
+
+                                                            {formatQuantity(
+                                                                selectedBatch
+                                                                    .conversion_factor,
+                                                            )}
+
+                                                            {' '}
+
+                                                            {selectedBatch
+                                                                .secondary_unit
+                                                                ?? stockUnit}
+                                                        </strong>
+                                                    </div>
+
+                                                    <div className="pdm-item">
+                                                        <span>
+                                                            Loose Selling Price
+                                                        </span>
+
+                                                        <strong>
+                                                            {formatCurrency(
+                                                                selectedBatch
+                                                                    .secondary_selling_price,
+                                                            )}
+
+                                                            {' / '}
+
+                                                            {selectedBatch
+                                                                .secondary_unit
+                                                                ?? stockUnit}
+                                                        </strong>
+                                                    </div>
+                                                </>
                                             )}
-                                        </strong>
                                     </div>
-                                </div>
-                            </section>
+                                </section>
 
-                            {/* NOTES */}
+                                <section className="pdm-section">
+                                    <header className="pdm-section-head">
+                                        <Icon name="calendar" />
 
-                            <section className="pdm-section">
-                                <header className="pdm-section-header">
-                                    <Icon name="tag" />
+                                        <h3>
+                                            Dates
+                                        </h3>
+                                    </header>
 
-                                    <h3 className="pdm-section-title">
-                                        Notes
-                                    </h3>
-                                </header>
+                                    <div className="pdm-grid">
+                                        <div className="pdm-item">
+                                            <span>
+                                                Manufactured
+                                            </span>
 
-                                <div className="pdm-notes">
-                                    {selectedBatch.notes
-                                        || 'No notes added for this stock batch.'}
-                                </div>
-                            </section>
-                        </div>
+                                            <strong>
+                                                {formatDate(
+                                                    selectedBatch
+                                                        .manufactured_date,
+                                                )}
+                                            </strong>
+                                        </div>
 
-                        <footer className="pdm-footer">
-                            <button
-                                type="button"
-                                className="pdm-footer-button"
-                                onClick={
-                                    closeBatchModal
-                                }
-                            >
-                                Close
-                            </button>
-                        </footer>
-                    </section>
-                </div>,
-                document.body,
-            )
+                                        <div className="pdm-item">
+                                            <span>
+                                                Expiry
+                                            </span>
+
+                                            <strong>
+                                                {formatDate(
+                                                    selectedBatch
+                                                        .expiry_date,
+                                                )}
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Received At
+                                            </span>
+
+                                            <strong>
+                                                {formatDateTime(
+                                                    selectedBatch
+                                                        .received_at,
+                                                )}
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section className="pdm-section">
+                                    <header className="pdm-section-head">
+                                        <Icon name="truck" />
+
+                                        <h3>
+                                            Purchase &amp; Supplier
+                                        </h3>
+                                    </header>
+
+                                    <div className="pdm-grid">
+                                        <div className="pdm-item">
+                                            <span>
+                                                Supplier
+                                            </span>
+
+                                            <strong>
+                                                {selectedBatch
+                                                    .supplier
+                                                    ?.name
+                                                    ?? 'Not available'}
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Purchase
+                                            </span>
+
+                                            <strong>
+                                                {selectedBatch
+                                                    .purchase_number
+                                                    || (
+                                                        selectedBatch
+                                                            .purchase_id
+                                                            ? `Purchase #${selectedBatch.purchase_id}`
+                                                            : 'Not available'
+                                                    )}
+                                            </strong>
+                                        </div>
+
+                                        <div className="pdm-item">
+                                            <span>
+                                                Purchase Date
+                                            </span>
+
+                                            <strong>
+                                                {formatDate(
+                                                    selectedBatch
+                                                        .purchase_date,
+                                                )}
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section className="pdm-section">
+                                    <header className="pdm-section-head">
+                                        <Icon name="tag" />
+
+                                        <h3>
+                                            Notes
+                                        </h3>
+                                    </header>
+
+                                    <div className="pdm-notes">
+                                        {selectedBatch
+                                            .notes
+                                            || 'No notes added for this stock batch.'}
+                                    </div>
+                                </section>
+                            </div>
+
+                            <footer className="pdm-footer">
+                                <button
+                                    type="button"
+                                    onClick={
+                                        closeModals
+                                    }
+                                >
+                                    Close
+                                </button>
+                            </footer>
+                        </section>
+                    </div>,
+                    document.body,
+                );
+            })()
             : null;
-
-    /* =====================================================
-       PAGE
-       ===================================================== */
 
     return (
         <>
@@ -4062,11 +4024,7 @@ export default function ProductDetailsPage() {
                     {pageStyles}
                 </style>
 
-                {/* =========================================
-                    TOP
-                   ========================================= */}
-
-                <div className="pdp-top-row">
+                <div className="pdp-top">
                     <button
                         type="button"
                         className="pdp-button"
@@ -4079,7 +4037,7 @@ export default function ProductDetailsPage() {
                         Back to Products
                     </button>
 
-                    <span className="pdp-product-id">
+                    <span>
                         Product ID
                         {' #'}
 
@@ -4089,34 +4047,25 @@ export default function ProductDetailsPage() {
                     </span>
                 </div>
 
-                {/* =========================================
-                    HERO
-                   ========================================= */}
-
                 <header className="pdp-hero">
                     <div className="pdp-hero-main">
                         <span className="pdp-product-icon">
                             <Icon name="box" />
                         </span>
 
-                        <div className="pdp-hero-copy">
+                        <div>
                             <span className="pdp-eyebrow">
                                 Product &amp; Inventory
                             </span>
 
-                            <h1
-                                className="pdp-title"
-                                title={
-                                    product.name
-                                }
-                            >
+                            <h1 className="pdp-title">
                                 {
                                     product.name
                                 }
                             </h1>
 
-                            <div className="pdp-meta-list">
-                                <span className="pdp-meta-chip">
+                            <div className="pdp-meta">
+                                <span className="pdp-chip">
                                     <Icon name="category" />
 
                                     {product
@@ -4125,7 +4074,7 @@ export default function ProductDetailsPage() {
                                         ?? 'General'}
                                 </span>
 
-                                <span className="pdp-meta-chip">
+                                <span className="pdp-chip">
                                     <Icon name="tag" />
 
                                     SKU:
@@ -4136,10 +4085,10 @@ export default function ProductDetailsPage() {
                                     }
                                 </span>
 
-                                <span className="pdp-meta-chip">
+                                <span className="pdp-chip">
                                     <Icon name="layers" />
 
-                                    Product Unit:
+                                    Unit:
                                     {' '}
 
                                     {
@@ -4147,8 +4096,28 @@ export default function ProductDetailsPage() {
                                     }
                                 </span>
 
+                                {hasVariants && (
+                                    <span className="pdp-chip">
+                                        <Icon name="layers" />
+
+                                        {
+                                            product
+                                                .variants
+                                                .length
+                                        }
+
+                                        {' '}
+
+                                        {product
+                                            .variants
+                                            .length === 1
+                                            ? 'Variant'
+                                            : 'Variants'}
+                                    </span>
+                                )}
+
                                 {product.barcode && (
-                                    <span className="pdp-meta-chip">
+                                    <span className="pdp-chip">
                                         <Icon name="barcode" />
 
                                         {
@@ -4163,8 +4132,8 @@ export default function ProductDetailsPage() {
                     <span
                         className={
                             product.is_active
-                                ? 'pdp-product-status active'
-                                : 'pdp-product-status inactive'
+                                ? 'pdp-active'
+                                : 'pdp-inactive'
                         }
                     >
                         {product.is_active
@@ -4172,13 +4141,6 @@ export default function ProductDetailsPage() {
                             : 'Inactive Product'}
                     </span>
                 </header>
-
-                {/* =========================================
-                    SUMMARY
-
-                    FIX:
-                    Actual physical stock units are used.
-                   ========================================= */}
 
                 <section className="pdp-summary-grid">
                     <article className="pdp-summary-card">
@@ -4234,90 +4196,63 @@ export default function ProductDetailsPage() {
                     </article>
                 </section>
 
-                {/* =========================================
-                    PRODUCT INFO + STOCK OVERVIEW
-
-                    MOVED ABOVE STOCK TABLE
-                   ========================================= */}
-
-                <section className="pdp-upper-info-grid">
-                    {/* PRODUCT INFORMATION */}
-
+                <section className="pdp-two-col">
                     <section className="pdp-panel">
-                        <header className="pdp-panel-heading">
+                        <header className="pdp-panel-head">
                             <div>
                                 <h2 className="pdp-panel-title">
                                     Product Information
                                 </h2>
 
-                                <p className="pdp-panel-description">
-                                    Main product identification
-                                    information.
+                                <p className="pdp-panel-desc">
+                                    Main product identification information.
                                 </p>
                             </div>
                         </header>
 
                         <div className="pdp-info-grid">
-                            <div className="pdp-info-item">
-                                <span className="pdp-info-label">
+                            <div className="pdp-info">
+                                <span>
                                     SKU
                                 </span>
 
-                                <strong
-                                    className="pdp-info-value"
-                                    title={
-                                        product.sku
-                                    }
-                                >
+                                <strong>
                                     {
                                         product.sku
                                     }
                                 </strong>
                             </div>
 
-                            <div className="pdp-info-item">
-                                <span className="pdp-info-label">
+                            <div className="pdp-info">
+                                <span>
                                     Barcode
                                 </span>
 
-                                <strong
-                                    className="pdp-info-value"
-                                    title={
-                                        product.barcode
-                                        ?? 'Not assigned'
-                                    }
-                                >
-                                    {product.barcode
+                                <strong>
+                                    {product
+                                        .barcode
                                         ?? 'Not assigned'}
                                 </strong>
                             </div>
 
-                            <div className="pdp-info-item">
-                                <span className="pdp-info-label">
-                                    Main Product Unit
+                            <div className="pdp-info">
+                                <span>
+                                    Main Unit
                                 </span>
 
-                                <strong className="pdp-info-value">
+                                <strong>
                                     {
                                         product.unit
                                     }
                                 </strong>
                             </div>
 
-                            <div className="pdp-info-item">
-                                <span className="pdp-info-label">
+                            <div className="pdp-info">
+                                <span>
                                     Category
                                 </span>
 
-                                <strong
-                                    className="pdp-info-value"
-                                    title={
-                                        product
-                                            .category
-                                            ?.name
-                                        ?? 'General'
-                                    }
-                                >
+                                <strong>
                                     {product
                                         .category
                                         ?.name
@@ -4325,63 +4260,61 @@ export default function ProductDetailsPage() {
                                 </strong>
                             </div>
 
-                            <div className="pdp-info-item">
-                                <span className="pdp-info-label">
-                                    Product Status
+                            <div className="pdp-info">
+                                <span>
+                                    Status
                                 </span>
 
-                                <strong className="pdp-info-value">
+                                <strong>
                                     {product.is_active
                                         ? 'Active'
                                         : 'Inactive'}
                                 </strong>
                             </div>
 
-                            <div className="pdp-info-item">
-                                <span className="pdp-info-label">
-                                    Product ID
+                            <div className="pdp-info">
+                                <span>
+                                    Variants
                                 </span>
 
-                                <strong className="pdp-info-value">
-                                    #
-                                    {
-                                        numericProductId
-                                    }
+                                <strong>
+                                    {hasVariants
+                                        ? `${product.variants.length} ${product.variants.length === 1 ? 'Variant' : 'Variants'}`
+                                        : 'No variants'}
                                 </strong>
                             </div>
                         </div>
                     </section>
 
-                    {/* STOCK OVERVIEW */}
-
                     <section className="pdp-panel">
-                        <header className="pdp-panel-heading">
+                        <header className="pdp-panel-head">
                             <div>
                                 <h2 className="pdp-panel-title">
                                     Stock Overview
                                 </h2>
 
-                                <p className="pdp-panel-description">
-                                    Actual physical inventory
-                                    currently recorded.
+                                <p className="pdp-panel-desc">
+                                    Current inventory overview.
                                 </p>
                             </div>
                         </header>
 
                         <div className="pdp-overview-grid">
-                            <article className="pdp-overview-card">
+                            <article className="pdp-overview">
                                 <span>
                                     Price Options
                                 </span>
 
                                 <strong>
-                                    {product
-                                        .summary
-                                        .number_of_price_options}
+                                    {
+                                        product
+                                            .summary
+                                            .number_of_price_options
+                                    }
                                 </strong>
                             </article>
 
-                            <article className="pdp-overview-card">
+                            <article className="pdp-overview">
                                 <span>
                                     Stock Entries
                                 </span>
@@ -4393,9 +4326,23 @@ export default function ProductDetailsPage() {
                                 </strong>
                             </article>
 
-                            <article className="pdp-overview-card highlight">
+                            <article className="pdp-overview">
                                 <span>
-                                    Available Stock
+                                    Variants
+                                </span>
+
+                                <strong>
+                                    {
+                                        product
+                                            .summary
+                                            .number_of_variants
+                                    }
+                                </strong>
+                            </article>
+
+                            <article className="pdp-overview highlight">
+                                <span>
+                                    Available
                                 </span>
 
                                 <strong>
@@ -4405,9 +4352,9 @@ export default function ProductDetailsPage() {
                                 </strong>
                             </article>
 
-                            <article className="pdp-overview-card highlight">
+                            <article className="pdp-overview highlight">
                                 <span>
-                                    Saleable Stock
+                                    Saleable
                                 </span>
 
                                 <strong>
@@ -4417,21 +4364,21 @@ export default function ProductDetailsPage() {
                                 </strong>
                             </article>
 
-                            <article className="pdp-overview-card">
+                            <article className="pdp-overview">
                                 <span>
                                     Total Received
                                 </span>
 
                                 <strong>
                                     {
-                                        totalReceivedText
+                                        receivedByPurchaseUnit
                                     }
                                 </strong>
                             </article>
 
-                            <article className="pdp-overview-card">
+                            <article className="pdp-overview">
                                 <span>
-                                    Expired Stock
+                                    Expired
                                 </span>
 
                                 <strong>
@@ -4444,352 +4391,476 @@ export default function ProductDetailsPage() {
                     </section>
                 </section>
 
-                {/* =========================================
-                    STOCK & PRICE DETAILS
-                   ========================================= */}
+                {hasVariants && (
+                    <section className="pdp-panel">
+                        <header className="pdp-panel-head">
+                            <div>
+                                <h2 className="pdp-panel-title">
+                                    Product Variants &amp; Available Stock
+                                </h2>
+
+                                <p className="pdp-panel-desc">
+                                    Select View Price &amp; Stock on a variant to see every cost price, selling price and the stock remaining for each batch.
+                                </p>
+                            </div>
+
+                            <span className="pdp-badge">
+                                {
+                                    product
+                                        .variants
+                                        .length
+                                }
+
+                                {' '}
+
+                                {product
+                                    .variants
+                                    .length === 1
+                                    ? 'Variant'
+                                    : 'Variants'}
+                            </span>
+                        </header>
+
+                        <div className="pdp-variant-wrap">
+                            <div className="pdp-variant-grid">
+                                {product
+                                    .variants
+                                    .map(
+                                        (
+                                            variant,
+                                        ) => {
+                                            const summary =
+                                                getVariantSummary(
+                                                    variant.id,
+                                                );
+
+                                            const availableText =
+                                                formatStockEntries(
+                                                    variant
+                                                        .available_stock_by_unit
+                                                    ?? [],
+                                                    variant
+                                                        .package_unit
+                                                    || product
+                                                        .unit
+                                                    || 'Unit',
+                                                );
+
+                                            const stockUnit =
+                                                summary
+                                                    ?.stock_unit
+                                                || variant
+                                                    .package_unit
+                                                || product
+                                                    .unit
+                                                || 'Unit';
+
+                                            return (
+                                                <article
+                                                    key={
+                                                        variant.id
+                                                    }
+                                                    className="pdp-variant-card"
+                                                >
+                                                    <div className="pdp-variant-head">
+                                                        <div>
+                                                            <strong className="pdp-variant-title">
+                                                                {
+                                                                    variant
+                                                                        .display_name
+                                                                }
+                                                            </strong>
+
+                                                            <span className="pdp-variant-sub">
+                                                                {formatQuantity(
+                                                                    variant
+                                                                        .size_value,
+                                                                )}
+
+                                                                {' '}
+
+                                                                {
+                                                                    variant
+                                                                        .size_unit
+                                                                }
+
+                                                                {' • '}
+
+                                                                {
+                                                                    variant
+                                                                        .package_unit
+                                                                }
+                                                            </span>
+                                                        </div>
+
+                                                        <span
+                                                            className={
+                                                                variant
+                                                                    .is_active
+                                                                    ? 'pdp-variant-status active'
+                                                                    : 'pdp-variant-status inactive'
+                                                            }
+                                                        >
+                                                            {variant
+                                                                .is_active
+                                                                ? 'Active'
+                                                                : 'Inactive'}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="pdp-variant-stock-grid">
+                                                        <div className="pdp-variant-stock highlight">
+                                                            <span>
+                                                                Available Stock
+                                                            </span>
+
+                                                            <strong>
+                                                                {
+                                                                    availableText
+                                                                }
+                                                            </strong>
+                                                        </div>
+
+                                                        <div className="pdp-variant-stock">
+                                                            <span>
+                                                                Saleable Stock
+                                                            </span>
+
+                                                            <strong>
+                                                                {formatQuantity(
+                                                                    summary
+                                                                        ?.saleable_quantity
+                                                                    ?? 0,
+                                                                )}
+
+                                                                {' '}
+
+                                                                {
+                                                                    stockUnit
+                                                                }
+                                                            </strong>
+                                                        </div>
+                                                    </div>
+
+                                                    <button
+                                                        type="button"
+                                                        className="pdp-variant-button"
+                                                        onClick={() => {
+                                                            openVariant(
+                                                                variant,
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="money" />
+
+                                                        View Price &amp; Stock
+                                                    </button>
+
+                                                    <div className="pdp-variant-meta">
+                                                        <div>
+                                                            <span>
+                                                                Variant SKU
+                                                            </span>
+
+                                                            <strong
+                                                                title={
+                                                                    variant
+                                                                        .sku
+                                                                }
+                                                            >
+                                                                {
+                                                                    variant
+                                                                        .sku
+                                                                }
+                                                            </strong>
+                                                        </div>
+
+                                                        <div>
+                                                            <span>
+                                                                Barcode
+                                                            </span>
+
+                                                            <strong
+                                                                title={
+                                                                    variant
+                                                                        .barcode
+                                                                    ?? 'Not assigned'
+                                                                }
+                                                            >
+                                                                {variant
+                                                                    .barcode
+                                                                    ?? 'Not assigned'}
+                                                            </strong>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="pdp-variant-footer">
+                                                        <span>
+                                                            Stock Batches
+                                                        </span>
+
+                                                        <strong>
+                                                            {summary
+                                                                ?.batch_count
+                                                                ?? 0}
+                                                        </strong>
+                                                    </div>
+                                                </article>
+                                            );
+                                        },
+                                    )}
+                            </div>
+                        </div>
+                    </section>
+                )}
 
                 <section className="pdp-panel">
-                    <header className="pdp-panel-heading">
+                    <header className="pdp-panel-head">
                         <div>
                             <h2 className="pdp-panel-title">
                                 Stock &amp; Price Details
                             </h2>
 
-                            <p className="pdp-panel-description">
-                                Each physical stock batch is
-                                displayed as one row. Stock
-                                quantities use their actual
-                                physical unit such as Bag or Kg.
+                            <p className="pdp-panel-desc">
+                                All physical stock batches with their exact variant, cost, selling price and remaining stock.
                             </p>
                         </div>
 
-                        <div className="pdp-panel-badges">
-                            <span className="pdp-count-badge">
-                                {
-                                    stockRows.length
-                                }
+                        <span className="pdp-badge">
+                            {
+                                stockRows.length
+                            }
 
-                                {' '}
+                            {' '}
 
-                                {stockRows.length
-                                    === 1
-                                    ? 'Stock Entry'
-                                    : 'Stock Entries'}
-                            </span>
-
-                            <span className="pdp-count-badge blue">
-                                {product
-                                    .summary
-                                    .number_of_price_options}
-
-                                {' '}
-
-                                {product
-                                    .summary
-                                    .number_of_price_options
-                                    === 1
-                                    ? 'Price'
-                                    : 'Prices'}
-                            </span>
-                        </div>
+                            {stockRows.length
+                                === 1
+                                ? 'Stock Entry'
+                                : 'Stock Entries'}
+                        </span>
                     </header>
 
                     {stockRows.length === 0 ? (
                         <div className="pdp-state">
-                            <span className="pdp-state-icon">
-                                <Icon name="stock" />
-                            </span>
+                            <Icon name="stock" />
 
-                            <strong className="pdp-state-title">
+                            <strong>
                                 No Stock Received
                             </strong>
 
-                            <span className="pdp-state-message">
-                                This product does not
-                                currently have any received
-                                stock entries.
+                            <span>
+                                This product has no received stock entries.
                             </span>
                         </div>
                     ) : (
-                        <div className="pdp-stock-list">
-                            {/* HEADER */}
+                        <div className="pdp-stock-wrap">
+                            <div className="pdp-stock-table-wrap">
+                                <table className="pdp-stock-table">
+                                    <thead>
+                                        <tr>
+                                            <th>
+                                                Stock Reference
+                                            </th>
 
-                            <div className="pdp-stock-grid pdp-stock-header">
-                                <span>
-                                    Stock Reference
-                                </span>
+                                            <th>
+                                                Variant
+                                            </th>
 
-                                <span>
-                                    Status
-                                </span>
+                                            <th>
+                                                Status
+                                            </th>
 
-                                <span>
-                                    Cost Price
-                                </span>
+                                            <th>
+                                                Cost Price
+                                            </th>
 
-                                <span>
-                                    Selling Price
-                                </span>
+                                            <th>
+                                                Selling Price
+                                            </th>
 
-                                <span>
-                                    Available
-                                </span>
+                                            <th>
+                                                Available
+                                            </th>
 
-                                <span>
-                                    Expiry
-                                </span>
+                                            <th>
+                                                Expiry
+                                            </th>
 
-                                <span>
-                                    Supplier
-                                </span>
+                                            <th>
+                                                Supplier
+                                            </th>
 
-                                <span>
-                                    Details
-                                </span>
-                            </div>
+                                            <th>
+                                                Details
+                                            </th>
+                                        </tr>
+                                    </thead>
 
-                            {/* STOCK ROWS */}
-
-                            <div className="pdp-stock-rows">
-                                {stockRows.map(
-                                    (
-                                        batch,
-                                    ) => {
-                                        const reference =
-                                            batch.batch_number
-                                            || batch.batch_code
-                                            || `Stock #${batch.id}`;
-
-                                        /*
-                                         * IMPORTANT FIX
-                                         *
-                                         * Example:
-                                         * Product Unit = Bag
-                                         * 1 Bag = 100 Kg
-                                         * available_quantity = 95
-                                         *
-                                         * stockUnit becomes Kg,
-                                         * therefore page displays:
-                                         *
-                                         * 95 Kg
-                                         *
-                                         * NOT:
-                                         * 95 Bag
-                                         */
-                                        const stockUnit =
-                                            getStockUnit(
+                                    <tbody>
+                                        {stockRows.map(
+                                            (
                                                 batch,
-                                                product.unit,
-                                            );
+                                            ) => {
+                                                const stockUnit =
+                                                    getStockUnit(
+                                                        batch,
+                                                        product
+                                                            .unit,
+                                                    );
 
-                                        const primaryUnit =
-                                            getPrimarySaleUnit(
-                                                batch,
-                                                product.unit,
-                                            );
+                                                const primaryUnit =
+                                                    getPrimaryUnit(
+                                                        batch,
+                                                        product
+                                                            .unit,
+                                                    );
 
-                                        return (
-                                            <article
-                                                key={
-                                                    batch.id
-                                                }
-                                                className="pdp-stock-grid pdp-stock-row"
-                                            >
-                                                {/* REFERENCE */}
-
-                                                <div className="pdp-stock-cell">
-                                                    <span className="pdp-cell-label">
-                                                        Stock Reference
-                                                    </span>
-
-                                                    <strong
-                                                        className="pdp-reference"
-                                                        title={
-                                                            reference
-                                                        }
-                                                    >
-                                                        {
-                                                            reference
-                                                        }
-                                                    </strong>
-
-                                                    <span className="pdp-reference-sub">
-                                                        Stock ID
-                                                        {' #'}
-
-                                                        {
+                                                return (
+                                                    <tr
+                                                        key={
                                                             batch.id
                                                         }
-                                                    </span>
-                                                </div>
-
-                                                {/* STATUS */}
-
-                                                <div className="pdp-stock-cell">
-                                                    <span className="pdp-cell-label">
-                                                        Status
-                                                    </span>
-
-                                                    <span
-                                                        className={
-                                                            getStatusClass(
-                                                                batch
-                                                                    .status,
-                                                            )
-                                                        }
                                                     >
-                                                        {getStatusLabel(
-                                                            batch
-                                                                .status,
-                                                        )}
-                                                    </span>
-                                                </div>
+                                                        <td>
+                                                            <strong>
+                                                                {getBatchReference(
+                                                                    batch,
+                                                                )}
+                                                            </strong>
 
-                                                {/* COST */}
-
-                                                <div className="pdp-stock-cell">
-                                                    <span className="pdp-cell-label">
-                                                        Cost Price
-                                                    </span>
-
-                                                    <strong className="pdp-cell-text pdp-cost">
-                                                        {formatCurrency(
-                                                            batch
-                                                                .unit_cost,
-                                                        )}
-                                                    </strong>
-
-                                                    <span className="pdp-price-unit">
-                                                        per
-                                                        {' '}
-                                                        {
-                                                            primaryUnit
-                                                        }
-                                                    </span>
-                                                </div>
-
-                                                {/* SELLING */}
-
-                                                <div className="pdp-stock-cell">
-                                                    <span className="pdp-cell-label">
-                                                        Selling Price
-                                                    </span>
-
-                                                    <strong className="pdp-cell-text pdp-selling">
-                                                        {formatCurrency(
-                                                            batch
-                                                                .selling_price,
-                                                        )}
-                                                    </strong>
-
-                                                    <span className="pdp-price-unit">
-                                                        per
-                                                        {' '}
-                                                        {
-                                                            primaryUnit
-                                                        }
-                                                    </span>
-                                                </div>
-
-                                                {/* AVAILABLE */}
-
-                                                <div className="pdp-stock-cell">
-                                                    <span className="pdp-cell-label">
-                                                        Available
-                                                    </span>
-
-                                                    <strong className="pdp-cell-text pdp-stock-quantity">
-                                                        {formatQuantity(
-                                                            batch
-                                                                .available_quantity,
-                                                        )}
-
-                                                        {' '}
-
-                                                        {
-                                                            stockUnit
-                                                        }
-                                                    </strong>
-
-                                                    {isDualUnitBatch(
-                                                        batch,
-                                                    ) && (
-                                                            <span className="pdp-price-unit">
-                                                                Physical stock
+                                                            <span className="pdp-sub">
+                                                                Stock ID #{batch.id}
                                                             </span>
-                                                        )}
-                                                </div>
+                                                        </td>
 
-                                                {/* EXPIRY */}
+                                                        <td>
+                                                            <strong>
+                                                                {batch
+                                                                    .variant
+                                                                    ?.display_name
+                                                                    ?? 'Standard Product'}
+                                                            </strong>
 
-                                                <div className="pdp-stock-cell">
-                                                    <span className="pdp-cell-label">
-                                                        Expiry
-                                                    </span>
+                                                            {batch.variant && (
+                                                                <span className="pdp-sub">
+                                                                    {
+                                                                        batch
+                                                                            .variant
+                                                                            .sku
+                                                                    }
+                                                                </span>
+                                                            )}
+                                                        </td>
 
-                                                    <span className="pdp-cell-text">
-                                                        {formatDate(
-                                                            batch
-                                                                .expiry_date,
-                                                        )}
-                                                    </span>
-                                                </div>
+                                                        <td>
+                                                            <span
+                                                                className={
+                                                                    getStatusClass(
+                                                                        batch
+                                                                            .status,
+                                                                    )
+                                                                }
+                                                            >
+                                                                {getStatusLabel(
+                                                                    batch
+                                                                        .status,
+                                                                )}
+                                                            </span>
+                                                        </td>
 
-                                                {/* SUPPLIER */}
+                                                        <td>
+                                                            <span className="pdp-cost">
+                                                                {formatCurrency(
+                                                                    batch
+                                                                        .unit_cost,
+                                                                )}
+                                                            </span>
 
-                                                <div className="pdp-stock-cell">
-                                                    <span className="pdp-cell-label">
-                                                        Supplier
-                                                    </span>
+                                                            <span className="pdp-sub">
+                                                                per
+                                                                {' '}
 
-                                                    <span
-                                                        className="pdp-cell-text"
-                                                        title={
-                                                            batch
+                                                                {
+                                                                    primaryUnit
+                                                                }
+                                                            </span>
+                                                        </td>
+
+                                                        <td>
+                                                            <span className="pdp-selling">
+                                                                {formatCurrency(
+                                                                    batch
+                                                                        .selling_price,
+                                                                )}
+                                                            </span>
+
+                                                            <span className="pdp-sub">
+                                                                per
+                                                                {' '}
+
+                                                                {
+                                                                    primaryUnit
+                                                                }
+                                                            </span>
+                                                        </td>
+
+                                                        <td>
+                                                            <span className="pdp-stock-qty">
+                                                                {formatQuantity(
+                                                                    batch
+                                                                        .available_quantity,
+                                                                )}
+
+                                                                {' '}
+
+                                                                {
+                                                                    stockUnit
+                                                                }
+                                                            </span>
+                                                        </td>
+
+                                                        <td>
+                                                            {formatDate(
+                                                                batch
+                                                                    .expiry_date,
+                                                            )}
+                                                        </td>
+
+                                                        <td>
+                                                            {batch
                                                                 .supplier
                                                                 ?.name
-                                                            ?? 'Not available'
-                                                        }
-                                                    >
-                                                        {batch
-                                                            .supplier
-                                                            ?.name
-                                                            ?? 'Not available'}
-                                                    </span>
-                                                </div>
+                                                                ?? 'Not available'}
+                                                        </td>
 
-                                                {/* DETAILS */}
+                                                        <td>
+                                                            <button
+                                                                type="button"
+                                                                className="pdp-view"
+                                                                onClick={() => {
+                                                                    openBatch(
+                                                                        batch,
+                                                                    );
+                                                                }}
+                                                            >
+                                                                <Icon name="eye" />
 
-                                                <div className="pdp-stock-cell action">
-                                                    <button
-                                                        type="button"
-                                                        className="pdp-button pdp-view-button"
-                                                        onClick={() => {
-                                                            setSelectedBatch(
-                                                                batch,
-                                                            );
-                                                        }}
-                                                    >
-                                                        <Icon name="eye" />
-
-                                                        View Details
-                                                    </button>
-                                                </div>
-                                            </article>
-                                        );
-                                    },
-                                )}
+                                                                View Details
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            },
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     )}
                 </section>
 
-                {/* =========================================
-                    AUDIT
-                   ========================================= */}
-
                 <footer className="pdp-audit">
-                    <div className="pdp-audit-item">
+                    <div>
                         <span>
                             Product Created
                         </span>
@@ -4802,7 +4873,7 @@ export default function ProductDetailsPage() {
                         </strong>
                     </div>
 
-                    <div className="pdp-audit-item">
+                    <div>
                         <span>
                             Last Updated
                         </span>
@@ -4816,6 +4887,8 @@ export default function ProductDetailsPage() {
                     </div>
                 </footer>
             </div>
+
+            {variantModal}
 
             {batchModal}
         </>
