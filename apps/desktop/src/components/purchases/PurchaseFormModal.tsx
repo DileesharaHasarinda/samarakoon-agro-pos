@@ -87,8 +87,10 @@ interface SearchableSelectProps {
     hasError?: boolean;
     withIcon?: boolean;
     ariaLabel: string;
+    navKey: string;
     triggerRef?: RefObject<HTMLButtonElement | null>;
     onChange: (value: string) => void;
+    onAdvance: (navKey: string) => void;
 }
 
 /* =========================================================
@@ -352,8 +354,10 @@ function SearchableSelect({
     hasError = false,
     withIcon = false,
     ariaLabel,
+    navKey,
     triggerRef,
     onChange,
+    onAdvance,
 }: SearchableSelectProps) {
     const rootRef = useRef<HTMLDivElement | null>(null);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -430,6 +434,16 @@ function SearchableSelect({
     const chooseOption = (option: SearchableSelectOption): void => {
         onChange(option.value);
         closeDropdown();
+
+        /*
+         * After selecting an option with Enter, move to the next
+         * keyboard-entry field. A zero-delay timer lets React render
+         * any newly enabled/created field first (for example the
+         * Package Variant field after selecting a variant product).
+         */
+        window.setTimeout(() => {
+            onAdvance(navKey);
+        }, 0);
     };
 
     const moveHighlight = (direction: number): void => {
@@ -499,14 +513,38 @@ function SearchableSelect({
                 aria-label={ariaLabel}
                 aria-haspopup="listbox"
                 aria-expanded={isOpen}
+                data-pfm-enter-nav="true"
+                data-pfm-nav-key={navKey}
                 onClick={() => setIsOpen((current) => !current)}
                 onKeyDown={(event) => {
+                    /*
+                     * When this select already has a value, Enter means
+                     * "accept this value and continue". ArrowDown or Space
+                     * can still reopen the list when the user wants to edit it.
+                     */
                     if (
-                        (event.key === 'Enter' || event.key === 'ArrowDown' || event.key === ' ')
+                        event.key === 'Enter'
+                        && !isOpen
+                        && selectedOption
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onAdvance(navKey);
+                        return;
+                    }
+
+                    if (
+                        (
+                            event.key === 'Enter'
+                            || event.key === 'ArrowDown'
+                            || event.key === ' '
+                        )
                         && !isOpen
                     ) {
                         event.preventDefault();
+                        event.stopPropagation();
                         setIsOpen(true);
+                        return;
                     }
 
                     if (event.key === 'Escape' && isOpen) {
@@ -927,9 +965,23 @@ const purchaseFormStyles = `
 
 #purchase-form-modal .pfm-workspace {
     display: grid !important;
-    grid-template-columns: minmax(0, 1fr) 295px !important;
+    grid-template-columns: minmax(0, 1fr) minmax(270px, 295px) !important;
     align-items: start !important;
     gap: 14px !important;
+}
+
+/*
+ * The purchased-products area is a size container.
+ * This makes the item form respond to the REAL available width
+ * beside the summary panel instead of only the browser viewport.
+ * It prevents the last price/discount fields from sliding underneath
+ * the summary column when the window, zoom level or sidebar width changes.
+ */
+#purchase-form-modal .pfm-products-section {
+    min-width: 0 !important;
+    width: 100% !important;
+    container-type: inline-size !important;
+    container-name: purchase-products !important;
 }
 
 #purchase-form-modal .pfm-items-list {
@@ -1170,24 +1222,40 @@ const purchaseFormStyles = `
  */
 #purchase-form-modal .pfm-item-main-grid {
     display: grid !important;
+    width: 100% !important;
+    min-width: 0 !important;
     grid-template-columns:
-        minmax(255px, 1.5fr)
-        minmax(120px, 0.55fr)
-        minmax(165px, 0.78fr)
-        minmax(165px, 0.78fr)
-        minmax(145px, 0.65fr) !important;
+        minmax(0, 1.45fr)
+        minmax(0, 0.62fr)
+        minmax(0, 0.86fr)
+        minmax(0, 0.86fr)
+        minmax(0, 0.68fr) !important;
     gap: 11px !important;
     align-items: start !important;
 }
 
 #purchase-form-modal .pfm-item-main-grid.has-variant {
     grid-template-columns:
-        minmax(220px, 1.25fr)
-        minmax(190px, 1.05fr)
-        minmax(105px, 0.5fr)
-        minmax(155px, 0.75fr)
-        minmax(155px, 0.75fr)
-        minmax(135px, 0.62fr) !important;
+        minmax(0, 1.22fr)
+        minmax(0, 1.04fr)
+        minmax(0, 0.55fr)
+        minmax(0, 0.82fr)
+        minmax(0, 0.82fr)
+        minmax(0, 0.68fr) !important;
+}
+
+#purchase-form-modal .pfm-item-main-grid > .pfm-field {
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+#purchase-form-modal .pfm-item-main-grid .pfm-control-wrap,
+#purchase-form-modal .pfm-item-main-grid .pfm-searchable-select,
+#purchase-form-modal .pfm-item-main-grid .pfm-searchable-trigger,
+#purchase-form-modal .pfm-item-main-grid .pfm-input {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
 }
 
 #purchase-form-modal .pfm-variant-help {
@@ -1381,6 +1449,20 @@ const purchaseFormStyles = `
     outline: none !important;
     border-color: var(--pfm-green-700) !important;
     box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.14) !important;
+}
+
+/*
+ * ENTER-KEY ENTRY FLOW
+ *
+ * Controls participating in the Enter workflow receive
+ * data-pfm-enter-nav="true". The focused field is deliberately
+ * obvious so a cashier/admin can enter a purchase without a mouse.
+ */
+#purchase-form-modal [data-pfm-enter-nav="true"]:focus,
+#purchase-form-modal [data-pfm-enter-nav="true"]:focus-visible {
+    outline: none !important;
+    border-color: var(--pfm-green-700) !important;
+    box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.15) !important;
 }
 
 #purchase-form-modal .pfm-input:disabled,
@@ -1924,6 +2006,40 @@ const purchaseFormStyles = `
 }
 
 /* =========================================================
+   ITEM FORM WIDTH SAFETY
+   =========================================================
+
+   These breakpoints use the purchased-products container width,
+   not the viewport width. This fixes the intermittent overlap seen
+   when the right-hand Purchase Summary leaves less horizontal room.
+*/
+
+@container purchase-products (max-width: 1080px) {
+    #purchase-form-modal .pfm-item-main-grid,
+    #purchase-form-modal .pfm-item-main-grid.has-variant {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    #purchase-form-modal .pfm-item-main-grid > .pfm-field > .pfm-main-field-label {
+        min-height: 22px !important;
+    }
+}
+
+@container purchase-products (max-width: 720px) {
+    #purchase-form-modal .pfm-item-main-grid,
+    #purchase-form-modal .pfm-item-main-grid.has-variant {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@container purchase-products (max-width: 480px) {
+    #purchase-form-modal .pfm-item-main-grid,
+    #purchase-form-modal .pfm-item-main-grid.has-variant {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* =========================================================
    RESPONSIVE
    ========================================================= */
 
@@ -2053,6 +2169,7 @@ export default function PurchaseFormModal({
     onSubmit,
 }: PurchaseFormModalProps) {
     const supplierInputRef = useRef<HTMLButtonElement | null>(null);
+    const formRef = useRef<HTMLFormElement | null>(null);
     const onCloseRef = useRef(onClose);
     const isSubmittingRef = useRef(isSubmitting);
 
@@ -2140,6 +2257,27 @@ export default function PurchaseFormModal({
 
         if (addedId) {
             setExpandedRowId(addedId);
+
+            /*
+             * When Add Product is activated from the keyboard,
+             * automatically place focus on the Product selector
+             * in the newly created row.
+             */
+            window.setTimeout(() => {
+                const productTrigger =
+                    formRef.current?.querySelector<HTMLElement>(
+                        `[data-pfm-nav-key="item-${addedId}-product"]`,
+                    );
+
+                productTrigger?.focus({
+                    preventScroll: true,
+                });
+
+                productTrigger?.scrollIntoView({
+                    block: 'nearest',
+                    behavior: 'smooth',
+                });
+            }, 40);
         } else if (
             currentIds.length > 0
             && (!expandedRowId || !currentIds.includes(expandedRowId))
@@ -2306,6 +2444,188 @@ export default function PurchaseFormModal({
         onAddItem();
     };
 
+    /*
+     * =====================================================
+     * ENTER-KEY NAVIGATION
+     * =====================================================
+     *
+     * Enter behaves like "next field" for data-entry controls.
+     *
+     * Searchable selects keep their own keyboard behaviour:
+     *   Enter on trigger -> open
+     *   Type / arrows    -> search and move
+     *   Enter in menu    -> select + advance
+     *
+     * Textareas:
+     *   Enter            -> next field
+     *   Shift + Enter    -> new line
+     *
+     * The submit button is the final focus target. Once focused,
+     * pressing Enter uses its normal form-submit behaviour.
+     */
+
+    const focusNextNavigable = (
+        currentNavKey: string,
+    ): void => {
+        window.setTimeout(() => {
+            const form =
+                formRef.current;
+
+            if (!form) {
+                return;
+            }
+
+            const navigableElements =
+                Array.from(
+                    form.querySelectorAll<HTMLElement>(
+                        '[data-pfm-enter-nav="true"]',
+                    ),
+                )
+                    .filter(
+                        (element) => {
+                            if (
+                                element instanceof HTMLButtonElement
+                                || element instanceof HTMLInputElement
+                                || element instanceof HTMLSelectElement
+                                || element instanceof HTMLTextAreaElement
+                            ) {
+                                if (element.disabled) {
+                                    return false;
+                                }
+                            }
+
+                            /*
+                             * Hidden controls from collapsed rows or
+                             * conditional dual-unit sections are skipped.
+                             */
+                            return element.getClientRects().length > 0;
+                        },
+                    );
+
+            const currentIndex =
+                navigableElements.findIndex(
+                    (element) =>
+                        element.dataset.pfmNavKey
+                        === currentNavKey,
+                );
+
+            if (currentIndex < 0) {
+                return;
+            }
+
+            const nextElement =
+                navigableElements[
+                currentIndex + 1
+                ];
+
+            if (!nextElement) {
+                return;
+            }
+
+            nextElement.focus({
+                preventScroll: true,
+            });
+
+            nextElement.scrollIntoView({
+                block: 'nearest',
+                inline: 'nearest',
+                behavior: 'smooth',
+            });
+
+            /*
+             * Select existing text so fast keyboard entry can
+             * immediately replace default values such as 0 or 1.
+             */
+            if (
+                nextElement instanceof HTMLInputElement
+                && (
+                    nextElement.type === 'text'
+                    || nextElement.type === 'number'
+                )
+            ) {
+                nextElement.select();
+            }
+        }, 0);
+    };
+
+    const handleFormKeyDown = (
+        event: ReactKeyboardEvent<HTMLFormElement>,
+    ): void => {
+        if (
+            event.key !== 'Enter'
+            || event.defaultPrevented
+            || event.metaKey
+            || event.ctrlKey
+            || event.altKey
+        ) {
+            return;
+        }
+
+        const target =
+            event.target;
+
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+
+        /*
+         * SearchableSelect handles Enter itself. This prevents
+         * the form from advancing before an option is selected.
+         */
+        if (
+            target.closest(
+                '.pfm-searchable-select',
+            )
+        ) {
+            return;
+        }
+
+        /*
+         * Shift + Enter remains available for a real newline
+         * inside Purchase Notes.
+         */
+        if (
+            target instanceof HTMLTextAreaElement
+            && event.shiftKey
+        ) {
+            return;
+        }
+
+        const navKey =
+            target.dataset.pfmNavKey;
+
+        if (!navKey) {
+            return;
+        }
+
+        /*
+         * Buttons retain their native Enter behaviour.
+         * This is especially important for the final Submit button.
+         */
+        if (
+            target instanceof HTMLButtonElement
+        ) {
+            return;
+        }
+
+        event.preventDefault();
+
+        /*
+         * Enter on a checkbox toggles it, then continues.
+         * This makes "Receive Stock Now" keyboard-friendly too.
+         */
+        if (
+            target instanceof HTMLInputElement
+            && target.type === 'checkbox'
+        ) {
+            target.click();
+        }
+
+        focusNextNavigable(
+            navKey,
+        );
+    };
+
     const supplierError = getFieldError('supplier_id');
     const purchaseDateError = getFieldError('purchase_date');
 
@@ -2359,7 +2679,13 @@ export default function PurchaseFormModal({
                         </button>
                     </header>
 
-                    <form className="pfm-form" noValidate onSubmit={onSubmit}>
+                    <form
+                        ref={formRef}
+                        className="pfm-form"
+                        noValidate
+                        onSubmit={onSubmit}
+                        onKeyDown={handleFormKeyDown}
+                    >
                         <div className="pfm-body">
                             {errorMessage && (
                                 <div className="pfm-alert" role="alert">
@@ -2408,9 +2734,11 @@ export default function PurchaseFormModal({
                                                 hasError={Boolean(supplierError)}
                                                 withIcon
                                                 ariaLabel="Select supplier"
+                                                navKey="supplier"
                                                 onChange={(supplierId) => {
                                                     onHeaderChange('supplier_id', supplierId);
                                                 }}
+                                                onAdvance={focusNextNavigable}
                                             />
                                         </span>
 
@@ -2442,6 +2770,8 @@ export default function PurchaseFormModal({
                                                 value={values.purchase_date}
                                                 disabled={isSubmitting}
                                                 required
+                                                data-pfm-enter-nav="true"
+                                                data-pfm-nav-key="purchase-date"
                                                 onChange={(event) => {
                                                     onHeaderChange('purchase_date', event.target.value);
                                                 }}
@@ -2478,6 +2808,8 @@ export default function PurchaseFormModal({
                                                 maxLength={120}
                                                 disabled={isSubmitting}
                                                 placeholder="Invoice or reference number"
+                                                data-pfm-enter-nav="true"
+                                                data-pfm-nav-key="supplier-invoice"
                                                 onChange={(event) => {
                                                     onHeaderChange(
                                                         'supplier_invoice_number',
@@ -2563,6 +2895,8 @@ export default function PurchaseFormModal({
                                                 rows={2}
                                                 disabled={isSubmitting}
                                                 placeholder="Payment terms, delivery notes or internal comments"
+                                                data-pfm-enter-nav="true"
+                                                data-pfm-nav-key="purchase-notes"
                                                 onChange={(event) => {
                                                     onHeaderChange('notes', event.target.value);
                                                 }}
@@ -2575,7 +2909,7 @@ export default function PurchaseFormModal({
                             {/* PRODUCT WORKSPACE */}
 
                             <div className="pfm-workspace">
-                                <section className="pfm-section">
+                                <section className="pfm-section pfm-products-section">
                                     <header className="pfm-section-header">
                                         <div className="pfm-section-heading">
                                             <span className="pfm-section-icon">
@@ -2862,6 +3196,7 @@ export default function PurchaseFormModal({
                                                                         disabled={isSubmitting}
                                                                         hasError={Boolean(productError)}
                                                                         ariaLabel={`Select product for item ${index + 1}`}
+                                                                        navKey={`item-${rowId}-product`}
                                                                         onChange={(productId) => {
                                                                             handleProductChange(
                                                                                 index,
@@ -2869,6 +3204,7 @@ export default function PurchaseFormModal({
                                                                                 productId,
                                                                             );
                                                                         }}
+                                                                        onAdvance={focusNextNavigable}
                                                                     />
 
                                                                     <div className="pfm-main-field-feedback">
@@ -2902,12 +3238,14 @@ export default function PurchaseFormModal({
                                                                             disabled={isSubmitting || !selectedProduct}
                                                                             hasError={Boolean(variantError)}
                                                                             ariaLabel={`Select package variant for item ${index + 1}`}
+                                                                            navKey={`item-${rowId}-variant`}
                                                                             onChange={(variantId) => {
                                                                                 handleVariantChange(
                                                                                     index,
                                                                                     variantId,
                                                                                 );
                                                                             }}
+                                                                            onAdvance={focusNextNavigable}
                                                                         />
 
                                                                         <div className="pfm-main-field-feedback">
@@ -2958,6 +3296,8 @@ export default function PurchaseFormModal({
                                                                         disabled={isSubmitting || requiresVariantSelection}
                                                                         required
                                                                         placeholder="0"
+                                                                        data-pfm-enter-nav="true"
+                                                                        data-pfm-nav-key={`item-${rowId}-quantity`}
                                                                         onChange={(event) => {
                                                                             onItemChange(
                                                                                 index,
@@ -3002,6 +3342,8 @@ export default function PurchaseFormModal({
                                                                             disabled={isSubmitting || requiresVariantSelection}
                                                                             required
                                                                             placeholder="0.00"
+                                                                            data-pfm-enter-nav="true"
+                                                                            data-pfm-nav-key={`item-${rowId}-unit-cost`}
                                                                             onChange={(event) => {
                                                                                 onItemChange(
                                                                                     index,
@@ -3047,6 +3389,8 @@ export default function PurchaseFormModal({
                                                                             disabled={isSubmitting || requiresVariantSelection}
                                                                             required
                                                                             placeholder="0.00"
+                                                                            data-pfm-enter-nav="true"
+                                                                            data-pfm-nav-key={`item-${rowId}-selling-price`}
                                                                             onChange={(event) => {
                                                                                 onItemChange(
                                                                                     index,
@@ -3086,6 +3430,8 @@ export default function PurchaseFormModal({
                                                                             value={item.discount}
                                                                             disabled={isSubmitting}
                                                                             placeholder="0.00"
+                                                                            data-pfm-enter-nav="true"
+                                                                            data-pfm-nav-key={`item-${rowId}-discount`}
                                                                             onChange={(event) => {
                                                                                 onItemChange(
                                                                                     index,
@@ -3120,6 +3466,8 @@ export default function PurchaseFormModal({
                                                                                 type="checkbox"
                                                                                 checked={dualUnitEnabled}
                                                                                 disabled={isSubmitting}
+                                                                                data-pfm-enter-nav="true"
+                                                                                data-pfm-nav-key={`item-${rowId}-dual-unit`}
                                                                                 onChange={(event) => {
                                                                                     handleDualUnitToggle(
                                                                                         index,
@@ -3161,6 +3509,8 @@ export default function PurchaseFormModal({
                                                                                             disabled={isSubmitting}
                                                                                             required
                                                                                             placeholder="Example: 50"
+                                                                                            data-pfm-enter-nav="true"
+                                                                                            data-pfm-nav-key={`item-${rowId}-conversion-factor`}
                                                                                             onChange={(event) => {
                                                                                                 changeExtendedItemField(
                                                                                                     index,
@@ -3226,6 +3576,8 @@ export default function PurchaseFormModal({
                                                                                             disabled={isSubmitting}
                                                                                             required
                                                                                             placeholder="Price per 1 Kg"
+                                                                                            data-pfm-enter-nav="true"
+                                                                                            data-pfm-nav-key={`item-${rowId}-secondary-selling-price`}
                                                                                             onChange={(event) => {
                                                                                                 changeExtendedItemField(
                                                                                                     index,
@@ -3312,6 +3664,8 @@ export default function PurchaseFormModal({
                                                                         maxLength={120}
                                                                         disabled={isSubmitting}
                                                                         placeholder="Optional"
+                                                                        data-pfm-enter-nav="true"
+                                                                        data-pfm-nav-key={`item-${rowId}-batch-number`}
                                                                         onChange={(event) => {
                                                                             onItemChange(
                                                                                 index,
@@ -3332,6 +3686,8 @@ export default function PurchaseFormModal({
                                                                         className="pfm-input"
                                                                         value={item.manufactured_date}
                                                                         disabled={isSubmitting}
+                                                                        data-pfm-enter-nav="true"
+                                                                        data-pfm-nav-key={`item-${rowId}-manufactured-date`}
                                                                         onChange={(event) => {
                                                                             onItemChange(
                                                                                 index,
@@ -3354,6 +3710,8 @@ export default function PurchaseFormModal({
                                                                         }
                                                                         value={item.expiry_date}
                                                                         disabled={isSubmitting}
+                                                                        data-pfm-enter-nav="true"
+                                                                        data-pfm-nav-key={`item-${rowId}-expiry-date`}
                                                                         onChange={(event) => {
                                                                             onItemChange(
                                                                                 index,
@@ -3387,6 +3745,8 @@ export default function PurchaseFormModal({
                                                                         maxLength={1000}
                                                                         disabled={isSubmitting}
                                                                         placeholder="Optional item note"
+                                                                        data-pfm-enter-nav="true"
+                                                                        data-pfm-nav-key={`item-${rowId}-notes`}
                                                                         onChange={(event) => {
                                                                             onItemChange(
                                                                                 index,
@@ -3459,6 +3819,8 @@ export default function PurchaseFormModal({
                                                 type="checkbox"
                                                 checked={values.receive_now}
                                                 disabled={isSubmitting}
+                                                data-pfm-enter-nav="true"
+                                                data-pfm-nav-key="receive-now"
                                                 onChange={(event) => {
                                                     onHeaderChange(
                                                         'receive_now',
@@ -3491,7 +3853,7 @@ export default function PurchaseFormModal({
                         <footer className="pfm-actions">
                             <span className="pfm-action-note">
                                 <Icon name="info" />
-                                Variant products require a package size before quantity, purchase cost and selling price can be entered.
+                                Keyboard mode: press Enter to move to the next field. Searchable lists use Enter to select. Use Shift + Enter for a new line in Purchase Notes.
                             </span>
 
                             <div className="pfm-action-buttons">
@@ -3508,6 +3870,8 @@ export default function PurchaseFormModal({
                                     type="submit"
                                     className="pfm-button pfm-submit"
                                     disabled={isSubmitting}
+                                    data-pfm-enter-nav="true"
+                                    data-pfm-nav-key="submit-purchase"
                                 >
                                     {isSubmitting ? (
                                         <span className="pfm-spinner" />

@@ -571,6 +571,11 @@ const adminNavigation: NavigationSection[] = [
                 icon: 'database',
             },
             {
+                label: 'Device Printer',
+                path: '/admin/device-printer',
+                icon: 'receipt',
+            },
+            {
                 label: 'Settings',
                 path: '/admin/settings',
                 icon: 'settings',
@@ -622,6 +627,16 @@ const cashierNavigation: NavigationSection[] = [
                 label: 'Sales Returns',
                 path: '/cashier/returns',
                 icon: 'return',
+            },
+        ],
+    },
+    {
+        title: 'Device',
+        items: [
+            {
+                label: 'Device Printer',
+                path: '/cashier/device-printer',
+                icon: 'receipt',
             },
         ],
     },

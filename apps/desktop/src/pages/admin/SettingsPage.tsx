@@ -2593,65 +2593,16 @@ export default function SettingsPage() {
                                             </select>
                                         </label>
 
-                                        <label className="stg-field">
-                                            <span>
-                                                Printer Name
-                                            </span>
-
-                                            <input
-                                                type="text"
-                                                maxLength={150}
-                                                placeholder="Example: EPSON TM-T82"
-                                                value={
-                                                    values
-                                                        .printer_name
-                                                    ?? ''
-                                                }
-                                                onChange={(event) => {
-                                                    setField(
-                                                        'printer_name',
-                                                        event
-                                                            .target
-                                                            .value
-                                                        || null,
-                                                    );
-                                                }}
-                                            />
-                                        </label>
-
-                                        <label className="stg-field">
-                                            <span>
-                                                Printer Network Address
-                                            </span>
-
-                                            <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                maxLength={45}
-                                                placeholder="Example: 192.168.1.50"
-                                                value={
-                                                    values
-                                                        .printer_ip_address
-                                                    ?? ''
-                                                }
-                                                onChange={(event) => {
-                                                    setField(
-                                                        'printer_ip_address',
-                                                        event
-                                                            .target
-                                                            .value
-                                                        || null,
-                                                    );
-                                                }}
-                                            />
-                                        </label>
-                                    </div>
-
-                                    <div className="stg-printer-banner">
-                                        Printer selection is controlled
-                                        by the system print dialog.
-                                        The printer name above is stored
-                                        as a reference for staff.
+                                        <div className="stg-printer-banner stg-full-field">
+                                            The physical receipt printer is now configured
+                                            separately on each cashier computer from
+                                            <strong> Device Printer</strong> in the sidebar.
+                                            This prevents Cashier PC 1 and Cashier PC 2
+                                            from overwriting each other&apos;s printer.
+                                            Receipt paper size, copies, receipt content and
+                                            auto-print preferences on this page remain shared
+                                            business settings.
+                                        </div>
                                     </div>
                                 </section>
 
@@ -2978,7 +2929,7 @@ export default function SettingsPage() {
                                             window.print();
                                         }}
                                     >
-                                        Test Print
+                                        Preview Print
                                     </button>
                                 </div>
                             </aside>

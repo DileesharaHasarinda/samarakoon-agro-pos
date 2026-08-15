@@ -8,6 +8,7 @@ import {
 
 import type {
     FormEvent,
+    KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 
 import {
@@ -773,6 +774,35 @@ const productsPageStyles = `
     border-radius: 8px !important;
 }
 
+#sapo-product-modal .pm-keyboard-help {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 7px !important;
+    margin-top: 10px !important;
+    padding: 10px 11px !important;
+    color: #475467 !important;
+    font-size: 11px !important;
+    font-weight: 650 !important;
+    background: #f8faf9 !important;
+    border: 1px solid #dfe6e1 !important;
+    border-radius: 8px !important;
+}
+
+#sapo-product-modal .pm-key {
+    display: inline-flex !important;
+    min-height: 23px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 2px 7px !important;
+    color: #14532d !important;
+    font-size: 10px !important;
+    font-weight: 850 !important;
+    background: #f0fdf4 !important;
+    border: 1px solid #b8dfc3 !important;
+    border-radius: 6px !important;
+}
+
 #sapo-product-modal .pm-variant-list {
     display: grid !important;
     gap: 11px !important;
@@ -888,8 +918,48 @@ export default function ProductsPage() {
     } =
         useAuth();
 
+    const formRef =
+        useRef<HTMLFormElement | null>(
+            null,
+        );
+
+    const categoryInputRef =
+        useRef<HTMLSelectElement | null>(
+            null,
+        );
+
     const nameInputRef =
         useRef<HTMLInputElement | null>(
+            null,
+        );
+
+    const unitInputRef =
+        useRef<HTMLSelectElement | null>(
+            null,
+        );
+
+    const barcodeInputRef =
+        useRef<HTMLInputElement | null>(
+            null,
+        );
+
+    const addVariantButtonRef =
+        useRef<HTMLButtonElement | null>(
+            null,
+        );
+
+    const submitButtonRef =
+        useRef<HTMLButtonElement | null>(
+            null,
+        );
+
+    /*
+     * When a new variant is added with the keyboard,
+     * this stores the row index that should receive focus
+     * after React renders the new variant card.
+     */
+    const pendingVariantFocusIndexRef =
+        useRef<number | null>(
             null,
         );
 
@@ -1011,6 +1081,193 @@ export default function ProductsPage() {
                 form.category_id,
             ],
         );
+
+    /* =====================================================
+       KEYBOARD / ENTER NAVIGATION
+       ===================================================== */
+
+    const focusElement =
+        (
+            element:
+                HTMLElement
+                | null,
+        ): void => {
+            if (!element) {
+                return;
+            }
+
+            window.requestAnimationFrame(
+                () => {
+                    element.focus({
+                        preventScroll:
+                            true,
+                    });
+
+                    element.scrollIntoView({
+                        behavior:
+                            'smooth',
+                        block:
+                            'nearest',
+                        inline:
+                            'nearest',
+                    });
+
+                    if (
+                        element
+                        instanceof HTMLInputElement
+                        && (
+                            element.type
+                            === 'text'
+                            || element.type
+                            === 'number'
+                            || element.type
+                            === 'search'
+                        )
+                    ) {
+                        element.select();
+                    }
+                },
+            );
+        };
+
+    const focusVariantField =
+        (
+            index: number,
+            field:
+                | 'size'
+                | 'size-unit'
+                | 'package'
+                | 'barcode'
+                | 'active',
+        ): void => {
+            const modal =
+                document.getElementById(
+                    'sapo-product-modal',
+                );
+
+            const element =
+                modal?.querySelector<HTMLElement>(
+                    `[data-variant-index="${index}"][data-variant-field="${field}"]`,
+                )
+                ?? null;
+
+            focusElement(
+                element,
+            );
+        };
+
+    const handleEnterFocus =
+        (
+            event:
+                ReactKeyboardEvent<HTMLElement>,
+            nextElement:
+                HTMLElement
+                | null,
+        ): void => {
+            if (
+                event.key
+                !== 'Enter'
+                || event.shiftKey
+                || event.ctrlKey
+                || event.metaKey
+                || event.altKey
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            focusElement(
+                nextElement,
+            );
+        };
+
+    const handleVariantFieldEnter =
+        (
+            event:
+                ReactKeyboardEvent<HTMLElement>,
+            index: number,
+            nextField:
+                | 'size'
+                | 'size-unit'
+                | 'package'
+                | 'barcode'
+                | 'active',
+        ): void => {
+            if (
+                event.key
+                !== 'Enter'
+                || event.shiftKey
+                || event.ctrlKey
+                || event.metaKey
+                || event.altKey
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            focusVariantField(
+                index,
+                nextField,
+            );
+        };
+
+    const handleVariantActiveEnter =
+        (
+            event:
+                ReactKeyboardEvent<HTMLInputElement>,
+            index: number,
+            checked: boolean,
+        ): void => {
+            if (
+                event.key
+                !== 'Enter'
+                || event.shiftKey
+                || event.ctrlKey
+                || event.metaKey
+                || event.altKey
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            updateVariant(
+                index,
+                {
+                    is_active:
+                        !checked,
+                },
+            );
+
+            const nextVariantIndex =
+                index + 1;
+
+            if (
+                nextVariantIndex
+                < form.variants.length
+            ) {
+                window.setTimeout(
+                    () => {
+                        focusVariantField(
+                            nextVariantIndex,
+                            'size',
+                        );
+                    },
+                    0,
+                );
+
+                return;
+            }
+
+            focusElement(
+                submitButtonRef.current,
+            );
+        };
 
     /* =====================================================
        LOAD
@@ -1136,22 +1393,85 @@ export default function ProductsPage() {
             const oldOverflow =
                 document.body.style.overflow;
 
+            const previouslyFocused =
+                document.activeElement
+                    instanceof HTMLElement
+                    ? document.activeElement
+                    : null;
+
             document.body.style.overflow =
                 'hidden';
+
+            /*
+             * Start every Add/Edit Product workflow from Category.
+             */
+            const focusTimer =
+                window.setTimeout(
+                    () => {
+                        focusElement(
+                            categoryInputRef.current,
+                        );
+                    },
+                    80,
+                );
 
             const handleKey =
                 (
                     event:
                         KeyboardEvent,
-                ) => {
+                ): void => {
                     if (
                         event.key
                         === 'Escape'
                         && !isSubmitting
                     ) {
+                        event.preventDefault();
+
                         setShowForm(
                             false,
                         );
+
+                        return;
+                    }
+
+                    /*
+                     * Ctrl/Cmd + Enter saves from anywhere in the modal.
+                     * This also lets a normal product be created without
+                     * adding package variants.
+                     */
+                    if (
+                        event.key
+                        === 'Enter'
+                        && (
+                            event.ctrlKey
+                            || event.metaKey
+                        )
+                        && !isSubmitting
+                    ) {
+                        event.preventDefault();
+
+                        formRef.current
+                            ?.requestSubmit();
+
+                        return;
+                    }
+
+                    /*
+                     * Alt + V adds a package variant without using a mouse.
+                     */
+                    if (
+                        (
+                            event.key
+                            === 'v'
+                            || event.key
+                            === 'V'
+                        )
+                        && event.altKey
+                        && !isSubmitting
+                    ) {
+                        event.preventDefault();
+
+                        addVariant();
                     }
                 };
 
@@ -1161,6 +1481,10 @@ export default function ProductsPage() {
             );
 
             return () => {
+                window.clearTimeout(
+                    focusTimer,
+                );
+
                 document.body.style.overflow =
                     oldOverflow;
 
@@ -1168,6 +1492,9 @@ export default function ProductsPage() {
                     'keydown',
                     handleKey,
                 );
+
+                previouslyFocused
+                    ?.focus();
             };
         },
         [
@@ -1292,6 +1619,9 @@ export default function ProductsPage() {
 
     const addVariant =
         (): void => {
+            pendingVariantFocusIndexRef.current =
+                form.variants.length;
+
             setForm(
                 (
                     current,
@@ -1309,6 +1639,51 @@ export default function ProductsPage() {
                 }),
             );
         };
+
+    /*
+     * After Add Variant is activated with Enter, focus the
+     * Size field of the newly created variant automatically.
+     */
+    useEffect(
+        () => {
+            const pendingIndex =
+                pendingVariantFocusIndexRef.current;
+
+            if (
+                !showForm
+                || pendingIndex
+                === null
+                || pendingIndex
+                >= form.variants.length
+            ) {
+                return;
+            }
+
+            pendingVariantFocusIndexRef.current =
+                null;
+
+            const timer =
+                window.setTimeout(
+                    () => {
+                        focusVariantField(
+                            pendingIndex,
+                            'size',
+                        );
+                    },
+                    40,
+                );
+
+            return () => {
+                window.clearTimeout(
+                    timer,
+                );
+            };
+        },
+        [
+            showForm,
+            form.variants.length,
+        ],
+    );
 
     const updateVariant =
         (
@@ -1624,6 +1999,9 @@ export default function ProductsPage() {
                             </header>
 
                             <form
+                                ref={
+                                    formRef
+                                }
                                 onSubmit={(event) => {
                                     void handleSubmit(
                                         event,
@@ -1664,6 +2042,9 @@ export default function ProductsPage() {
                                             </span>
 
                                             <select
+                                                ref={
+                                                    categoryInputRef
+                                                }
                                                 className="pm-select"
                                                 value={
                                                     form.category_id
@@ -1673,6 +2054,12 @@ export default function ProductsPage() {
                                                     isSubmitting
                                                     || isCategoryLoading
                                                 }
+                                                onKeyDown={(event) => {
+                                                    handleEnterFocus(
+                                                        event,
+                                                        nameInputRef.current,
+                                                    );
+                                                }}
                                                 onChange={(event) => {
                                                     setForm(
                                                         (
@@ -1769,6 +2156,12 @@ export default function ProductsPage() {
                                                         160
                                                     }
                                                     placeholder="Example: Tomato Seeds"
+                                                    onKeyDown={(event) => {
+                                                        handleEnterFocus(
+                                                            event,
+                                                            unitInputRef.current,
+                                                        );
+                                                    }}
                                                     onChange={(event) => {
                                                         setForm(
                                                             (
@@ -1796,10 +2189,19 @@ export default function ProductsPage() {
                                                 </span>
 
                                                 <select
+                                                    ref={
+                                                        unitInputRef
+                                                    }
                                                     className="pm-select"
                                                     value={
                                                         form.unit
                                                     }
+                                                    onKeyDown={(event) => {
+                                                        handleEnterFocus(
+                                                            event,
+                                                            barcodeInputRef.current,
+                                                        );
+                                                    }}
                                                     onChange={(event) => {
                                                         const unit =
                                                             event
@@ -1868,6 +2270,9 @@ export default function ProductsPage() {
                                                 </span>
 
                                                 <input
+                                                    ref={
+                                                        barcodeInputRef
+                                                    }
                                                     className="pm-input"
                                                     value={
                                                         form.barcode
@@ -1876,6 +2281,37 @@ export default function ProductsPage() {
                                                         120
                                                     }
                                                     placeholder="For normal product"
+                                                    onKeyDown={(event) => {
+                                                        if (
+                                                            event.key
+                                                            !== 'Enter'
+                                                            || event.shiftKey
+                                                            || event.ctrlKey
+                                                            || event.metaKey
+                                                            || event.altKey
+                                                        ) {
+                                                            return;
+                                                        }
+
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+
+                                                        if (
+                                                            form.variants.length
+                                                            > 0
+                                                        ) {
+                                                            focusVariantField(
+                                                                0,
+                                                                'size',
+                                                            );
+
+                                                            return;
+                                                        }
+
+                                                        focusElement(
+                                                            addVariantButtonRef.current,
+                                                        );
+                                                    }}
                                                     onChange={(event) => {
                                                         setForm(
                                                             (
@@ -1897,6 +2333,32 @@ export default function ProductsPage() {
                                         <div className="pm-info">
                                             For products with package variants, each variant can have its own barcode. Cost price, selling price, batch, expiry and stock are still recorded when purchasing stock.
                                         </div>
+
+                                        <div className="pm-keyboard-help">
+                                            <span className="pm-key">
+                                                Enter
+                                            </span>
+
+                                            <span>
+                                                Next field
+                                            </span>
+
+                                            <span className="pm-key">
+                                                Ctrl/Cmd + Enter
+                                            </span>
+
+                                            <span>
+                                                Save product
+                                            </span>
+
+                                            <span className="pm-key">
+                                                Alt + V
+                                            </span>
+
+                                            <span>
+                                                Add variant
+                                            </span>
+                                        </div>
                                     </section>
 
                                     {/* VARIANTS */}
@@ -1914,11 +2376,29 @@ export default function ProductsPage() {
                                             </div>
 
                                             <button
+                                                ref={
+                                                    addVariantButtonRef
+                                                }
                                                 type="button"
                                                 className="pm-button pm-button-primary"
                                                 disabled={
                                                     isSubmitting
                                                 }
+                                                onKeyDown={(event) => {
+                                                    if (
+                                                        event.key
+                                                        === 'Enter'
+                                                        && !event.shiftKey
+                                                        && !event.ctrlKey
+                                                        && !event.metaKey
+                                                        && !event.altKey
+                                                    ) {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+
+                                                        addVariant();
+                                                    }
+                                                }}
                                                 onClick={
                                                     addVariant
                                                 }
@@ -1986,11 +2466,22 @@ export default function ProductsPage() {
                                                                         min="0.001"
                                                                         step="0.001"
                                                                         className="pm-input"
+                                                                        data-variant-index={
+                                                                            index
+                                                                        }
+                                                                        data-variant-field="size"
                                                                         value={
                                                                             variant
                                                                                 .size_value
                                                                         }
                                                                         placeholder="100"
+                                                                        onKeyDown={(event) => {
+                                                                            handleVariantFieldEnter(
+                                                                                event,
+                                                                                index,
+                                                                                'size-unit',
+                                                                            );
+                                                                        }}
                                                                         onChange={(event) => {
                                                                             updateVariant(
                                                                                 index,
@@ -2012,10 +2503,21 @@ export default function ProductsPage() {
 
                                                                     <select
                                                                         className="pm-select"
+                                                                        data-variant-index={
+                                                                            index
+                                                                        }
+                                                                        data-variant-field="size-unit"
                                                                         value={
                                                                             variant
                                                                                 .size_unit
                                                                         }
+                                                                        onKeyDown={(event) => {
+                                                                            handleVariantFieldEnter(
+                                                                                event,
+                                                                                index,
+                                                                                'package',
+                                                                            );
+                                                                        }}
                                                                         onChange={(event) => {
                                                                             updateVariant(
                                                                                 index,
@@ -2060,10 +2562,21 @@ export default function ProductsPage() {
 
                                                                     <select
                                                                         className="pm-select"
+                                                                        data-variant-index={
+                                                                            index
+                                                                        }
+                                                                        data-variant-field="package"
                                                                         value={
                                                                             variant
                                                                                 .package_unit
                                                                         }
+                                                                        onKeyDown={(event) => {
+                                                                            handleVariantFieldEnter(
+                                                                                event,
+                                                                                index,
+                                                                                'barcode',
+                                                                            );
+                                                                        }}
                                                                         onChange={(event) => {
                                                                             updateVariant(
                                                                                 index,
@@ -2108,6 +2621,10 @@ export default function ProductsPage() {
 
                                                                     <input
                                                                         className="pm-input"
+                                                                        data-variant-index={
+                                                                            index
+                                                                        }
+                                                                        data-variant-field="barcode"
                                                                         value={
                                                                             variant
                                                                                 .barcode
@@ -2116,6 +2633,13 @@ export default function ProductsPage() {
                                                                             120
                                                                         }
                                                                         placeholder="Scan or enter barcode"
+                                                                        onKeyDown={(event) => {
+                                                                            handleVariantFieldEnter(
+                                                                                event,
+                                                                                index,
+                                                                                'active',
+                                                                            );
+                                                                        }}
                                                                         onChange={(event) => {
                                                                             updateVariant(
                                                                                 index,
@@ -2133,10 +2657,22 @@ export default function ProductsPage() {
                                                                 <label className="pm-check">
                                                                     <input
                                                                         type="checkbox"
+                                                                        data-variant-index={
+                                                                            index
+                                                                        }
+                                                                        data-variant-field="active"
                                                                         checked={
                                                                             variant
                                                                                 .is_active
                                                                         }
+                                                                        onKeyDown={(event) => {
+                                                                            handleVariantActiveEnter(
+                                                                                event,
+                                                                                index,
+                                                                                variant
+                                                                                    .is_active,
+                                                                            );
+                                                                        }}
                                                                         onChange={(event) => {
                                                                             updateVariant(
                                                                                 index,
@@ -2176,6 +2712,9 @@ export default function ProductsPage() {
                                     </button>
 
                                     <button
+                                        ref={
+                                            submitButtonRef
+                                        }
                                         type="submit"
                                         className="pm-button pm-button-primary"
                                         disabled={

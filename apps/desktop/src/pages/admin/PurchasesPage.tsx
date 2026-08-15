@@ -10,6 +10,10 @@ import type {
 } from 'react';
 
 import {
+    createPortal,
+} from 'react-dom';
+
+import {
     useAuth,
 } from '../../auth/AuthContext';
 
@@ -95,6 +99,7 @@ type IconName =
     | 'chevron-right'
     | 'close'
     | 'edit'
+    | 'eye'
     | 'filter'
     | 'package'
     | 'plus'
@@ -180,6 +185,19 @@ function Icon({
                 <svg {...props}>
                     <path d="M12 20h9" />
                     <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                </svg>
+            );
+
+        case 'eye':
+            return (
+                <svg {...props}>
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+
+                    <circle
+                        cx="12"
+                        cy="12"
+                        r="2.5"
+                    />
                 </svg>
             );
 
@@ -380,6 +398,39 @@ function formatDate(
             day: '2-digit',
             month: 'short',
             year: 'numeric',
+        },
+    ).format(date);
+}
+
+function formatDateTime(
+    value:
+        | string
+        | null
+        | undefined,
+): string {
+    if (!value) {
+        return 'Not available';
+    }
+
+    const date =
+        new Date(value);
+
+    if (
+        Number.isNaN(
+            date.getTime(),
+        )
+    ) {
+        return value;
+    }
+
+    return new Intl.DateTimeFormat(
+        'en-GB',
+        {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
         },
     ).format(date);
 }
@@ -1458,7 +1509,7 @@ const purchasesPageStyles = `
         )
         100px
         minmax(
-            230px,
+            320px,
             auto
         ) !important;
 
@@ -2382,8 +2433,1996 @@ const purchasesPageStyles = `
         animation-duration:
             1.2s !important;
     }
+
+}
+
+/* =========================================================
+   PURCHASE DETAILS MODAL
+   ========================================================= */
+
+#purchase-details-modal,
+#purchase-details-modal *,
+#purchase-details-modal *::before,
+#purchase-details-modal *::after {
+    box-sizing: border-box !important;
+}
+
+#purchase-details-modal {
+    --pvd-green-950: #052e16;
+    --pvd-green-900: #14532d;
+    --pvd-green-800: #166534;
+    --pvd-green-700: #15803d;
+    --pvd-green-100: #dcfce7;
+    --pvd-green-50: #f0fdf4;
+
+    --pvd-blue: #175cd3;
+    --pvd-blue-50: #eff8ff;
+
+    --pvd-amber: #b54708;
+    --pvd-amber-50: #fffaeb;
+
+    --pvd-red: #b42318;
+    --pvd-red-50: #fef3f2;
+
+    --pvd-text: #101828;
+    --pvd-text-2: #344054;
+    --pvd-muted: #667085;
+
+    --pvd-border: #d0d9d2;
+    --pvd-border-soft: #e5ebe6;
+
+    position: fixed !important;
+
+    inset: 0 !important;
+
+    z-index: 2147483000 !important;
+
+    display: flex !important;
+
+    width: 100vw !important;
+    height: 100dvh !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    padding: 24px !important;
+
+    color: var(--pvd-text) !important;
+
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif !important;
+
+    background:
+        rgba(
+            7,
+            20,
+            12,
+            0.74
+        ) !important;
+
+    backdrop-filter:
+        blur(5px) !important;
+}
+
+#purchase-details-modal button {
+    font: inherit !important;
+}
+
+#purchase-details-modal h2,
+#purchase-details-modal h3,
+#purchase-details-modal p {
+    margin: 0 !important;
+}
+
+#purchase-details-modal .pvd-dialog {
+    display: flex !important;
+
+    width:
+        min(
+            1180px,
+            100%
+        ) !important;
+
+    max-height:
+        calc(
+            100dvh - 48px
+        ) !important;
+
+    flex-direction: column !important;
+
+    overflow: hidden !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        #d6e0d8 !important;
+
+    border-radius: 18px !important;
+
+    box-shadow:
+        0 30px 100px
+        rgba(
+            0,
+            0,
+            0,
+            0.4
+        ) !important;
+}
+
+#purchase-details-modal .pvd-header {
+    display: flex !important;
+
+    flex: 0 0 auto !important;
+
+    align-items: center !important;
+    justify-content: space-between !important;
+
+    gap: 18px !important;
+
+    padding: 18px 20px !important;
+
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--pvd-green-950),
+            var(--pvd-green-800),
+            var(--pvd-green-700)
+        ) !important;
+}
+
+#purchase-details-modal .pvd-header-main {
+    display: flex !important;
+
+    min-width: 0 !important;
+
+    align-items: center !important;
+
+    gap: 12px !important;
+}
+
+#purchase-details-modal .pvd-header-icon {
+    display: grid !important;
+
+    width: 46px !important;
+    height: 46px !important;
+
+    min-width: 46px !important;
+
+    place-items: center !important;
+
+    color: var(--pvd-green-900) !important;
+
+    background: #ffffff !important;
+
+    border-radius: 11px !important;
+}
+
+#purchase-details-modal .pvd-header-icon svg {
+    width: 22px !important;
+    height: 22px !important;
+}
+
+#purchase-details-modal .pvd-kicker {
+    display: block !important;
+
+    color:
+        rgba(
+            255,
+            255,
+            255,
+            0.72
+        ) !important;
+
+    font-size: 10px !important;
+    font-weight: 800 !important;
+
+    letter-spacing: 0.05em !important;
+
+    text-transform: uppercase !important;
+}
+
+#purchase-details-modal .pvd-title {
+    margin-top: 2px !important;
+
+    overflow: hidden !important;
+
+    color: #ffffff !important;
+
+    font-size: 21px !important;
+    font-weight: 850 !important;
+
+    text-overflow: ellipsis !important;
+
+    white-space: nowrap !important;
+}
+
+#purchase-details-modal .pvd-subtitle {
+    display: block !important;
+
+    margin-top: 2px !important;
+
+    overflow: hidden !important;
+
+    color:
+        rgba(
+            255,
+            255,
+            255,
+            0.8
+        ) !important;
+
+    font-size: 11px !important;
+    font-weight: 600 !important;
+
+    text-overflow: ellipsis !important;
+
+    white-space: nowrap !important;
+}
+
+#purchase-details-modal .pvd-close {
+    display: grid !important;
+
+    width: 42px !important;
+    height: 42px !important;
+
+    min-width: 42px !important;
+
+    place-items: center !important;
+
+    padding: 0 !important;
+
+    color: #ffffff !important;
+
+    background:
+        rgba(
+            255,
+            255,
+            255,
+            0.12
+        ) !important;
+
+    border:
+        1px solid
+        rgba(
+            255,
+            255,
+            255,
+            0.26
+        ) !important;
+
+    border-radius: 9px !important;
+
+    cursor: pointer !important;
+}
+
+#purchase-details-modal .pvd-close svg {
+    width: 18px !important;
+    height: 18px !important;
+}
+
+#purchase-details-modal .pvd-body {
+    min-height: 0 !important;
+
+    flex: 1 !important;
+
+    padding: 16px !important;
+
+    overflow-y: auto !important;
+
+    background: #f4f7f5 !important;
+}
+
+#purchase-details-modal .pvd-summary-grid {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            5,
+            minmax(
+                0,
+                1fr
+            )
+        ) !important;
+
+    gap: 9px !important;
+
+    margin-bottom: 13px !important;
+}
+
+#purchase-details-modal .pvd-summary-card {
+    display: flex !important;
+
+    min-width: 0 !important;
+    min-height: 88px !important;
+
+    flex-direction: column !important;
+    justify-content: center !important;
+
+    gap: 3px !important;
+
+    padding: 11px 12px !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        #d7e1d9 !important;
+
+    border-radius: 9px !important;
+}
+
+#purchase-details-modal .pvd-summary-card.green {
+    background: var(--pvd-green-50) !important;
+
+    border-color: #b8dfc3 !important;
+}
+
+#purchase-details-modal .pvd-summary-card.blue {
+    background: var(--pvd-blue-50) !important;
+
+    border-color: #bddaff !important;
+}
+
+#purchase-details-modal .pvd-summary-card.amber {
+    background: var(--pvd-amber-50) !important;
+
+    border-color: #efd696 !important;
+}
+
+#purchase-details-modal .pvd-summary-label {
+    color: var(--pvd-muted) !important;
+
+    font-size: 8px !important;
+    font-weight: 800 !important;
+
+    text-transform: uppercase !important;
+}
+
+#purchase-details-modal .pvd-summary-value {
+    overflow-wrap: anywhere !important;
+
+    color: var(--pvd-text) !important;
+
+    font-size: 15px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-details-modal .pvd-summary-card.green .pvd-summary-value {
+    color: var(--pvd-green-900) !important;
+}
+
+#purchase-details-modal .pvd-summary-card.blue .pvd-summary-value {
+    color: var(--pvd-blue) !important;
+}
+
+#purchase-details-modal .pvd-summary-card.amber .pvd-summary-value {
+    color: var(--pvd-amber) !important;
+}
+
+#purchase-details-modal .pvd-section {
+    overflow: hidden !important;
+
+    margin-top: 12px !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        #d7e1d9 !important;
+
+    border-radius: 10px !important;
+}
+
+#purchase-details-modal .pvd-section-head {
+    display: flex !important;
+
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+
+    gap: 12px !important;
+
+    padding: 11px 13px !important;
+
+    background: #f8faf9 !important;
+
+    border-bottom:
+        1px solid
+        #e3e9e4 !important;
+}
+
+#purchase-details-modal .pvd-section-head-main {
+    display: flex !important;
+
+    align-items: center !important;
+
+    gap: 8px !important;
+}
+
+#purchase-details-modal .pvd-section-head-main svg {
+    width: 17px !important;
+    height: 17px !important;
+
+    color: var(--pvd-green-700) !important;
+}
+
+#purchase-details-modal .pvd-section-title {
+    color: var(--pvd-text) !important;
+
+    font-size: 13px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-details-modal .pvd-count {
+    display: inline-flex !important;
+
+    min-height: 27px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    padding: 3px 8px !important;
+
+    color: var(--pvd-green-900) !important;
+
+    font-size: 9px !important;
+    font-weight: 800 !important;
+
+    background: var(--pvd-green-50) !important;
+
+    border:
+        1px solid
+        #b8dfc3 !important;
+
+    border-radius: 999px !important;
+}
+
+#purchase-details-modal .pvd-detail-grid {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            4,
+            minmax(
+                0,
+                1fr
+            )
+        ) !important;
+
+    gap: 1px !important;
+
+    background: #e7ece8 !important;
+}
+
+#purchase-details-modal .pvd-detail-item {
+    display: flex !important;
+
+    min-width: 0 !important;
+    min-height: 70px !important;
+
+    flex-direction: column !important;
+    justify-content: center !important;
+
+    gap: 3px !important;
+
+    padding: 10px 11px !important;
+
+    background: #ffffff !important;
+}
+
+#purchase-details-modal .pvd-detail-item.wide {
+    grid-column:
+        1 / -1 !important;
+}
+
+#purchase-details-modal .pvd-detail-label {
+    color: var(--pvd-muted) !important;
+
+    font-size: 8px !important;
+    font-weight: 800 !important;
+
+    text-transform: uppercase !important;
+}
+
+#purchase-details-modal .pvd-detail-value {
+    overflow-wrap: anywhere !important;
+
+    color: var(--pvd-text-2) !important;
+
+    font-size: 11px !important;
+    font-weight: 750 !important;
+
+    line-height: 1.4 !important;
+}
+
+#purchase-details-modal .pvd-items {
+    display: grid !important;
+
+    gap: 10px !important;
+
+    padding: 11px !important;
+
+    background: #f4f7f5 !important;
+}
+
+#purchase-details-modal .pvd-item-card {
+    overflow: hidden !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        var(--pvd-border) !important;
+
+    border-radius: 10px !important;
+}
+
+#purchase-details-modal .pvd-item-header {
+    display: flex !important;
+
+    align-items: center !important;
+    justify-content: space-between !important;
+
+    gap: 12px !important;
+
+    padding: 11px 12px !important;
+
+    background:
+        linear-gradient(
+            135deg,
+            #ffffff,
+            #f0f8f2
+        ) !important;
+
+    border-bottom:
+        1px solid
+        var(--pvd-border-soft) !important;
+}
+
+#purchase-details-modal .pvd-item-title-wrap {
+    min-width: 0 !important;
+}
+
+#purchase-details-modal .pvd-item-kicker {
+    display: block !important;
+
+    color: var(--pvd-green-700) !important;
+
+    font-size: 8px !important;
+    font-weight: 800 !important;
+
+    text-transform: uppercase !important;
+}
+
+#purchase-details-modal .pvd-item-title {
+    display: block !important;
+
+    margin-top: 2px !important;
+
+    overflow: hidden !important;
+
+    color: var(--pvd-text) !important;
+
+    font-size: 14px !important;
+    font-weight: 850 !important;
+
+    text-overflow: ellipsis !important;
+
+    white-space: nowrap !important;
+}
+
+#purchase-details-modal .pvd-item-variant {
+    display: block !important;
+
+    margin-top: 2px !important;
+
+    color: var(--pvd-muted) !important;
+
+    font-size: 10px !important;
+    font-weight: 650 !important;
+}
+
+#purchase-details-modal .pvd-item-total {
+    flex: 0 0 auto !important;
+
+    color: var(--pvd-green-900) !important;
+
+    font-size: 13px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-details-modal .pvd-item-grid {
+    display: grid !important;
+
+    grid-template-columns:
+        repeat(
+            5,
+            minmax(
+                0,
+                1fr
+            )
+        ) !important;
+
+    gap: 1px !important;
+
+    background: #e7ece8 !important;
+}
+
+#purchase-details-modal .pvd-item-field {
+    display: flex !important;
+
+    min-width: 0 !important;
+    min-height: 68px !important;
+
+    flex-direction: column !important;
+    justify-content: center !important;
+
+    gap: 3px !important;
+
+    padding: 9px 10px !important;
+
+    background: #ffffff !important;
+}
+
+#purchase-details-modal .pvd-item-field span {
+    color: var(--pvd-muted) !important;
+
+    font-size: 8px !important;
+    font-weight: 800 !important;
+
+    text-transform: uppercase !important;
+}
+
+#purchase-details-modal .pvd-item-field strong {
+    overflow-wrap: anywhere !important;
+
+    color: var(--pvd-text-2) !important;
+
+    font-size: 10px !important;
+    font-weight: 750 !important;
+}
+
+#purchase-details-modal .pvd-item-field strong.money {
+    color: var(--pvd-blue) !important;
+
+    font-size: 11px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-details-modal .pvd-item-field strong.sale {
+    color: var(--pvd-green-900) !important;
+
+    font-size: 11px !important;
+    font-weight: 850 !important;
+}
+
+#purchase-details-modal .pvd-item-field.wide {
+    grid-column:
+        span 2 !important;
+}
+
+#purchase-details-modal .pvd-notes {
+    min-height: 58px !important;
+
+    padding: 11px 12px !important;
+
+    color: var(--pvd-text-2) !important;
+
+    font-size: 11px !important;
+    font-weight: 650 !important;
+
+    line-height: 1.55 !important;
+
+    background: #ffffff !important;
+}
+
+#purchase-details-modal .pvd-state {
+    display: flex !important;
+
+    min-height: 320px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    flex-direction: column !important;
+
+    gap: 8px !important;
+
+    padding: 28px !important;
+
+    color: var(--pvd-muted) !important;
+
+    text-align: center !important;
+}
+
+#purchase-details-modal .pvd-state.error {
+    color: var(--pvd-red) !important;
+}
+
+#purchase-details-modal .pvd-spinner {
+    width: 38px !important;
+    height: 38px !important;
+
+    border:
+        4px solid
+        var(--pvd-green-100) !important;
+
+    border-top-color:
+        var(--pvd-green-700) !important;
+
+    border-radius: 50% !important;
+
+    animation:
+        pvd-spin
+        700ms
+        linear
+        infinite !important;
+}
+
+@keyframes pvd-spin {
+    to {
+        transform:
+            rotate(
+                360deg
+            );
+    }
+}
+
+#purchase-details-modal .pvd-retry {
+    min-height: 38px !important;
+
+    padding: 7px 13px !important;
+
+    color: #ffffff !important;
+
+    font-size: 11px !important;
+    font-weight: 800 !important;
+
+    background: var(--pvd-green-700) !important;
+
+    border:
+        1px solid
+        var(--pvd-green-700) !important;
+
+    border-radius: 8px !important;
+
+    cursor: pointer !important;
+}
+
+#purchase-details-modal .pvd-footer {
+    display: flex !important;
+
+    flex: 0 0 auto !important;
+
+    align-items: center !important;
+    justify-content: flex-end !important;
+
+    padding: 12px 16px !important;
+
+    background: #ffffff !important;
+
+    border-top:
+        1px solid
+        #dfe6e1 !important;
+}
+
+#purchase-details-modal .pvd-footer-button {
+    min-height: 40px !important;
+
+    padding: 8px 17px !important;
+
+    color: #ffffff !important;
+
+    font-size: 12px !important;
+    font-weight: 800 !important;
+
+    background: var(--pvd-green-700) !important;
+
+    border:
+        1px solid
+        var(--pvd-green-700) !important;
+
+    border-radius: 8px !important;
+
+    cursor: pointer !important;
+}
+
+@media (
+    max-width: 980px
+) {
+    #purchase-details-modal .pvd-summary-grid {
+        grid-template-columns:
+            repeat(
+                3,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+
+    #purchase-details-modal .pvd-detail-grid {
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+
+    #purchase-details-modal .pvd-item-grid {
+        grid-template-columns:
+            repeat(
+                3,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+}
+
+@media (
+    max-width: 700px
+) {
+    #purchase-details-modal {
+        align-items: flex-end !important;
+
+        padding: 0 !important;
+    }
+
+    #purchase-details-modal .pvd-dialog {
+        width: 100% !important;
+
+        max-height: 94dvh !important;
+
+        border-radius:
+            16px
+            16px
+            0
+            0 !important;
+    }
+
+    #purchase-details-modal .pvd-summary-grid {
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+
+    #purchase-details-modal .pvd-item-grid {
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+}
+
+@media (
+    max-width: 500px
+) {
+    #purchase-details-modal .pvd-summary-grid,
+    #purchase-details-modal .pvd-detail-grid,
+    #purchase-details-modal .pvd-item-grid {
+        grid-template-columns:
+            1fr !important;
+    }
+
+    #purchase-details-modal .pvd-item-field.wide {
+        grid-column:
+            auto !important;
+    }
 }
 `;
+
+interface PurchaseDetailsModalProps {
+    target:
+    Purchase
+    | null;
+
+    purchase:
+    Purchase
+    | null;
+
+    products:
+    PurchaseProductOption[];
+
+    isLoading:
+    boolean;
+
+    errorMessage:
+    string;
+
+    onClose:
+    () => void;
+
+    onRetry:
+    () => void;
+}
+
+function PurchaseDetailsModal({
+    target,
+    purchase,
+    products,
+    isLoading,
+    errorMessage,
+    onClose,
+    onRetry,
+}: PurchaseDetailsModalProps) {
+    const isOpen =
+        target !== null;
+
+    useEffect(
+        () => {
+            if (!isOpen) {
+                return;
+            }
+
+            const previousOverflow =
+                document.body
+                    .style
+                    .overflow;
+
+            document.body
+                .style
+                .overflow =
+                'hidden';
+
+            const handleKeyDown =
+                (
+                    event:
+                        KeyboardEvent,
+                ): void => {
+                    if (
+                        event.key
+                        === 'Escape'
+                    ) {
+                        onClose();
+                    }
+                };
+
+            window.addEventListener(
+                'keydown',
+                handleKeyDown,
+            );
+
+            return () => {
+                document.body
+                    .style
+                    .overflow =
+                    previousOverflow;
+
+                window.removeEventListener(
+                    'keydown',
+                    handleKeyDown,
+                );
+            };
+        },
+        [
+            isOpen,
+            onClose,
+        ],
+    );
+
+    if (
+        !target
+        || typeof document
+        === 'undefined'
+    ) {
+        return null;
+    }
+
+    const headerPurchase =
+        purchase
+        ?? target;
+
+    const items =
+        purchase
+            ?.items
+        ?? [];
+
+    const resolveProduct =
+        (
+            productId:
+                number,
+        ) =>
+            products.find(
+                (
+                    productOption,
+                ) =>
+                    productOption.id
+                    === productId,
+            );
+
+    const resolveVariantName =
+        (
+            productId:
+                number,
+            variantId:
+                number
+                | null
+                | undefined,
+        ): string => {
+            if (
+                variantId
+                === null
+                || variantId
+                === undefined
+            ) {
+                return 'Standard Product';
+            }
+
+            const productOption =
+                resolveProduct(
+                    productId,
+                );
+
+            const variant =
+                productOption
+                    ?.variants
+                    ?.find(
+                        (
+                            item,
+                        ) =>
+                            item.id
+                            === variantId,
+                    );
+
+            return (
+                variant
+                    ?.display_name
+                ?? `Variant #${variantId}`
+            );
+        };
+
+    return createPortal(
+        <div
+            id="purchase-details-modal"
+            role="presentation"
+            onMouseDown={(
+                event,
+            ) => {
+                if (
+                    event.target
+                    === event.currentTarget
+                ) {
+                    onClose();
+                }
+            }}
+        >
+            <section
+                className="pvd-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="purchase-details-title"
+                onMouseDown={(
+                    event,
+                ) => {
+                    event.stopPropagation();
+                }}
+            >
+                <header className="pvd-header">
+                    <div className="pvd-header-main">
+                        <span className="pvd-header-icon">
+                            <Icon name="receipt" />
+                        </span>
+
+                        <div>
+                            <span className="pvd-kicker">
+                                Complete Purchase Record
+                            </span>
+
+                            <h2
+                                id="purchase-details-title"
+                                className="pvd-title"
+                            >
+                                {
+                                    headerPurchase
+                                        .purchase_number
+                                }
+                            </h2>
+
+                            <span className="pvd-subtitle">
+                                {
+                                    headerPurchase
+                                        .supplier
+                                        .name
+                                }
+
+                                {' • '}
+
+                                {formatDate(
+                                    headerPurchase
+                                        .purchase_date,
+                                )}
+                            </span>
+                        </div>
+                    </div>
+
+                    <button
+                        type="button"
+                        className="pvd-close"
+                        aria-label="Close purchase details"
+                        onClick={
+                            onClose
+                        }
+                    >
+                        <Icon name="close" />
+                    </button>
+                </header>
+
+                <div className="pvd-body">
+                    {isLoading ? (
+                        <div className="pvd-state">
+                            <div className="pvd-spinner" />
+
+                            <strong>
+                                Loading Purchase Details
+                            </strong>
+
+                            <span>
+                                Retrieving the complete purchase,
+                                item, pricing and stock information.
+                            </span>
+                        </div>
+                    ) : errorMessage ? (
+                        <div className="pvd-state error">
+                            <Icon name="alert" />
+
+                            <strong>
+                                Unable to Load Purchase
+                            </strong>
+
+                            <span>
+                                {
+                                    errorMessage
+                                }
+                            </span>
+
+                            <button
+                                type="button"
+                                className="pvd-retry"
+                                onClick={
+                                    onRetry
+                                }
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    ) : purchase ? (
+                        <>
+                            <section className="pvd-summary-grid">
+                                <article className="pvd-summary-card green">
+                                    <span className="pvd-summary-label">
+                                        Grand Total
+                                    </span>
+
+                                    <strong className="pvd-summary-value">
+                                        {currencyFormatter.format(
+                                            Number(
+                                                purchase
+                                                    .grand_total,
+                                            ),
+                                        )}
+                                    </strong>
+                                </article>
+
+                                <article className="pvd-summary-card blue">
+                                    <span className="pvd-summary-label">
+                                        Subtotal
+                                    </span>
+
+                                    <strong className="pvd-summary-value">
+                                        {currencyFormatter.format(
+                                            Number(
+                                                purchase
+                                                    .subtotal,
+                                            ),
+                                        )}
+                                    </strong>
+                                </article>
+
+                                <article className="pvd-summary-card">
+                                    <span className="pvd-summary-label">
+                                        Item Discounts
+                                    </span>
+
+                                    <strong className="pvd-summary-value">
+                                        {currencyFormatter.format(
+                                            Number(
+                                                purchase
+                                                    .item_discount_total,
+                                            ),
+                                        )}
+                                    </strong>
+                                </article>
+
+                                <article className="pvd-summary-card amber">
+                                    <span className="pvd-summary-label">
+                                        Purchase Discount
+                                    </span>
+
+                                    <strong className="pvd-summary-value">
+                                        {currencyFormatter.format(
+                                            Number(
+                                                purchase
+                                                    .discount,
+                                            ),
+                                        )}
+                                    </strong>
+                                </article>
+
+                                <article className="pvd-summary-card">
+                                    <span className="pvd-summary-label">
+                                        Additional Cost
+                                    </span>
+
+                                    <strong className="pvd-summary-value">
+                                        {currencyFormatter.format(
+                                            Number(
+                                                purchase
+                                                    .additional_cost,
+                                            ),
+                                        )}
+                                    </strong>
+                                </article>
+                            </section>
+
+                            <section className="pvd-section">
+                                <header className="pvd-section-head">
+                                    <div className="pvd-section-head-main">
+                                        <Icon name="receipt" />
+
+                                        <h3 className="pvd-section-title">
+                                            Purchase Information
+                                        </h3>
+                                    </div>
+                                </header>
+
+                                <div className="pvd-detail-grid">
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Purchase Number
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {
+                                                purchase
+                                                    .purchase_number
+                                            }
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Supplier Invoice
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {purchase
+                                                .supplier_invoice_number
+                                                ?? 'Not provided'}
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Purchase Date
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {formatDate(
+                                                purchase
+                                                    .purchase_date,
+                                            )}
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Status
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {getStatusLabel(
+                                                purchase
+                                                    .status,
+                                            )}
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Items
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {
+                                                purchase
+                                                    .items_count
+                                            }
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Total Quantity
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {formatQuantity(
+                                                purchase
+                                                    .total_quantity,
+                                            )}
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Created At
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {formatDateTime(
+                                                purchase
+                                                    .created_at,
+                                            )}
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Last Updated
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {formatDateTime(
+                                                purchase
+                                                    .updated_at,
+                                            )}
+                                        </strong>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="pvd-section">
+                                <header className="pvd-section-head">
+                                    <div className="pvd-section-head-main">
+                                        <Icon name="supplier" />
+
+                                        <h3 className="pvd-section-title">
+                                            Supplier &amp; Receiving
+                                        </h3>
+                                    </div>
+                                </header>
+
+                                <div className="pvd-detail-grid">
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Supplier
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {
+                                                purchase
+                                                    .supplier
+                                                    .name
+                                            }
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Supplier Phone
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {purchase
+                                                .supplier
+                                                .phone
+                                                || 'Not provided'}
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Created By
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {
+                                                purchase
+                                                    .created_by
+                                                    .name
+                                            }
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Received By
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {purchase
+                                                .received_by
+                                                ?.name
+                                                ?? 'Not received'}
+                                        </strong>
+                                    </div>
+
+                                    <div className="pvd-detail-item">
+                                        <span className="pvd-detail-label">
+                                            Received At
+                                        </span>
+
+                                        <strong className="pvd-detail-value">
+                                            {formatDateTime(
+                                                purchase
+                                                    .received_at,
+                                            )}
+                                        </strong>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="pvd-section">
+                                <header className="pvd-section-head">
+                                    <div className="pvd-section-head-main">
+                                        <Icon name="package" />
+
+                                        <h3 className="pvd-section-title">
+                                            Purchased Items
+                                        </h3>
+                                    </div>
+
+                                    <span className="pvd-count">
+                                        {
+                                            items.length
+                                        }
+
+                                        {' '}
+
+                                        {items.length === 1
+                                            ? 'Item'
+                                            : 'Items'}
+                                    </span>
+                                </header>
+
+                                {items.length === 0 ? (
+                                    <div className="pvd-state">
+                                        <Icon name="package" />
+
+                                        <strong>
+                                            No Purchase Items
+                                        </strong>
+
+                                        <span>
+                                            No item details were returned for this purchase.
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="pvd-items">
+                                        {items.map(
+                                            (
+                                                item,
+                                                index,
+                                            ) => {
+                                                const productOption =
+                                                    resolveProduct(
+                                                        item
+                                                            .product_id,
+                                                    );
+
+                                                const productName =
+                                                    item
+                                                        .product
+                                                        ?.name
+                                                    ?? productOption
+                                                        ?.name
+                                                    ?? `Product #${item.product_id}`;
+
+                                                const variantName =
+                                                    resolveVariantName(
+                                                        item
+                                                            .product_id,
+                                                        item
+                                                            .product_variant_id,
+                                                    );
+
+                                                const purchaseUnit =
+                                                    productOption
+                                                        ?.unit
+                                                    ?? item
+                                                        .product
+                                                        ?.unit
+                                                    ?? 'Unit';
+
+                                                const stockBatch =
+                                                    item
+                                                        .stock_batch;
+
+                                                const stockUnit =
+                                                    stockBatch
+                                                        ?.stock_unit
+                                                    || stockBatch
+                                                        ?.secondary_unit
+                                                    || purchaseUnit;
+
+                                                return (
+                                                    <article
+                                                        key={
+                                                            item.id
+                                                        }
+                                                        className="pvd-item-card"
+                                                    >
+                                                        <header className="pvd-item-header">
+                                                            <div className="pvd-item-title-wrap">
+                                                                <span className="pvd-item-kicker">
+                                                                    Item {index + 1}
+                                                                </span>
+
+                                                                <strong
+                                                                    className="pvd-item-title"
+                                                                    title={
+                                                                        productName
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        productName
+                                                                    }
+                                                                </strong>
+
+                                                                <span className="pvd-item-variant">
+                                                                    Variant:
+                                                                    {' '}
+
+                                                                    {
+                                                                        variantName
+                                                                    }
+                                                                </span>
+                                                            </div>
+
+                                                            <strong className="pvd-item-total">
+                                                                {currencyFormatter.format(
+                                                                    Number(
+                                                                        item
+                                                                            .line_total,
+                                                                    ),
+                                                                )}
+                                                            </strong>
+                                                        </header>
+
+                                                        <div className="pvd-item-grid">
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Product ID
+                                                                </span>
+
+                                                                <strong>
+                                                                    #{item.product_id}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Variant ID
+                                                                </span>
+
+                                                                <strong>
+                                                                    {item
+                                                                        .product_variant_id
+                                                                        ? `#${item.product_variant_id}`
+                                                                        : 'Standard'}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Purchased Quantity
+                                                                </span>
+
+                                                                <strong>
+                                                                    {formatQuantity(
+                                                                        item
+                                                                            .quantity,
+                                                                    )}
+
+                                                                    {' '}
+
+                                                                    {
+                                                                        purchaseUnit
+                                                                    }
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Received Quantity
+                                                                </span>
+
+                                                                <strong>
+                                                                    {formatQuantity(
+                                                                        item
+                                                                            .received_quantity,
+                                                                    )}
+
+                                                                    {' '}
+
+                                                                    {
+                                                                        purchaseUnit
+                                                                    }
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Purchase Cost
+                                                                </span>
+
+                                                                <strong className="money">
+                                                                    {currencyFormatter.format(
+                                                                        Number(
+                                                                            item
+                                                                                .unit_cost,
+                                                                        ),
+                                                                    )}
+
+                                                                    {' / '}
+
+                                                                    {
+                                                                        purchaseUnit
+                                                                    }
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Selling Price
+                                                                </span>
+
+                                                                <strong className="sale">
+                                                                    {currencyFormatter.format(
+                                                                        Number(
+                                                                            item
+                                                                                .selling_price,
+                                                                        ),
+                                                                    )}
+
+                                                                    {' / '}
+
+                                                                    {
+                                                                        purchaseUnit
+                                                                    }
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Item Discount
+                                                                </span>
+
+                                                                <strong>
+                                                                    {currencyFormatter.format(
+                                                                        Number(
+                                                                            item
+                                                                                .discount,
+                                                                        ),
+                                                                    )}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Line Total
+                                                                </span>
+
+                                                                <strong className="sale">
+                                                                    {currencyFormatter.format(
+                                                                        Number(
+                                                                            item
+                                                                                .line_total,
+                                                                        ),
+                                                                    )}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Batch Number
+                                                                </span>
+
+                                                                <strong>
+                                                                    {item
+                                                                        .batch_number
+                                                                        || stockBatch
+                                                                            ?.batch_number
+                                                                        || 'Not provided'}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Manufactured Date
+                                                                </span>
+
+                                                                <strong>
+                                                                    {formatDate(
+                                                                        item
+                                                                            .manufactured_date,
+                                                                    )}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Expiry Date
+                                                                </span>
+
+                                                                <strong>
+                                                                    {formatDate(
+                                                                        item
+                                                                            .expiry_date,
+                                                                    )}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Dual Unit
+                                                                </span>
+
+                                                                <strong>
+                                                                    {item
+                                                                        .is_dual_unit
+                                                                        ? 'Yes'
+                                                                        : 'No'}
+                                                                </strong>
+                                                            </div>
+
+                                                            {item
+                                                                .is_dual_unit && (
+                                                                    <>
+                                                                        <div className="pvd-item-field">
+                                                                            <span>
+                                                                                Loose Unit
+                                                                            </span>
+
+                                                                            <strong>
+                                                                                {item
+                                                                                    .secondary_unit
+                                                                                    ?? 'Kg'}
+                                                                            </strong>
+                                                                        </div>
+
+                                                                        <div className="pvd-item-field">
+                                                                            <span>
+                                                                                Conversion
+                                                                            </span>
+
+                                                                            <strong>
+                                                                                1
+                                                                                {' '}
+
+                                                                                {
+                                                                                    purchaseUnit
+                                                                                }
+
+                                                                                {' = '}
+
+                                                                                {formatQuantity(
+                                                                                    item
+                                                                                        .conversion_factor,
+                                                                                )}
+
+                                                                                {' '}
+
+                                                                                {item
+                                                                                    .secondary_unit
+                                                                                    ?? 'Kg'}
+                                                                            </strong>
+                                                                        </div>
+
+                                                                        <div className="pvd-item-field">
+                                                                            <span>
+                                                                                Loose Selling Price
+                                                                            </span>
+
+                                                                            <strong className="sale">
+                                                                                {item
+                                                                                    .secondary_selling_price
+                                                                                    !== null
+                                                                                    ? currencyFormatter.format(
+                                                                                        Number(
+                                                                                            item
+                                                                                                .secondary_selling_price,
+                                                                                        ),
+                                                                                    )
+                                                                                    : 'Not provided'}
+
+                                                                                {' / '}
+
+                                                                                {item
+                                                                                    .secondary_unit
+                                                                                    ?? 'Kg'}
+                                                                            </strong>
+                                                                        </div>
+
+                                                                        <div className="pvd-item-field">
+                                                                            <span>
+                                                                                Base Unit Cost
+                                                                            </span>
+
+                                                                            <strong className="money">
+                                                                                {currencyFormatter.format(
+                                                                                    Number(
+                                                                                        item
+                                                                                            .base_unit_cost,
+                                                                                    ),
+                                                                                )}
+
+                                                                                {' / '}
+
+                                                                                {item
+                                                                                    .secondary_unit
+                                                                                    ?? stockUnit}
+                                                                            </strong>
+                                                                        </div>
+                                                                    </>
+                                                                )}
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Total Physical Stock
+                                                                </span>
+
+                                                                <strong>
+                                                                    {formatQuantity(
+                                                                        item
+                                                                            .total_stock_quantity,
+                                                                    )}
+
+                                                                    {' '}
+
+                                                                    {
+                                                                        stockUnit
+                                                                    }
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Received Physical Stock
+                                                                </span>
+
+                                                                <strong>
+                                                                    {formatQuantity(
+                                                                        item
+                                                                            .received_stock_quantity,
+                                                                    )}
+
+                                                                    {' '}
+
+                                                                    {
+                                                                        stockUnit
+                                                                    }
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Current Available Stock
+                                                                </span>
+
+                                                                <strong className="sale">
+                                                                    {stockBatch
+                                                                        ? `${formatQuantity(
+                                                                            stockBatch
+                                                                                .available_quantity,
+                                                                        )} ${stockUnit}`
+                                                                        : 'No stock batch'}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Stock Batch Code
+                                                                </span>
+
+                                                                <strong>
+                                                                    {stockBatch
+                                                                        ?.batch_code
+                                                                        ?? 'Not available'}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field">
+                                                                <span>
+                                                                    Stock Received At
+                                                                </span>
+
+                                                                <strong>
+                                                                    {formatDateTime(
+                                                                        stockBatch
+                                                                            ?.received_at,
+                                                                    )}
+                                                                </strong>
+                                                            </div>
+
+                                                            <div className="pvd-item-field wide">
+                                                                <span>
+                                                                    Item Notes
+                                                                </span>
+
+                                                                <strong>
+                                                                    {item
+                                                                        .notes
+                                                                        || 'No item notes'}
+                                                                </strong>
+                                                            </div>
+                                                        </div>
+                                                    </article>
+                                                );
+                                            },
+                                        )}
+                                    </div>
+                                )}
+                            </section>
+
+                            <section className="pvd-section">
+                                <header className="pvd-section-head">
+                                    <div className="pvd-section-head-main">
+                                        <Icon name="receipt" />
+
+                                        <h3 className="pvd-section-title">
+                                            Purchase Notes
+                                        </h3>
+                                    </div>
+                                </header>
+
+                                <div className="pvd-notes">
+                                    {purchase.notes
+                                        || 'No notes were added to this purchase.'}
+                                </div>
+                            </section>
+                        </>
+                    ) : null}
+                </div>
+
+                <footer className="pvd-footer">
+                    <button
+                        type="button"
+                        className="pvd-footer-button"
+                        onClick={
+                            onClose
+                        }
+                    >
+                        Close
+                    </button>
+                </footer>
+            </section>
+        </div>,
+        document.body,
+    );
+}
 
 export default function PurchasesPage() {
     const {
@@ -2539,6 +4578,30 @@ export default function PurchasesPage() {
     const [
         deleteError,
         setDeleteError,
+    ] = useState('');
+
+    const [
+        viewTarget,
+        setViewTarget,
+    ] = useState<
+        Purchase | null
+    >(null);
+
+    const [
+        viewingPurchase,
+        setViewingPurchase,
+    ] = useState<
+        Purchase | null
+    >(null);
+
+    const [
+        isViewingPurchase,
+        setIsViewingPurchase,
+    ] = useState(false);
+
+    const [
+        viewPurchaseError,
+        setViewPurchaseError,
     ] = useState('');
 
     const loadOptions =
@@ -2772,6 +4835,90 @@ export default function PurchasesPage() {
             setFormError('');
 
             setFieldErrors({});
+        };
+
+    const loadPurchaseForView =
+        async (
+            purchase: Purchase,
+        ): Promise<void> => {
+            if (!token) {
+                return;
+            }
+
+            setIsViewingPurchase(
+                true,
+            );
+
+            setViewPurchaseError(
+                '',
+            );
+
+            try {
+                const response =
+                    await getPurchase(
+                        token,
+                        purchase.id,
+                    );
+
+                setViewingPurchase(
+                    response.data,
+                );
+            } catch (error) {
+                setViewingPurchase(
+                    null,
+                );
+
+                setViewPurchaseError(
+                    error
+                        instanceof ApiError
+                        ? error.message
+                        : 'Unable to load the complete purchase details.',
+                );
+            } finally {
+                setIsViewingPurchase(
+                    false,
+                );
+            }
+        };
+
+    const openViewPurchase =
+        (
+            purchase: Purchase,
+        ): void => {
+            setViewTarget(
+                purchase,
+            );
+
+            setViewingPurchase(
+                null,
+            );
+
+            setViewPurchaseError(
+                '',
+            );
+
+            void loadPurchaseForView(
+                purchase,
+            );
+        };
+
+    const closeViewPurchase =
+        (): void => {
+            setViewTarget(
+                null,
+            );
+
+            setViewingPurchase(
+                null,
+            );
+
+            setViewPurchaseError(
+                '',
+            );
+
+            setIsViewingPurchase(
+                false,
+            );
         };
 
     const openEditForm =
@@ -4326,6 +6473,20 @@ export default function PurchasesPage() {
                                     </div>
 
                                     <div className="pur-actions">
+                                        <button
+                                            type="button"
+                                            className="pur-button pur-blue-button pur-action-button"
+                                            onClick={() => {
+                                                openViewPurchase(
+                                                    purchase,
+                                                );
+                                            }}
+                                        >
+                                            <Icon name="eye" />
+
+                                            View
+                                        </button>
+
                                         {purchase
                                             .status
                                             === 'draft' ? (
@@ -4510,6 +6671,36 @@ export default function PurchasesPage() {
                         </footer>
                     )}
             </section>
+
+            <PurchaseDetailsModal
+                target={
+                    viewTarget
+                }
+                purchase={
+                    viewingPurchase
+                }
+                products={
+                    products
+                }
+                isLoading={
+                    isViewingPurchase
+                }
+                errorMessage={
+                    viewPurchaseError
+                }
+                onClose={
+                    closeViewPurchase
+                }
+                onRetry={() => {
+                    if (
+                        viewTarget
+                    ) {
+                        void loadPurchaseForView(
+                            viewTarget,
+                        );
+                    }
+                }}
+            />
 
             <PurchaseFormModal
                 isOpen={

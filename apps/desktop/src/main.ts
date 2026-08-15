@@ -47,14 +47,6 @@ const createWindow = () => {
 
 // ---------------------------------------------------------------
 // Server configuration (persisted per-machine)
-//
-// Each installed copy of the desktop app (Admin PC, Cashier PC 1,
-// Cashier PC 2, etc.) needs to know the address of the machine
-// running the Laravel API. Rather than baking that address into
-// the build, it is entered once on first launch (via the
-// ServerSetupScreen in the renderer) and persisted to a small JSON
-// file inside this app's userData folder, so it survives restarts
-// and app updates without needing a rebuild.
 // ---------------------------------------------------------------
 
 interface ServerConfig {
@@ -101,10 +93,111 @@ ipcMain.handle("save-server-config", async (_event, config: ServerConfig) => {
   return { success: true };
 });
 
+// ---------------------------------------------------------------
+// Receipt printer configuration (persisted per-machine)
+// ---------------------------------------------------------------
+
+interface PrinterConfig {
+  receiptPrinterName: string;
+}
+
+function getPrinterConfigPath(): string {
+  return path.join(app.getPath("userData"), "printer-config.json");
+}
+
+async function readPrinterConfig(): Promise<PrinterConfig | null> {
+  try {
+    const raw = await fs.readFile(getPrinterConfigPath(), "utf-8");
+    const parsed = JSON.parse(raw);
+
+    if (parsed && typeof parsed.receiptPrinterName === "string") {
+      return {
+        receiptPrinterName: parsed.receiptPrinterName.trim(),
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function writePrinterConfig(config: PrinterConfig): Promise<void> {
+  await fs.writeFile(
+    getPrinterConfigPath(),
+    JSON.stringify(
+      {
+        receiptPrinterName: config.receiptPrinterName.trim(),
+      },
+      null,
+      2
+    ),
+    "utf-8"
+  );
+}
+
+ipcMain.handle("get-printer-config", async () => {
+  return readPrinterConfig();
+});
+
+ipcMain.handle("save-printer-config", async (_event, config: PrinterConfig) => {
+  const receiptPrinterName =
+    typeof config?.receiptPrinterName === "string"
+      ? config.receiptPrinterName.trim()
+      : "";
+
+  if (!receiptPrinterName) {
+    return {
+      success: false,
+      error: "Select a receipt printer before saving.",
+    };
+  }
+
+  try {
+    const printers = await listSystemPrinters();
+
+    const matchedPrinter = printers.find(
+      (printer) => printer.name === receiptPrinterName
+    );
+
+    if (!matchedPrinter) {
+      return {
+        success: false,
+        error: `No installed printer named "${receiptPrinterName}" was found on this computer.`,
+      };
+    }
+
+    await writePrinterConfig({
+      receiptPrinterName,
+    });
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to save the local printer configuration.",
+    };
+  }
+});
+
 interface PosPrintOptions {
   printerName?: string | null;
   paperWidthMicrons?: number;
   paperHeightMicrons?: number;
+
+  /**
+   * When true, Chromium shapes the Sinhala/Unicode receipt into pixels,
+   * then the bitmap is printed with the legacy ESC * 24-dot bit-image
+   * command. This avoids both printer code-page corruption and the
+   * GS v 0 compatibility problem seen on some thermal-printer clones.
+   */
+  unicodeThermalBitmap?: boolean;
+  paperWidthMm?: 58 | 80;
 }
 
 interface PosPrintResult {
@@ -148,6 +241,7 @@ interface EscPosReceiptPayload {
 
   notes?: string | null;
   footerText?: string | null;
+  softwareCredit?: string | null;
 
   copies: number;
   duplicateLabel: boolean;
@@ -177,10 +271,482 @@ async function listSystemPrinters(): Promise<RuntimePrinterInfo[]> {
   }
 }
 
+async function validatePrinterForOutput(
+  printerName: string
+): Promise<PosPrintResult | null> {
+  if (!printerName) {
+    return {
+      success: false,
+      error:
+        "No receipt printer is configured for this computer. Open Device Printer Settings and select the printer connected to this cashier PC.",
+    };
+  }
+
+  try {
+    const printers = await listSystemPrinters();
+
+    const matchedPrinter = printers.find(
+      (printer) => printer.name === printerName
+    );
+
+    if (!matchedPrinter) {
+      return {
+        success: false,
+        error: `No printer named "${printerName}" was found on this computer. Open Device Printer Settings, refresh the printer list and select an installed printer.`,
+      };
+    }
+
+    if (matchedPrinter.status === 3) {
+      return {
+        success: false,
+        error: `The printer "${printerName}" is offline. Check the USB cable, power and operating-system printer status, then try again.`,
+      };
+    }
+  } catch {
+    // Best effort only. The actual print call can still report the
+    // operating-system error if printer discovery fails.
+  }
+
+  return null;
+}
+
+async function waitForRenderedFonts(window: BrowserWindow): Promise<void> {
+  try {
+    await window.webContents.executeJavaScript(`
+      (async () => {
+        if (
+          document.fonts &&
+          document.fonts.ready
+        ) {
+          await document.fonts.ready;
+        }
+
+        await new Promise((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(resolve);
+            });
+          });
+        });
+
+        return true;
+      })();
+    `);
+  } catch {
+    // Best effort only.
+  }
+}
+
+// ---------------------------------------------------------------
+// Raw byte sending (shared by the ASCII ESC/POS text path and the
+// Sinhala/Unicode raster path). Both bypass the OS print driver
+// entirely — CUPS's `-o raw` mode (macOS/Linux) or a raw file copy
+// to the printer share (Windows) hands the printer our exact bytes,
+// so nothing rescales, re-paginates or reformats them.
+// ---------------------------------------------------------------
+
+async function sendRawBytesToPrinter(
+  printerName: string,
+  buffer: Buffer
+): Promise<PosPrintResult> {
+  const tempFilePath = path.join(
+    os.tmpdir(),
+    `pos-raw-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`
+  );
+
+  try {
+    await fs.writeFile(tempFilePath, buffer);
+  } catch (writeError) {
+    return {
+      success: false,
+      error: `Could not prepare the print data: ${
+        writeError instanceof Error ? writeError.message : String(writeError)
+      }`,
+    };
+  }
+
+  try {
+    if (process.platform === "win32") {
+      await execFileAsync("cmd", [
+        "/c",
+        "copy",
+        "/b",
+        tempFilePath,
+        `\\\\localhost\\${printerName}`,
+      ]);
+    } else {
+      // macOS and Linux: CUPS raw printing.
+      await execFileAsync("lp", ["-d", printerName, "-o", "raw", tempFilePath]);
+    }
+
+    return { success: true };
+  } catch (printError) {
+    return {
+      success: false,
+      error: `Printing failed on "${printerName}": ${
+        printError instanceof Error ? printError.message : String(printError)
+      }`,
+    };
+  } finally {
+    void fs.unlink(tempFilePath).catch(() => {
+      // Best-effort cleanup; ignore failures.
+    });
+  }
+}
+
+/**
+ * SINHALA / UNICODE THERMAL PRINTING — COMPATIBILITY BITMAP MODE
+ * ----------------------------------------------------------------
+ *
+ * The thermal printer's built-in text code pages do not contain Sinhala.
+ * Sending Sinhala as ordinary ESC/POS text therefore produces corrupted
+ * symbols. Printing Unicode HTML through some generic thermal drivers can
+ * also convert the text back into the printer's code page.
+ *
+ * We therefore render the COMPLETE receipt inside Chromium first. At that
+ * point Sinhala is already shaped correctly by the operating system's font
+ * engine. We then convert the finished page to a monochrome bitmap.
+ *
+ * IMPORTANT: this version deliberately does NOT use GS v 0 raster-image
+ * commands. Some inexpensive ESC/POS-compatible printers can lose command
+ * synchronization after a large GS v 0 job and later print the image bytes
+ * as garbage characters. Instead we use the older ESC * 24-dot bit-image
+ * command in tiny 24-row bands. This command is slower, but it is much more
+ * conservative and each command contains only one short strip of bitmap
+ * data, so the printer never has to parse one huge raster block.
+ */
+
+const UNICODE_RENDER_SCALE = 2;
+
+function thermalHeadWidthDots(paperWidthMm: 58 | 80): number {
+  return paperWidthMm === 58 ? 384 : 576;
+}
+
+interface MonochromeReceiptBitmap {
+  widthDots: number;
+  heightDots: number;
+  bits: Uint8Array;
+}
+
+async function rasterizeUnicodeReceipt(
+  html: string,
+  paperWidthMm: 58 | 80
+): Promise<MonochromeReceiptBitmap | null> {
+  const finalWidthDots = thermalHeadWidthDots(paperWidthMm);
+  const renderWidthPx = finalWidthDots * UNICODE_RENDER_SCALE;
+
+  let tempFilePath: string | null = null;
+  let renderWindow: BrowserWindow | null = null;
+
+  try {
+    tempFilePath = path.join(
+      os.tmpdir(),
+      `pos-unicode-render-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.html`
+    );
+
+    await fs.writeFile(tempFilePath, html, "utf-8");
+
+    renderWindow = new BrowserWindow({
+      show: false,
+      width: renderWidthPx,
+      height: 1200,
+      useContentSize: true,
+      backgroundColor: "#ffffff",
+      webPreferences: {
+        offscreen: false,
+        backgroundThrottling: false,
+      },
+    });
+
+    renderWindow.webContents.setZoomFactor(1);
+
+    await renderWindow.loadFile(tempFilePath);
+    await waitForRenderedFonts(renderWindow);
+
+    // Wait for logos/images to finish decoding before measuring/capturing.
+    try {
+      await renderWindow.webContents.executeJavaScript(`
+        (async () => {
+          const images = Array.from(document.images || []);
+
+          await Promise.all(
+            images.map(async (image) => {
+              if (image.complete) {
+                if (typeof image.decode === "function") {
+                  try {
+                    await image.decode();
+                  } catch {
+                    // Ignore image decode errors.
+                  }
+                }
+
+                return;
+              }
+
+              await new Promise((resolve) => {
+                const done = () => resolve(true);
+                image.addEventListener("load", done, { once: true });
+                image.addEventListener("error", done, { once: true });
+              });
+            })
+          );
+
+          return true;
+        })();
+      `);
+    } catch {
+      // Best effort only.
+    }
+
+    const measuredHeightPx = await renderWindow.webContents.executeJavaScript(`
+      (() => {
+        const body = document.body;
+        const root = document.documentElement;
+        const receipt = document.querySelector(".print-document-receipt");
+
+        return Math.ceil(Math.max(
+          receipt ? receipt.getBoundingClientRect().bottom : 0,
+          body ? body.scrollHeight : 0,
+          body ? body.offsetHeight : 0,
+          root ? root.scrollHeight : 0,
+          root ? root.offsetHeight : 0
+        ));
+      })();
+    `);
+
+    if (
+      typeof measuredHeightPx !== "number" ||
+      !Number.isFinite(measuredHeightPx) ||
+      measuredHeightPx <= 0
+    ) {
+      return null;
+    }
+
+    // Prevent accidental endless/huge print jobs.
+    if (measuredHeightPx > 30000) {
+      throw new Error(
+        "The receipt is too long for thermal bitmap printing. Use the A4 invoice for this sale."
+      );
+    }
+
+    renderWindow.setContentSize(
+      renderWidthPx,
+      Math.max(120, Math.ceil(measuredHeightPx))
+    );
+
+    await waitForRenderedFonts(renderWindow);
+    await new Promise<void>((resolve) => setTimeout(resolve, 80));
+
+    // Capture the entire hidden window. Do not pass a capture rectangle;
+    // this avoids cropping when the OS display scale is 125%/150%.
+    const captured = await renderWindow.webContents.capturePage();
+
+    if (captured.isEmpty()) {
+      return null;
+    }
+
+    const capturedSize = captured.getSize();
+
+    if (capturedSize.width <= 0 || capturedSize.height <= 0) {
+      return null;
+    }
+
+    const targetHeightDots = Math.max(
+      1,
+      Math.round((capturedSize.height / capturedSize.width) * finalWidthDots)
+    );
+
+    const resized = captured.resize({
+      width: finalWidthDots,
+      height: targetHeightDots,
+      quality: "best",
+    });
+
+    const size = resized.getSize();
+    const bitmap = resized.toBitmap();
+
+    if (size.width <= 0 || size.height <= 0) {
+      return null;
+    }
+
+    const thresholdBits = new Uint8Array(size.width * size.height);
+
+    /*
+     * Keep a fairly strong black threshold so Sinhala loops, vowel marks and
+     * combining strokes survive the 203-DPI reduction. We deliberately avoid
+     * photographic dithering because it makes receipt text grainy.
+     */
+    const threshold = 190;
+
+    for (let y = 0; y < size.height; y += 1) {
+      for (let x = 0; x < size.width; x += 1) {
+        const index = (y * size.width + x) * 4;
+
+        const luminance =
+          (bitmap[index] + bitmap[index + 1] + bitmap[index + 2]) / 3;
+
+        thresholdBits[y * size.width + x] = luminance < threshold ? 1 : 0;
+      }
+    }
+
+    /*
+     * Keep the monochrome bitmap at its natural thickness.
+     *
+     * Earlier versions expanded every black pixel into its neighbours. That
+     * helped extremely thin glyphs, but it also made normal English and
+     * Sinhala lettering look excessively heavy on 203-DPI thermal paper.
+     * The 2x render + high-quality downsample already preserves the character
+     * shapes, so a moderate threshold is enough for a cleaner receipt.
+     */
+    const bits = thresholdBits;
+
+    return {
+      widthDots: size.width,
+      heightDots: size.height,
+      bits,
+    };
+  } finally {
+    if (renderWindow && !renderWindow.isDestroyed()) {
+      renderWindow.close();
+    }
+
+    if (tempFilePath) {
+      void fs.unlink(tempFilePath).catch(() => {
+        // Best-effort cleanup.
+      });
+    }
+  }
+}
+
+/**
+ * Build legacy ESC * 24-dot bit-image commands.
+ *
+ * IMPORTANT: every band is exactly 24 source rows and the printer line
+ * spacing is exactly 24. Do NOT overlap adjacent bands. A previous 23-row
+ * advance fixed some seams but caused the next band to reprint part of the
+ * previous one on clone printers, producing the doubled/ghosted horizontal
+ * text visible in the user's receipt photo.
+ *
+ * Any stroke strengthening is done earlier in rasterizeUnicodeReceipt(),
+ * where it cannot disturb the printer's vertical positioning.
+ */
+function buildLegacyEscPosBitImage(bitmap: MonochromeReceiptBitmap): Buffer {
+  const { widthDots, heightDots, bits } = bitmap;
+  const chunks: Buffer[] = [];
+
+  // Reset and use left alignment for image output.
+  chunks.push(Buffer.from([0x1b, 0x40])); // ESC @
+  chunks.push(Buffer.from([0x1b, 0x61, 0x00])); // ESC a 0
+
+  const bandHeight = 24;
+  const mode = 33; // 24-dot double-density bit-image mode
+  const nL = widthDots & 0xff;
+  const nH = (widthDots >> 8) & 0xff;
+
+  // ESC 3 24: one line feed advances exactly one 24-dot image band.
+  chunks.push(Buffer.from([0x1b, 0x33, bandHeight]));
+
+  for (let startY = 0; startY < heightDots; startY += bandHeight) {
+    const band = Buffer.alloc(widthDots * 3);
+
+    for (let x = 0; x < widthDots; x += 1) {
+      for (let byteInColumn = 0; byteInColumn < 3; byteInColumn += 1) {
+        let value = 0;
+
+        for (let bitIndex = 0; bitIndex < 8; bitIndex += 1) {
+          const y = startY + byteInColumn * 8 + bitIndex;
+
+          if (y < heightDots && bits[y * widthDots + x] === 1) {
+            value |= 0x80 >> bitIndex;
+          }
+        }
+
+        band[x * 3 + byteInColumn] = value;
+      }
+    }
+
+    // Reassert the line spacing before each image band. Some inexpensive
+    // ESC/POS clones do not preserve graphics state as reliably as Epson.
+    chunks.push(Buffer.from([0x1b, 0x33, bandHeight]));
+
+    chunks.push(Buffer.from([0x1b, 0x2a, mode, nL, nH]));
+
+    chunks.push(band);
+    chunks.push(Buffer.from([0x0a])); // print band + advance exactly 24 rows
+  }
+
+  // Restore normal spacing, feed beyond the cutter, cut, then reset so the
+  // next receipt starts from a clean printer state.
+  chunks.push(Buffer.from([0x1b, 0x32])); // ESC 2
+  chunks.push(Buffer.from([0x0a, 0x0a, 0x0a]));
+  chunks.push(Buffer.from([0x1d, 0x56, 0x01])); // GS V 1
+  chunks.push(Buffer.from([0x1b, 0x40])); // ESC @
+
+  return Buffer.concat(chunks);
+}
+
+async function printUnicodeThermalBitmap(
+  html: string,
+  options: PosPrintOptions
+): Promise<PosPrintResult> {
+  let printerName = options.printerName?.trim() ?? "";
+
+  const localPrinterConfig = await readPrinterConfig();
+
+  if (localPrinterConfig?.receiptPrinterName) {
+    printerName = localPrinterConfig.receiptPrinterName;
+  }
+
+  const validationError = await validatePrinterForOutput(printerName);
+
+  if (validationError) {
+    return validationError;
+  }
+
+  const paperWidthMm: 58 | 80 = options.paperWidthMm === 58 ? 58 : 80;
+
+  try {
+    const bitmap = await rasterizeUnicodeReceipt(html, paperWidthMm);
+
+    if (!bitmap) {
+      return {
+        success: false,
+        error:
+          "Could not render the Sinhala/Unicode receipt into a printable bitmap.",
+      };
+    }
+
+    if (bitmap.heightDots > 12000) {
+      return {
+        success: false,
+        error:
+          "This receipt is too long for one thermal bitmap job. Print the A4 invoice for this sale.",
+      };
+    }
+
+    const output = buildLegacyEscPosBitImage(bitmap);
+
+    return await sendRawBytesToPrinter(printerName, output);
+  } catch (error) {
+    return {
+      success: false,
+      error: `Sinhala thermal printing failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+}
+
 async function printHtmlSilently(
   html: string,
   options: PosPrintOptions
 ): Promise<PosPrintResult> {
+  if (options.unicodeThermalBitmap) {
+    return printUnicodeThermalBitmap(html, options);
+  }
+
   if (options.printerName) {
     try {
       const printers = await listSystemPrinters();
@@ -192,7 +758,7 @@ async function printHtmlSilently(
       if (!matchedPrinter) {
         return {
           success: false,
-          error: `No printer named "${options.printerName}" was found. Check the printer name in Business Settings matches the exact name registered in your operating system.`,
+          error: `No printer named "${options.printerName}" was found on this computer. Open Device Printer Settings, refresh the printer list and select an installed printer.`,
         };
       }
 
@@ -271,7 +837,27 @@ async function printHtmlSilently(
       return;
     }
 
-    printWindow.webContents.once("did-finish-load", () => {
+    printWindow.webContents.once("did-finish-load", async () => {
+      try {
+        await printWindow?.webContents.executeJavaScript(`
+          (async () => {
+            if (document.fonts && document.fonts.ready) {
+              await document.fonts.ready;
+            }
+
+            await new Promise((resolve) => {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(resolve);
+              });
+            });
+
+            return true;
+          })();
+        `);
+      } catch {
+        // Best effort only.
+      }
+
       const printOptions: Electron.WebContentsPrintOptions = {
         silent: true,
         printBackground: true,
@@ -284,17 +870,59 @@ async function printHtmlSilently(
         printOptions.deviceName = options.printerName;
       }
 
-      if (options.paperWidthMicrons && options.paperHeightMicrons) {
+      if (options.paperWidthMicrons) {
+        let measuredHeightMicrons = 0;
+
+        try {
+          const measuredHeightPx = await printWindow?.webContents
+            .executeJavaScript(`
+            (() => {
+              const body = document.body;
+              const root = document.documentElement;
+
+              return Math.ceil(Math.max(
+                body ? body.scrollHeight : 0,
+                body ? body.offsetHeight : 0,
+                root ? root.scrollHeight : 0,
+                root ? root.offsetHeight : 0
+              ));
+            })();
+          `);
+
+          if (
+            typeof measuredHeightPx === "number" &&
+            Number.isFinite(measuredHeightPx) &&
+            measuredHeightPx > 0
+          ) {
+            const measuredHeightMm = (measuredHeightPx / 96) * 25.4;
+
+            measuredHeightMicrons = Math.round(
+              Math.max(40, measuredHeightMm + 10) * 1000
+            );
+          }
+        } catch {
+          measuredHeightMicrons = 0;
+        }
+
+        const requestedHeightMicrons =
+          options.paperHeightMicrons && options.paperHeightMicrons > 0
+            ? options.paperHeightMicrons
+            : 0;
+
+        const finalHeightMicrons = Math.max(
+          measuredHeightMicrons,
+          requestedHeightMicrons,
+          40000
+        );
+
         (
           printOptions as unknown as {
             pageSize: { width: number; height: number };
           }
         ).pageSize = {
           width: options.paperWidthMicrons,
-          height: options.paperHeightMicrons,
+          height: finalHeightMicrons,
         };
-      } else if (options.paperWidthMicrons) {
-        printOptions.pageSize = "A4";
       }
 
       try {
@@ -344,11 +972,7 @@ async function printHtmlSilently(
 }
 
 /**
- * ESC/POS raw command builder. Each function appends raw bytes to
- * the buffer array; the printer's own firmware interprets these
- * directly, so text always renders at the printer's native
- * resolution with its own built-in font — no HTML rasterization,
- * no blockiness, no clipping.
+ * ESC/POS raw command builder for plain ASCII/English receipts.
  */
 class EscPosBuilder {
   private chunks: Buffer[] = [];
@@ -358,13 +982,7 @@ class EscPosBuilder {
   constructor(charactersPerLine: number) {
     this.lineWidth = charactersPerLine;
     this.chunks.push(Buffer.from([0x1b, 0x40])); // ESC @ : initialize
-
-    // ESC t 0 : select character code page 0 (PC437, USA/Standard
-    // Europe). Without this, the printer uses whatever code page
-    // it happens to default to, which can cause plain ASCII bytes
-    // to render as unrelated accented characters on some
-    // firmware/region variants.
-    this.chunks.push(Buffer.from([0x1b, 0x74, 0x00]));
+    this.chunks.push(Buffer.from([0x1b, 0x74, 0x00])); // ESC t 0 : code page 0
   }
 
   private push(bytes: number[]): void {
@@ -372,33 +990,16 @@ class EscPosBuilder {
   }
 
   private text(value: string): void {
-    // Intl.NumberFormat can insert Unicode space variants (non-
-    // breaking space U+00A0, narrow no-break space U+202F, thin
-    // space U+2009, etc.) between a currency code and its amount,
-    // depending on locale/ICU data. These are NOT plain ASCII, so
-    // if we only stripped non-ASCII characters, they would vanish
-    // entirely and squash "LKR" directly against the number
-    // (or worse, get reinterpreted by the printer's active code
-    // page as an unrelated character such as "á"). Normalizing
-    // them to a regular space first keeps spacing correct and
-    // predictable.
     const normalized = value.replace(
       /[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g,
       " "
     );
 
-    // Also normalize common "smart" punctuation that word
-    // processors or autocorrect may introduce, so it degrades to
-    // a safe ASCII equivalent instead of being silently dropped.
     const punctuationNormalized = normalized
       .replace(/[\u2018\u2019]/g, "'")
       .replace(/[\u201C\u201D]/g, '"')
       .replace(/[\u2013\u2014]/g, "-");
 
-    // Finally, strip anything still outside standard printable
-    // ASCII (space through tilde). Anything left at this point has
-    // no safe universal representation across printer code pages,
-    // so dropping it is safer than risking a misrendered character.
     const asciiSafe = punctuationNormalized.replace(/[^\x20-\x7E]/g, "");
 
     this.chunks.push(Buffer.from(asciiSafe, "ascii"));
@@ -419,8 +1020,21 @@ class EscPosBuilder {
     return this;
   }
 
+  fontB(on: boolean): this {
+    // ESC M 1 = Font B, ESC M 0 = Font A.
+    // Font B is narrower, allowing the software credit to remain
+    // on one line on standard 80mm / 48-column receipt printers.
+    this.push([0x1b, 0x4d, on ? 1 : 0]);
+    return this;
+  }
+
+  doubleHeight(on: boolean): this {
+    // GS ! 0x10 doubles height only, keeping the narrow Font B width.
+    this.push([0x1d, 0x21, on ? 0x10 : 0x00]);
+    return this;
+  }
+
   doubleSize(on: boolean): this {
-    // GS ! : character size. 0x11 = double width + double height.
     this.push([0x1d, 0x21, on ? 0x11 : 0x00]);
     return this;
   }
@@ -457,8 +1071,6 @@ class EscPosBuilder {
   cut(): this {
     this.newLine();
     this.newLine();
-    // GS V 1 : partial cut (falls back to full feed-and-cut on
-    // printers without a cutter, which the TM-T82 has built in).
     this.push([0x1d, 0x56, 0x01]);
     return this;
   }
@@ -557,6 +1169,30 @@ function buildEscPosBuffer(payload: EscPosReceiptPayload): Buffer {
       doc.newLine().alignCenter().println(payload.footerText);
     }
 
+    if (payload.softwareCredit) {
+      doc.newLine().alignCenter().bold(false).fontB(true);
+
+      if (payload.paperWidthMm === 80) {
+        /*
+         * The full credit is 55 characters. Font A normally supports
+         * about 48 characters on 80mm, so use narrower Font B and
+         * double-height only. This keeps the complete credit on one
+         * line while making it easier to read.
+         */
+        doc.doubleHeight(true).println(payload.softwareCredit);
+        doc.doubleHeight(false);
+      } else {
+        /*
+         * A 58mm thermal head is physically too narrow for all 55
+         * characters on one line with standard ESC/POS fonts. Let the
+         * printer wrap safely rather than clipping the phone number.
+         */
+        doc.println(payload.softwareCredit);
+      }
+
+      doc.fontB(false);
+    }
+
     doc.cut();
 
     builders.push(doc.toBuffer());
@@ -565,108 +1201,34 @@ function buildEscPosBuffer(payload: EscPosReceiptPayload): Buffer {
   return Buffer.concat(builders);
 }
 
-/**
- * Sends raw ESC/POS bytes directly to a USB-connected printer via
- * the operating system's own raw printing mode.
- *
- * On macOS and Linux this uses CUPS's built-in `lp` command with
- * the `-o raw` flag, which bypasses CUPS's normal document
- * rendering pipeline entirely — the printer receives our exact
- * bytes and interprets them using its own built-in ESC/POS
- * firmware, avoiding the bitmap rasterization that previously
- * caused blocky/clipped text.
- *
- * Windows uses a PowerShell raw copy to the printer's share name
- * as a fallback, since Windows does not ship an `lp` equivalent.
- */
 async function printReceiptEscPosUsb(
-  payload: EscPosReceiptPayload
+  payload: EscPosReceiptPayload,
+  useSavedDevicePrinter = true
 ): Promise<PosPrintResult> {
-  if (!payload.printerName) {
-    return {
-      success: false,
-      error:
-        "No printer name is configured. Enter the exact printer name (as shown in your operating system) in Business Settings.",
-    };
-  }
+  let printerName = payload.printerName.trim();
 
-  try {
-    const printers = await listSystemPrinters();
+  if (useSavedDevicePrinter) {
+    const localPrinterConfig = await readPrinterConfig();
 
-    const matchedPrinter = printers.find(
-      (printer) => printer.name === payload.printerName
-    );
-
-    if (!matchedPrinter) {
-      return {
-        success: false,
-        error: `No printer named "${payload.printerName}" was found. Check the printer name in Business Settings matches the exact name shown in your operating system's printer list.`,
-      };
+    if (localPrinterConfig?.receiptPrinterName) {
+      printerName = localPrinterConfig.receiptPrinterName;
     }
-
-    if (matchedPrinter.status === 3) {
-      return {
-        success: false,
-        error: `The printer "${payload.printerName}" is offline. Check the USB cable and power, then try again.`,
-      };
-    }
-  } catch {
-    // Continue; let the raw print call surface any real failure.
   }
 
-  const buffer = buildEscPosBuffer(payload);
+  const validationError = await validatePrinterForOutput(printerName);
 
-  const tempFilePath = path.join(
-    os.tmpdir(),
-    `pos-escpos-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`
-  );
-
-  try {
-    await fs.writeFile(tempFilePath, buffer);
-  } catch (writeError) {
-    return {
-      success: false,
-      error: `Could not prepare the print data: ${
-        writeError instanceof Error ? writeError.message : String(writeError)
-      }`,
-    };
+  if (validationError) {
+    return validationError;
   }
 
-  try {
-    if (process.platform === "win32") {
-      // Windows fallback: copy the raw bytes to the printer's
-      // share as a binary file, which spools it unmodified.
-      await execFileAsync("cmd", [
-        "/c",
-        "copy",
-        "/b",
-        tempFilePath,
-        `\\\\localhost\\${payload.printerName}`,
-      ]);
-    } else {
-      // macOS and Linux: CUPS raw printing.
-      await execFileAsync("lp", [
-        "-d",
-        payload.printerName,
-        "-o",
-        "raw",
-        tempFilePath,
-      ]);
-    }
+  const effectivePayload: EscPosReceiptPayload = {
+    ...payload,
+    printerName,
+  };
 
-    return { success: true };
-  } catch (printError) {
-    return {
-      success: false,
-      error: `Printing failed: ${
-        printError instanceof Error ? printError.message : String(printError)
-      }`,
-    };
-  } finally {
-    void fs.unlink(tempFilePath).catch(() => {
-      // Best-effort cleanup; ignore failures.
-    });
-  }
+  const buffer = buildEscPosBuffer(effectivePayload);
+
+  return sendRawBytesToPrinter(printerName, buffer);
 }
 
 ipcMain.handle(
@@ -708,6 +1270,71 @@ ipcMain.handle(
         }`,
       };
     }
+  }
+);
+
+ipcMain.handle(
+  "test-receipt-printer",
+  async (
+    _event,
+    payload: {
+      printerName: string;
+      paperWidthMm?: 58 | 80;
+    }
+  ): Promise<PosPrintResult> => {
+    const printerName =
+      typeof payload?.printerName === "string"
+        ? payload.printerName.trim()
+        : "";
+
+    if (!printerName) {
+      return {
+        success: false,
+        error: "Select a printer before running a test print.",
+      };
+    }
+
+    return printReceiptEscPosUsb(
+      {
+        printerName,
+        paperWidthMm: payload.paperWidthMm === 58 ? 58 : 80,
+        businessName: "SAMARAKOON AGRO",
+        addressLines: ["DEVICE PRINTER TEST"],
+        receiptTitle: "TEST PRINT",
+        metaLines: [
+          {
+            left: `Printer: ${printerName}`,
+          },
+          {
+            left: `Computer: ${os.hostname()}`,
+          },
+        ],
+        items: [
+          {
+            name: "Printer connection is working",
+            quantityLine: "1 x TEST",
+            lineTotal: "OK",
+          },
+        ],
+        totalsLines: [
+          {
+            left: "Status",
+            right: "SUCCESS",
+          },
+        ],
+        statusLines: [
+          {
+            left: "Mode",
+            right: "LOCAL DEVICE",
+          },
+        ],
+        footerText: "Save this printer for this cashier PC.",
+        softwareCredit: null,
+        copies: 1,
+        duplicateLabel: false,
+      },
+      false
+    );
   }
 );
 
