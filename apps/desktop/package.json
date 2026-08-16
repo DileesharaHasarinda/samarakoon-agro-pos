@@ -43,6 +43,7 @@
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
     "node-thermal-printer": "^4.6.0",
+    "pusher-js": "^8.6.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0"

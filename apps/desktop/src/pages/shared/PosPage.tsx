@@ -24,6 +24,15 @@ import {
 } from '../../lib/api';
 
 import {
+    subscribeToRealtimeStock,
+} from '../../lib/realtimeStock';
+
+import type {
+    RealtimeStockStatus,
+    RealtimeStockUpdatedEvent,
+} from '../../lib/realtimeStock';
+
+import {
     completePosSale,
     getPosCategories,
     getPosProducts,
@@ -474,6 +483,202 @@ function getBatchStockUsedByCart(
     );
 }
 
+function getRealtimeStatusLabel(
+    status: RealtimeStockStatus,
+): string {
+    switch (status) {
+        case 'connected':
+            return 'Live Stock Connected';
+
+        case 'connecting':
+            return 'Connecting Live Stock';
+
+        case 'error':
+            return 'Live Stock Error';
+
+        case 'disconnected':
+        default:
+            return 'Live Stock Disconnected';
+    }
+}
+
+function getCombinedCartStockError(
+    cart: PosCartItem[],
+): string | null {
+    const batchIds =
+        Array.from(
+            new Set(
+                cart.map(
+                    (
+                        item,
+                    ) =>
+                        item
+                            .stock_batch_id,
+                ),
+            ),
+        );
+
+    for (
+        const batchId
+        of batchIds
+    ) {
+        const batchItems =
+            cart.filter(
+                (
+                    item,
+                ) =>
+                    item
+                        .stock_batch_id
+                    === batchId,
+            );
+
+        if (
+            batchItems.length
+            === 0
+        ) {
+            continue;
+        }
+
+        const availableStock =
+            Number(
+                batchItems[0]
+                    .available_stock_quantity
+                ?? 0,
+            );
+
+        const requiredStock =
+            normaliseQuantity(
+                batchItems.reduce(
+                    (
+                        total,
+                        item,
+                    ) =>
+                        total
+                        + Number(
+                            item
+                                .stock_quantity
+                            ?? 0,
+                        ),
+                    0,
+                ),
+            );
+
+        if (
+            requiredStock
+            > availableStock
+            + 0.0001
+        ) {
+            return `${batchItems[0]
+                .product_name
+                } requires ${formatQuantity(
+                    requiredStock,
+                )
+                } ${batchItems[0]
+                    .stock_unit
+                }, but only ${formatQuantity(
+                    availableStock,
+                )
+                } ${batchItems[0]
+                    .stock_unit
+                } are available. Another cashier may have sold stock from this batch.`;
+        }
+    }
+
+    return null;
+}
+
+function applyRealtimeStockEventToCart(
+    cart: PosCartItem[],
+    event: RealtimeStockUpdatedEvent,
+): PosCartItem[] {
+    const updatesByBatchId =
+        new Map(
+            event.batches.map(
+                (
+                    batch,
+                ) => [
+                    batch.id,
+                    batch,
+                ] as const,
+            ),
+        );
+
+    return cart.map(
+        (
+            item,
+        ) => {
+            const update =
+                updatesByBatchId.get(
+                    item
+                        .stock_batch_id,
+                );
+
+            if (!update) {
+                return item;
+            }
+
+            const availableStockQuantity =
+                normaliseQuantity(
+                    Math.max(
+                        0,
+                        Number(
+                            update
+                                .available_quantity
+                            ?? 0,
+                        ),
+                    ),
+                );
+
+            const rawConversionFactor =
+                Number(
+                    item
+                        .conversion_factor
+                    ?? 1,
+                );
+
+            const conversionFactor =
+                Number.isFinite(
+                    rawConversionFactor,
+                )
+                    && rawConversionFactor > 0
+                    ? rawConversionFactor
+                    : 1;
+
+            const rawAvailableSaleQuantity =
+                availableStockQuantity
+                / conversionFactor;
+
+            const availableSaleQuantity =
+                isFullPrimaryUnit(
+                    item,
+                )
+                    ? Math.max(
+                        0,
+                        Math.floor(
+                            rawAvailableSaleQuantity
+                            + 0.0001,
+                        ),
+                    )
+                    : normaliseQuantity(
+                        Math.max(
+                            0,
+                            rawAvailableSaleQuantity,
+                        ),
+                    );
+
+            return {
+                ...item,
+
+                available_quantity:
+                    availableSaleQuantity,
+
+                available_stock_quantity:
+                    availableStockQuantity,
+            };
+        },
+    );
+}
+
 type IconName =
     | 'alert'
     | 'bag'
@@ -887,6 +1092,107 @@ const styles = `
         var(--muted) !important;
 
     font-size: 12px !important;
+}
+
+#agro-pos .realtime-status {
+    display: inline-flex !important;
+
+    min-height: 36px !important;
+
+    align-items: center !important;
+
+    gap: 8px !important;
+
+    padding:
+        7px 10px !important;
+
+    color:
+        var(--text-2) !important;
+
+    font-size: 12px !important;
+
+    font-weight: 800 !important;
+
+    white-space: nowrap !important;
+
+    background: #ffffff !important;
+
+    border:
+        1px solid
+        var(--border) !important;
+
+    border-radius: 999px !important;
+}
+
+#agro-pos .realtime-dot {
+    display: block !important;
+
+    width: 9px !important;
+    height: 9px !important;
+
+    flex:
+        0 0 9px !important;
+
+    background: #98a2b3 !important;
+
+    border-radius: 50% !important;
+}
+
+#agro-pos .realtime-status.connected {
+    color:
+        var(--green-900) !important;
+
+    background:
+        var(--green-50) !important;
+
+    border-color:
+        #b8dfc3 !important;
+}
+
+#agro-pos .realtime-status.connected .realtime-dot {
+    background:
+        var(--green-700) !important;
+
+    box-shadow:
+        0 0 0 3px
+        rgba(
+            21,
+            128,
+            61,
+            0.12
+        ) !important;
+}
+
+#agro-pos .realtime-status.connecting {
+    color:
+        var(--amber) !important;
+
+    background:
+        var(--amber-bg) !important;
+
+    border-color:
+        #f0d48f !important;
+}
+
+#agro-pos .realtime-status.connecting .realtime-dot {
+    background: #f79009 !important;
+}
+
+#agro-pos .realtime-status.disconnected,
+#agro-pos .realtime-status.error {
+    color:
+        var(--red) !important;
+
+    background:
+        var(--red-bg) !important;
+
+    border-color:
+        #f3b5af !important;
+}
+
+#agro-pos .realtime-status.disconnected .realtime-dot,
+#agro-pos .realtime-status.error .realtime-dot {
+    background: #d92d20 !important;
 }
 
 #agro-pos .alert {
@@ -2702,6 +3008,17 @@ export default function PosPage() {
             null,
         );
 
+    const loadProductsRef =
+        useRef<
+            (
+                showLoading?: boolean,
+            ) => Promise<void>
+        >(
+            async (): Promise<void> => {
+                return;
+            },
+        );
+
     const [
         products,
         setProducts,
@@ -2806,6 +3123,13 @@ export default function PosPage() {
         setIsClearCartConfirming,
     ] = useState(false);
 
+    const [
+        realtimeStatus,
+        setRealtimeStatus,
+    ] = useState<
+        RealtimeStockStatus
+    >('disconnected');
+
     const loadCategories =
         useCallback(
             async (): Promise<void> => {
@@ -2836,14 +3160,18 @@ export default function PosPage() {
 
     const loadProducts =
         useCallback(
-            async (): Promise<void> => {
+            async (
+                showLoading = true,
+            ): Promise<void> => {
                 if (!token) {
                     return;
                 }
 
-                setIsLoading(
-                    true,
-                );
+                if (showLoading) {
+                    setIsLoading(
+                        true,
+                    );
+                }
 
                 setPageError('');
 
@@ -2872,6 +3200,35 @@ export default function PosPage() {
                     setPagination(
                         response.meta,
                     );
+
+                    /*
+                     * If the batch selection modal is currently open, replace
+                     * its product object with the fresh server version too.
+                     * If the product no longer appears because the last stock
+                     * was sold by another cashier, close the stale modal.
+                     */
+                    setSelectedProduct(
+                        (
+                            current,
+                        ) => {
+                            if (!current) {
+                                return null;
+                            }
+
+                            return (
+                                response
+                                    .data
+                                    .find(
+                                        (
+                                            product,
+                                        ) =>
+                                            product.id
+                                            === current.id,
+                                    )
+                                ?? null
+                            );
+                        },
+                    );
                 } catch (error) {
                     setPageError(
                         getErrorMessage(
@@ -2880,9 +3237,11 @@ export default function PosPage() {
                         ),
                     );
                 } finally {
-                    setIsLoading(
-                        false,
-                    );
+                    if (showLoading) {
+                        setIsLoading(
+                            false,
+                        );
+                    }
                 }
             },
             [
@@ -2903,6 +3262,148 @@ export default function PosPage() {
         void loadProducts();
     }, [
         loadProducts,
+    ]);
+
+    useEffect(() => {
+        loadProductsRef.current =
+            loadProducts;
+    }, [
+        loadProducts,
+    ]);
+
+    useEffect(() => {
+        if (!token) {
+            setRealtimeStatus(
+                'disconnected',
+            );
+
+            return;
+        }
+
+        let disposed = false;
+
+        let disconnect:
+            | (() => void)
+            | null = null;
+
+        const connectRealtimeStock =
+            async (): Promise<void> => {
+                try {
+                    const subscription =
+                        await subscribeToRealtimeStock(
+                            {
+                                token,
+
+                                onStatusChange:
+                                    (
+                                        status,
+                                    ) => {
+                                        if (disposed) {
+                                            return;
+                                        }
+
+                                        setRealtimeStatus(
+                                            status,
+                                        );
+                                    },
+
+                                onStockUpdated:
+                                    (
+                                        event,
+                                    ) => {
+                                        if (disposed) {
+                                            return;
+                                        }
+
+                                        /*
+                                         * Immediately update any matching
+                                         * batches already sitting in this
+                                         * cashier's cart. This prevents the
+                                         * cart from continuing to show stale
+                                         * availability while the API refresh
+                                         * is in flight.
+                                         */
+                                        setCart(
+                                            (
+                                                current,
+                                            ) =>
+                                                applyRealtimeStockEventToCart(
+                                                    current,
+                                                    event,
+                                                ),
+                                        );
+
+                                        /*
+                                         * Re-fetch the current filtered POS
+                                         * page from Laravel so product cards,
+                                         * sale options, dual-unit quantities
+                                         * and batch availability all remain
+                                         * authoritative. This refresh is
+                                         * silent, so the cashier does not see
+                                         * a loading spinner for every sale
+                                         * made on another machine.
+                                         */
+                                        void loadProductsRef
+                                            .current(
+                                                false,
+                                            );
+                                    },
+
+                                onReconnected:
+                                    () => {
+                                        if (disposed) {
+                                            return;
+                                        }
+
+                                        /*
+                                         * A connection may have been offline
+                                         * while stock changed. Always perform
+                                         * a fresh API read after Reverb
+                                         * successfully reconnects.
+                                         */
+                                        void loadProductsRef
+                                            .current(
+                                                false,
+                                            );
+                                    },
+                            },
+                        );
+
+                    if (disposed) {
+                        subscription
+                            .disconnect();
+
+                        return;
+                    }
+
+                    disconnect =
+                        subscription
+                            .disconnect;
+                } catch (error) {
+                    if (disposed) {
+                        return;
+                    }
+
+                    setRealtimeStatus(
+                        'error',
+                    );
+
+                    console.error(
+                        'Unable to start realtime POS stock synchronization.',
+                        error,
+                    );
+                }
+            };
+
+        void connectRealtimeStock();
+
+        return () => {
+            disposed = true;
+
+            disconnect?.();
+        };
+    }, [
+        token,
     ]);
 
     useEffect(() => {
@@ -2937,6 +3438,21 @@ export default function PosPage() {
         }
     }, [
         cart.length,
+    ]);
+
+    useEffect(() => {
+        const stockError =
+            getCombinedCartStockError(
+                cart,
+            );
+
+        if (stockError) {
+            setCartError(
+                stockError,
+            );
+        }
+    }, [
+        cart,
     ]);
 
     const subtotal =
@@ -3533,88 +4049,10 @@ export default function PosPage() {
         };
 
     const validateCombinedStock =
-        (): string | null => {
-            const batchIds =
-                Array.from(
-                    new Set(
-                        cart.map(
-                            (
-                                item,
-                            ) =>
-                                item
-                                    .stock_batch_id,
-                        ),
-                    ),
-                );
-
-            for (
-                const batchId
-                of batchIds
-            ) {
-                const batchItems =
-                    cart.filter(
-                        (
-                            item,
-                        ) =>
-                            item
-                                .stock_batch_id
-                            === batchId,
-                    );
-
-                if (
-                    batchItems.length
-                    === 0
-                ) {
-                    continue;
-                }
-
-                const availableStock =
-                    Number(
-                        batchItems[0]
-                            .available_stock_quantity
-                        ?? 0,
-                    );
-
-                const requiredStock =
-                    normaliseQuantity(
-                        batchItems.reduce(
-                            (
-                                total,
-                                item,
-                            ) =>
-                                total
-                                + Number(
-                                    item
-                                        .stock_quantity
-                                    ?? 0,
-                                ),
-                            0,
-                        ),
-                    );
-
-                if (
-                    requiredStock
-                    > availableStock
-                    + 0.0001
-                ) {
-                    return `${batchItems[0]
-                            .product_name
-                        } requires ${formatQuantity(
-                            requiredStock,
-                        )
-                        } ${batchItems[0]
-                            .stock_unit
-                        }, but only ${formatQuantity(
-                            availableStock,
-                        )
-                        } ${batchItems[0]
-                            .stock_unit
-                        } are available.`;
-                }
-            }
-
-            return null;
-        };
+        (): string | null =>
+            getCombinedCartStockError(
+                cart,
+            );
 
     const openPayment =
         (): void => {
@@ -3816,7 +4254,23 @@ export default function PosPage() {
 
                     </div>
 
-                   
+                    <div
+                        className={`realtime-status ${realtimeStatus}`}
+                        title={
+                            realtimeStatus
+                                === 'connected'
+                                ? 'Stock changes from other cashier machines are being received automatically.'
+                                : 'Realtime stock synchronization is not currently connected.'
+                        }
+                    >
+                        <span className="realtime-dot" />
+
+                        <span>
+                            {getRealtimeStatusLabel(
+                                realtimeStatus,
+                            )}
+                        </span>
+                    </div>
                 </header>
 
                 {pageError && (

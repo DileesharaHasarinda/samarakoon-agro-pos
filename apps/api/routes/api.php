@@ -25,6 +25,8 @@ use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\SupplierPayableController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
 
 Route::prefix('v1')
     ->group(function (): void {
@@ -74,6 +76,33 @@ Route::prefix('v1')
         Route::middleware(
             'auth:sanctum',
         )->group(function (): void {
+
+            /*
+                 * =====================================================
+                 * PRIVATE WEBSOCKET CHANNEL AUTHORIZATION
+                 * =====================================================
+                 *
+                 * Used by Cashier PC 1 / Cashier PC 2 to subscribe
+                 * securely to live POS stock changes.
+                 *
+                 * Final URL:
+                 *
+                 * POST /api/v1/broadcasting/auth
+                 *
+                 * The route is protected by Sanctum because this code
+                 * lives inside the existing auth:sanctum group.
+                 */
+            Route::post(
+                '/broadcasting/auth',
+                function (
+                    Request $request,
+                ) {
+                    return Broadcast::auth(
+                        $request,
+                    );
+                },
+            );
+            
             /*
              * Current user.
              */

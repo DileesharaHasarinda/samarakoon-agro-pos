@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\PosStockUpdated;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sale\StoreSaleRequest;
 use App\Models\Customer;
@@ -1346,15 +1348,27 @@ class SaleController extends Controller
             3,
         );
 
+        /*
+         * The database transaction has successfully committed at this point.
+         * Load the final persisted stock quantities before broadcasting them
+         * to the other POS machines.
+         */
+        $loadedSale =
+            $this->loadSale(
+                $sale,
+            );
+
+        $this->broadcastPosStockUpdate(
+            $loadedSale,
+        );
+
         return response()->json([
             'message' =>
             'Sale completed successfully.',
 
             'data' =>
             $this->saleData(
-                $this->loadSale(
-                    $sale,
-                ),
+                $loadedSale,
                 $user->isAdmin(),
             ),
         ], 201);
@@ -1382,6 +1396,105 @@ class SaleController extends Controller
                 $user->isAdmin(),
             ),
         ]);
+    }
+
+    /**
+     * Broadcast the final committed stock quantities for every batch touched
+     * by this sale. A Reverb failure must never turn an already-committed
+     * sale into a false HTTP failure, because the cashier could otherwise
+     * retry and accidentally create a duplicate sale.
+     */
+    private function broadcastPosStockUpdate(
+        Sale $sale,
+    ): void {
+        $batches =
+            $sale
+            ->items
+            ->map(
+                fn(
+                    SaleItem $item,
+                ): ?StockBatch =>
+                $item->stockBatch,
+            )
+            ->filter(
+                fn(
+                    mixed $batch,
+                ): bool =>
+                $batch instanceof StockBatch,
+            )
+            ->unique(
+                fn(
+                    StockBatch $batch,
+                ): int =>
+                (int) $batch->id,
+            )
+            ->map(
+                fn(
+                    StockBatch $batch,
+                ): array => [
+                    'id' =>
+                    (int) $batch->id,
+
+                    'product_id' =>
+                    (int) $batch
+                        ->product_id,
+
+                    /*
+                         * Product variants are not currently used by the
+                         * Samarakoon Agro POS stock-batch sale flow. Keep
+                         * this field in the event contract for forward
+                         * compatibility with realtimeStock.ts.
+                         */
+                    'product_variant_id' =>
+                    null,
+
+                    'available_quantity' =>
+                    round(
+                        (float) $batch
+                            ->available_quantity,
+                        3,
+                    ),
+
+                    'updated_at' =>
+                    $batch
+                        ->updated_at
+                        ?->toISOString(),
+                ],
+            )
+            ->values()
+            ->all();
+
+        if ($batches === []) {
+            return;
+        }
+
+        try {
+            PosStockUpdated::dispatch(
+                (int) $sale->id,
+                (string) $sale
+                    ->sale_number,
+                $batches,
+            );
+        } catch (\Throwable $exception) {
+            Log::warning(
+                'Sale committed successfully, but realtime POS stock broadcasting failed.',
+                [
+                    'sale_id' =>
+                    (int) $sale->id,
+
+                    'sale_number' =>
+                    (string) $sale
+                        ->sale_number,
+
+                    'exception' =>
+                    $exception::class,
+
+                    'message' =>
+                    $exception
+                        ->getMessage(),
+                ],
+            );
+        }
     }
 
     private function loadSale(
