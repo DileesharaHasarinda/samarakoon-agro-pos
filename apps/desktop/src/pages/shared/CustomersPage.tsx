@@ -11,6 +11,9 @@ import {
 import CustomerFormModal
     from '../../components/customers/CustomerFormModal';
 
+import CustomerViewModal
+    from '../../components/customers/CustomerViewModal';
+
 import {
     ApiError,
 } from '../../lib/api';
@@ -33,6 +36,8 @@ const currencyFormatter =
         {
             style: 'currency',
             currency: 'LKR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
         },
     );
 
@@ -45,50 +50,68 @@ const customersPageStyles = `
     }
 
     #sapo-customers-page {
-        --cup-green-900: #14532d;
         --cup-green-800: #166534;
         --cup-green-700: #15803d;
         --cup-green-100: #dcfce7;
         --cup-green-50: #f0fdf4;
-        --cup-blue: #2563eb;
-        --cup-blue-light: #eff6ff;
-        --cup-amber: #b45309;
-        --cup-amber-light: #fffbeb;
+
         --cup-red: #dc2626;
         --cup-red-light: #fef2f2;
+
+        --cup-blue: #2563eb;
+        --cup-blue-light: #eff6ff;
+
         --cup-slate: #475569;
         --cup-slate-light: #f1f5f9;
-        --cup-text: #0f172a;
-        --cup-text-secondary: #334155;
-        --cup-muted: #64748b;
-        --cup-border: #e2e8f0;
-        --cup-border-strong: #cbd5e1;
-        --cup-bg: #f8fafc;
-        --cup-white: #ffffff;
-        --cup-radius: 8px;
-        --cup-radius-sm: 6px;
-        --cup-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
-        position: relative !important;
-        display: block !important;
+        --cup-text: #111827;
+        --cup-text-secondary: #1f2937;
+        --cup-muted: #6b7280;
+
+        --cup-border: #e5e7eb;
+        --cup-border-strong: #d1d5db;
+
+        --cup-bg: #f9fafb;
+        --cup-white: #ffffff;
+
+        --cup-font:
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Roboto,
+            Helvetica,
+            Arial,
+            sans-serif;
+
+        display: flex !important;
+
         width: 100% !important;
-        height: calc(100vh - 100px) !important;
-        height: calc(100dvh - 100px) !important;
         min-width: 0 !important;
-        min-height: 0 !important;
-        max-width: 100% !important;
-        max-height: calc(100vh - 100px) !important;
-        max-height: calc(100dvh - 100px) !important;
+
+        flex-direction: column !important;
+
+        gap: 20px !important;
+
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
-        color: var(--cup-text) !important;
-        font-family: var(--cup-font) !important;
+
+        color:
+            var(--cup-text-secondary) !important;
+
+        font-family:
+            var(--cup-font) !important;
+
         font-size: 14px !important;
-        line-height: 1.45 !important;
-        background: transparent !important;
-        border: 0 !important;
-        isolation: isolate !important;
+        line-height: 1.5 !important;
+
+        background:
+            transparent !important;
+
+        isolation:
+            isolate !important;
+
+        overflow:
+            visible !important;
     }
 
     #sapo-customers-page h1,
@@ -98,637 +121,1421 @@ const customersPageStyles = `
     #sapo-customers-page span,
     #sapo-customers-page strong,
     #sapo-customers-page small,
-    #sapo-customers-page label,
     #sapo-customers-page button,
     #sapo-customers-page input,
     #sapo-customers-page select,
     #sapo-customers-page table,
     #sapo-customers-page th,
     #sapo-customers-page td {
-        font-family: var(--cup-font) !important;
-        text-transform: none !important;
-        letter-spacing: normal !important;
+        font-family:
+            var(--cup-font) !important;
+
+        letter-spacing:
+            normal !important;
     }
 
     #sapo-customers-page h1,
     #sapo-customers-page h2,
     #sapo-customers-page h3,
-    #sapo-customers-page p,
-    #sapo-customers-page ul,
-    #sapo-customers-page li {
+    #sapo-customers-page p {
         margin: 0 !important;
         padding: 0 !important;
-        list-style: none !important;
     }
 
-    /* ---------- Scroll region ---------- */
-
-    #sapo-customers-page
-    .cup-scroll-region {
-        position: absolute !important;
-        inset: 0 !important;
-        display: flex !important;
-        width: 100% !important;
-        height: 100% !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        gap: 16px !important;
-        margin: 0 !important;
-        padding: 16px 16px 32px 16px !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
-        overscroll-behavior-y: contain !important;
-        scrollbar-gutter: stable !important;
-        touch-action: pan-y !important;
-        -webkit-overflow-scrolling: touch !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: var(--cup-border-strong) transparent !important;
-        background: var(--cup-bg) !important;
-    }
-
-    #sapo-customers-page
-    .cup-scroll-region > * {
-        flex: 0 0 auto !important;
-        flex-shrink: 0 !important;
-    }
-
-    #sapo-customers-page
-    .cup-scroll-region::-webkit-scrollbar {
-        width: 10px !important;
-    }
-
-    #sapo-customers-page
-    .cup-scroll-region::-webkit-scrollbar-track {
-        background: transparent !important;
-    }
-
-    #sapo-customers-page
-    .cup-scroll-region::-webkit-scrollbar-thumb {
-        background: var(--cup-border-strong) !important;
-        border: 2px solid transparent !important;
-        border-radius: 999px !important;
-        background-clip: content-box !important;
-    }
-
-    #sapo-customers-page
-    .cup-scroll-region::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8 !important;
-        background-clip: content-box !important;
-    }
-
-    /* ---------- Header ---------- */
+    /* =====================================================
+       HEADER
+       ===================================================== */
 
     #sapo-customers-page
     .cup-header {
         display: flex !important;
+
         width: 100% !important;
-        align-items: center !important;
-        justify-content: space-between !important;
+
+        align-items:
+            flex-start !important;
+
+        justify-content:
+            space-between !important;
+
+        flex-wrap: wrap !important;
+
         gap: 16px !important;
-        margin: 0 !important;
-        padding: 18px 20px !important;
-        background: var(--cup-white) !important;
-        border: 1px solid var(--cup-border) !important;
-        border-radius: var(--cup-radius) !important;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+
+        padding:
+            20px
+            24px !important;
+
+        background:
+            var(--cup-white) !important;
+
+        border:
+            1px solid
+            var(--cup-border) !important;
+
+        border-radius:
+            10px !important;
     }
 
     #sapo-customers-page
     .cup-header-copy {
         display: flex !important;
+
         min-width: 0 !important;
-        flex-direction: column !important;
+
+        flex:
+            1 1 420px !important;
+
+        flex-direction:
+            column !important;
+
         gap: 4px !important;
     }
 
     #sapo-customers-page
     .cup-kicker {
-        display: block !important;
-        color: var(--cup-green-700) !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.06em !important;
-        text-transform: uppercase !important;
+        display: inline-block !important;
+
+        margin-bottom:
+            6px !important;
+
+        color:
+            var(--cup-green-700) !important;
+
+        font-size:
+            12px !important;
+
+        font-weight:
+            600 !important;
+
+        letter-spacing:
+            0.04em !important;
+
+        text-transform:
+            uppercase !important;
+
+        background:
+            transparent !important;
     }
 
     #sapo-customers-page
-    .cup-header-copy h2 {
-        color: var(--cup-text) !important;
-        font-size: 20px !important;
-        font-weight: 700 !important;
-        line-height: 1.3 !important;
-        letter-spacing: -0.01em !important;
+    .cup-header h2 {
+        margin-bottom:
+            4px !important;
+
+        color:
+            var(--cup-text) !important;
+
+        font-size:
+            22px !important;
+
+        font-weight:
+            700 !important;
+
+        line-height:
+            1.3 !important;
     }
 
     #sapo-customers-page
-    .cup-header-copy p {
-        color: var(--cup-muted) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: 1.4 !important;
+    .cup-header p {
+        color:
+            var(--cup-muted) !important;
+
+        font-size:
+            13.5px !important;
+
+        line-height:
+            1.5 !important;
     }
 
-    /* ---------- Buttons ---------- */
-
-    #sapo-customers-page
-    .cup-button {
-        display: inline-flex !important;
-        min-height: 38px !important;
-        flex-shrink: 0 !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: 6px !important;
-        margin: 0 !important;
-        padding: 8px 16px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.2 !important;
-        text-align: center !important;
-        text-decoration: none !important;
-        appearance: none !important;
-        border-radius: var(--cup-radius-sm) !important;
-        box-shadow: none !important;
-        cursor: pointer !important;
-        transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease !important;
-        white-space: nowrap !important;
-    }
-
-    #sapo-customers-page
-    .cup-primary-button {
-        color: #ffffff !important;
-        background: var(--cup-green-700) !important;
-        border: 1px solid var(--cup-green-700) !important;
-    }
-
-    #sapo-customers-page
-    .cup-primary-button:hover:not(:disabled) {
-        background: var(--cup-green-800) !important;
-        border-color: var(--cup-green-800) !important;
-    }
-
-    #sapo-customers-page
-    .cup-secondary-button {
-        color: var(--cup-text-secondary) !important;
-        background: var(--cup-white) !important;
-        border: 1px solid var(--cup-border-strong) !important;
-    }
-
-    #sapo-customers-page
-    .cup-secondary-button:hover:not(:disabled) {
-        color: var(--cup-text) !important;
-        background: var(--cup-bg) !important;
-        border-color: #94a3b8 !important;
-    }
-
-    #sapo-customers-page
-    .cup-danger-button {
-        color: var(--cup-red) !important;
-        background: var(--cup-red-light) !important;
-        border: 1px solid #fecaca !important;
-    }
-
-    #sapo-customers-page
-    .cup-danger-button:hover:not(:disabled) {
-        color: #ffffff !important;
-        background: var(--cup-red) !important;
-        border-color: var(--cup-red) !important;
-    }
-
-    #sapo-customers-page button:disabled {
-        opacity: 0.55 !important;
-        cursor: not-allowed !important;
-    }
-
-    /* ---------- Alerts ---------- */
+    /* =====================================================
+       ALERTS
+       ===================================================== */
 
     #sapo-customers-page
     .cup-alert {
         display: flex !important;
+
         width: 100% !important;
-        align-items: center !important;
-        gap: 10px !important;
-        margin: 0 !important;
-        padding: 10px 14px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.4 !important;
-        border-radius: var(--cup-radius-sm) !important;
+
+        align-items:
+            center !important;
+
+        gap: 8px !important;
+
+        padding:
+            12px
+            16px !important;
+
+        font-size:
+            13.5px !important;
+
+        font-weight:
+            500 !important;
+
+        border-radius:
+            8px !important;
     }
 
     #sapo-customers-page
     .cup-alert-success {
-        color: var(--cup-green-800) !important;
-        background: var(--cup-green-50) !important;
-        border: 1px solid var(--cup-green-100) !important;
+        color:
+            var(--cup-green-700) !important;
+
+        background:
+            var(--cup-green-50) !important;
+
+        border:
+            1px solid
+            #bbf7d0 !important;
     }
 
     #sapo-customers-page
     .cup-alert-error {
-        color: var(--cup-red) !important;
-        background: var(--cup-red-light) !important;
-        border: 1px solid #fecaca !important;
+        color:
+            #b91c1c !important;
+
+        background:
+            var(--cup-red-light) !important;
+
+        border:
+            1px solid
+            #fecaca !important;
     }
 
-    /* ---------- Panel / toolbar ---------- */
+    /* =====================================================
+       BUTTONS
+       ===================================================== */
 
     #sapo-customers-page
-    .cup-panel {
+    .cup-button {
+        display: inline-flex !important;
+
+        min-height:
+            36px !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
+
+        gap: 6px !important;
+
+        padding:
+            7px
+            13px !important;
+
+        color:
+            var(--cup-text-secondary) !important;
+
+        font-size:
+            13px !important;
+
+        font-weight:
+            600 !important;
+
+        line-height:
+            1.2 !important;
+
+        appearance:
+            none !important;
+
+        border-radius:
+            6px !important;
+
+        cursor:
+            pointer !important;
+
+        white-space:
+            nowrap !important;
+
+        transition:
+            background-color
+            0.15s ease,
+            border-color
+            0.15s ease,
+            color
+            0.15s ease !important;
+    }
+
+    #sapo-customers-page
+    .cup-primary-button {
+        color:
+            #ffffff !important;
+
+        background:
+            var(--cup-green-700) !important;
+
+        border:
+            1px solid
+            var(--cup-green-700) !important;
+    }
+
+    #sapo-customers-page
+    .cup-primary-button:hover:not(:disabled) {
+        background:
+            var(--cup-green-800) !important;
+
+        border-color:
+            var(--cup-green-800) !important;
+    }
+
+    #sapo-customers-page
+    .cup-secondary-button {
+        color:
+            #374151 !important;
+
+        background:
+            var(--cup-white) !important;
+
+        border:
+            1px solid
+            var(--cup-border-strong) !important;
+    }
+
+    #sapo-customers-page
+    .cup-secondary-button:hover:not(:disabled) {
+        background:
+            var(--cup-bg) !important;
+
+        border-color:
+            #9ca3af !important;
+    }
+
+    #sapo-customers-page
+    .cup-view-button {
+        color:
+            var(--cup-blue) !important;
+
+        background:
+            var(--cup-blue-light) !important;
+
+        border:
+            1px solid
+            #bfdbfe !important;
+    }
+
+    #sapo-customers-page
+    .cup-view-button:hover:not(:disabled) {
+        color:
+            #ffffff !important;
+
+        background:
+            var(--cup-blue) !important;
+
+        border-color:
+            var(--cup-blue) !important;
+    }
+
+    #sapo-customers-page
+    .cup-danger-button {
+        color:
+            var(--cup-red) !important;
+
+        background:
+            var(--cup-red-light) !important;
+
+        border:
+            1px solid
+            #fecaca !important;
+    }
+
+    #sapo-customers-page
+    .cup-danger-button:hover:not(:disabled) {
+        color:
+            #ffffff !important;
+
+        background:
+            var(--cup-red) !important;
+
+        border-color:
+            var(--cup-red) !important;
+    }
+
+    #sapo-customers-page
+    button:disabled {
+        opacity:
+            0.55 !important;
+
+        cursor:
+            not-allowed !important;
+    }
+
+    /* =====================================================
+       CONTENT CARD
+       ===================================================== */
+
+    #sapo-customers-page
+    .cup-content-card {
         display: flex !important;
+
         width: 100% !important;
         min-width: 0 !important;
-        flex-direction: column !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        background: var(--cup-white) !important;
-        border: 1px solid var(--cup-border) !important;
-        border-radius: var(--cup-radius) !important;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+
+        flex-direction:
+            column !important;
+
+        gap: 16px !important;
+
+        padding:
+            20px !important;
+
+        background:
+            var(--cup-white) !important;
+
+        border:
+            1px solid
+            var(--cup-border) !important;
+
+        border-radius:
+            10px !important;
     }
+
+    /* =====================================================
+       TOOLBAR
+       ===================================================== */
 
     #sapo-customers-page
     .cup-toolbar {
         display: flex !important;
+
         width: 100% !important;
+
         flex-wrap: wrap !important;
-        align-items: center !important;
-        gap: 10px !important;
-        margin: 0 !important;
-        padding: 14px 16px !important;
-        background: var(--cup-white) !important;
-        border-bottom: 1px solid var(--cup-border) !important;
+
+        align-items:
+            center !important;
+
+        gap: 12px !important;
     }
 
     #sapo-customers-page
-    .cup-toolbar input[type="search"] {
-        flex: 1 1 260px !important;
-        min-width: 220px !important;
+    .cup-toolbar
+    input[type="search"] {
+        flex:
+            1 1 260px !important;
+
+        min-width:
+            220px !important;
+
+        height:
+            38px !important;
+
+        padding:
+            0
+            14px !important;
+
+        color:
+            var(--cup-text-secondary) !important;
+
+        font-size:
+            13.5px !important;
+
+        background:
+            var(--cup-bg) !important;
+
+        border:
+            1px solid
+            var(--cup-border-strong) !important;
+
+        border-radius:
+            8px !important;
+
+        outline:
+            none !important;
+
+        transition:
+            border-color
+            0.15s ease,
+            box-shadow
+            0.15s ease,
+            background
+            0.15s ease !important;
+    }
+
+    #sapo-customers-page
+    .cup-toolbar
+    input[type="search"]::placeholder {
+        color:
+            #9ca3af !important;
+    }
+
+    #sapo-customers-page
+    .cup-toolbar
+    input[type="search"]:focus {
+        background:
+            var(--cup-white) !important;
+
+        border-color:
+            var(--cup-green-700) !important;
+
+        box-shadow:
+            0 0 0 3px
+            rgba(
+                22,
+                163,
+                74,
+                0.12
+            ) !important;
     }
 
     #sapo-customers-page
     .cup-toolbar select {
-        flex: 0 0 auto !important;
-        width: 180px !important;
+        min-width:
+            160px !important;
+
+        height:
+            38px !important;
+
+        padding:
+            0
+            14px !important;
+
+        color:
+            var(--cup-text-secondary) !important;
+
+        font-size:
+            13.5px !important;
+
+        background:
+            var(--cup-bg) !important;
+
+        border:
+            1px solid
+            var(--cup-border-strong) !important;
+
+        border-radius:
+            8px !important;
+
+        outline:
+            none !important;
+
+        cursor:
+            pointer !important;
     }
 
-    #sapo-customers-page
-    .cup-toolbar input,
-    #sapo-customers-page
-    .cup-toolbar select {
-        display: block !important;
-        height: 38px !important;
-        min-height: 38px !important;
-        margin: 0 !important;
-        padding: 0 12px !important;
-        color: var(--cup-text) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: normal !important;
-        outline: none !important;
-        background: var(--cup-white) !important;
-        border: 1px solid var(--cup-border-strong) !important;
-        border-radius: var(--cup-radius-sm) !important;
-        box-shadow: none !important;
-        appearance: auto !important;
-    }
-
-    #sapo-customers-page
-    .cup-toolbar select {
-        cursor: pointer !important;
-    }
-
-    #sapo-customers-page
-    .cup-toolbar input::placeholder {
-        color: #94a3b8 !important;
-        font-size: 13px !important;
-        opacity: 1 !important;
-    }
-
-    #sapo-customers-page
-    .cup-toolbar input:focus,
     #sapo-customers-page
     .cup-toolbar select:focus {
-        border-color: var(--cup-green-700) !important;
-        box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.12) !important;
+        background:
+            var(--cup-white) !important;
+
+        border-color:
+            var(--cup-green-700) !important;
+
+        box-shadow:
+            0 0 0 3px
+            rgba(
+                22,
+                163,
+                74,
+                0.12
+            ) !important;
     }
 
-    /* ---------- Table ---------- */
+    /* =====================================================
+       TABLE CONTAINER
+
+       IMPORTANT:
+       Vertical scrolling is allowed.
+       Horizontal scrolling is disabled.
+       ===================================================== */
 
     #sapo-customers-page
     .cup-table-container {
         display: block !important;
+
         width: 100% !important;
         min-width: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow-x: auto !important;
-        overflow-y: visible !important;
-        background: var(--cup-white) !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: var(--cup-border-strong) transparent !important;
+
+        max-height:
+            520px !important;
+
+        overflow-x:
+            hidden !important;
+
+        overflow-y:
+            auto !important;
+
+        background:
+            var(--cup-white) !important;
+
+        border:
+            1px solid
+            var(--cup-border) !important;
+
+        border-radius:
+            8px !important;
+
+        scrollbar-width:
+            thin !important;
+
+        scrollbar-color:
+            var(--cup-border-strong)
+            transparent !important;
     }
 
     #sapo-customers-page
     .cup-table-container::-webkit-scrollbar {
-        height: 10px !important;
+        width:
+            8px !important;
     }
 
     #sapo-customers-page
     .cup-table-container::-webkit-scrollbar-track {
-        background: transparent !important;
+        background:
+            transparent !important;
     }
 
     #sapo-customers-page
     .cup-table-container::-webkit-scrollbar-thumb {
-        background: var(--cup-border-strong) !important;
-        border-radius: 999px !important;
+        background:
+            var(--cup-border-strong) !important;
+
+        border-radius:
+            8px !important;
     }
+
+    #sapo-customers-page
+    .cup-table-container::-webkit-scrollbar-thumb:hover {
+        background:
+            #9ca3af !important;
+    }
+
+    /* =====================================================
+       TABLE
+       ===================================================== */
 
     #sapo-customers-page
     .cup-table {
-        width: 100% !important;
-        min-width: 980px !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        table-layout: fixed !important;
-        border-collapse: separate !important;
-        border-spacing: 0 !important;
-        background: var(--cup-white) !important;
+        width:
+            100% !important;
+
+        min-width:
+            0 !important;
+
+        max-width:
+            100% !important;
+
+        table-layout:
+            fixed !important;
+
+        border-collapse:
+            collapse !important;
+
+        color:
+            var(--cup-text-secondary) !important;
+
+        font-size:
+            13px !important;
+
+        background:
+            var(--cup-white) !important;
     }
 
     #sapo-customers-page
-    .cup-table th,
-    #sapo-customers-page
-    .cup-table td {
-        margin: 0 !important;
-        padding: 10px 12px !important;
-        vertical-align: middle !important;
-        text-align: left !important;
-        white-space: nowrap !important;
-        border: 0 !important;
-        border-bottom: 1px solid var(--cup-border) !important;
+    .cup-table thead {
+        position:
+            sticky !important;
+
+        top:
+            0 !important;
+
+        z-index:
+            2 !important;
     }
 
     #sapo-customers-page
-    .cup-table th {
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 3 !important;
-        height: 40px !important;
-        color: var(--cup-text-secondary) !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
-        letter-spacing: 0.02em !important;
-        text-transform: uppercase !important;
-        background: #f1f5f9 !important;
-        border-bottom: 1px solid var(--cup-border-strong) !important;
+    .cup-table
+    thead th {
+        padding:
+            12px
+            10px !important;
+
+        color:
+            var(--cup-muted) !important;
+
+        font-size:
+            11px !important;
+
+        font-weight:
+            650 !important;
+
+        line-height:
+            1.25 !important;
+
+        text-align:
+            left !important;
+
+        text-transform:
+            uppercase !important;
+
+        background:
+            #f9fafb !important;
+
+        border-bottom:
+            1px solid
+            var(--cup-border) !important;
+
+        white-space:
+            normal !important;
+
+        overflow-wrap:
+            anywhere !important;
     }
 
     #sapo-customers-page
-    .cup-table td {
-        height: 58px !important;
-        color: var(--cup-text) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: 1.3 !important;
-        background: var(--cup-white) !important;
+    .cup-table
+    tbody td {
+        padding:
+            13px
+            10px !important;
+
+        color:
+            var(--cup-text-secondary) !important;
+
+        font-size:
+            12.5px !important;
+
+        vertical-align:
+            middle !important;
+
+        background:
+            var(--cup-white) !important;
+
+        border-bottom:
+            1px solid
+            #f1f5f9 !important;
+
+        white-space:
+            normal !important;
+
+        overflow-wrap:
+            anywhere !important;
     }
 
     #sapo-customers-page
-    .cup-table tbody tr:hover td {
-        background: #f8fafc !important;
+    .cup-table
+    tbody tr:last-child td {
+        border-bottom:
+            none !important;
     }
+
+    #sapo-customers-page
+    .cup-table
+    tbody tr:hover td {
+        background:
+            #f9fafb !important;
+    }
+
+    /* ---------- Column sizing ---------- */
 
     #sapo-customers-page
     .cup-col-customer {
-        width: 220px !important;
+        width:
+            17% !important;
     }
 
     #sapo-customers-page
     .cup-col-mobile {
-        width: 140px !important;
+        width:
+            11% !important;
     }
 
     #sapo-customers-page
     .cup-col-type {
-        width: 120px !important;
+        width:
+            9% !important;
     }
 
     #sapo-customers-page
     .cup-col-money {
-        width: 150px !important;
+        width:
+            13% !important;
     }
 
     #sapo-customers-page
     .cup-col-small {
-        width: 90px !important;
+        width:
+            6% !important;
+
+        text-align:
+            center !important;
     }
 
     #sapo-customers-page
     .cup-col-status {
-        width: 110px !important;
+        width:
+            9% !important;
     }
 
     #sapo-customers-page
     .cup-col-actions {
-        width: 170px !important;
+        width:
+            22% !important;
     }
+
+    /* =====================================================
+       CUSTOMER CELL
+       ===================================================== */
 
     #sapo-customers-page
     .cup-customer-cell {
         display: flex !important;
-        min-width: 0 !important;
-        flex-direction: column !important;
+
+        min-width:
+            0 !important;
+
+        flex-direction:
+            column !important;
+
         gap: 2px !important;
     }
 
     #sapo-customers-page
     .cup-customer-name {
         display: block !important;
-        overflow: hidden !important;
-        color: var(--cup-text) !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
+
+        overflow:
+            hidden !important;
+
+        color:
+            var(--cup-text) !important;
+
+        font-size:
+            13px !important;
+
+        font-weight:
+            600 !important;
+
+        line-height:
+            1.3 !important;
+
+        text-overflow:
+            ellipsis !important;
+
+        white-space:
+            nowrap !important;
     }
 
     #sapo-customers-page
     .cup-customer-code {
         display: block !important;
-        overflow: hidden !important;
-        color: var(--cup-muted) !important;
-        font-size: 12px !important;
-        font-weight: 500 !important;
-        line-height: 1.3 !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
+
+        overflow:
+            hidden !important;
+
+        color:
+            #9ca3af !important;
+
+        font-size:
+            11.5px !important;
+
+        line-height:
+            1.3 !important;
+
+        text-overflow:
+            ellipsis !important;
+
+        white-space:
+            nowrap !important;
     }
 
+    /* =====================================================
+       MONEY
+       ===================================================== */
+
     #sapo-customers-page
-    .cup-type-badge {
-        display: inline-flex !important;
-        min-height: 24px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        padding: 3px 9px !important;
-        color: var(--cup-slate) !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        white-space: nowrap !important;
-        text-transform: capitalize !important;
-        background: var(--cup-slate-light) !important;
-        border-radius: 999px !important;
+    .cup-money-value {
+        display:
+            inline-block !important;
+
+        font-variant-numeric:
+            tabular-nums !important;
+
+        white-space:
+            nowrap !important;
     }
 
     #sapo-customers-page
     .cup-due-value {
-        color: var(--cup-red) !important;
-        font-weight: 700 !important;
+        color:
+            var(--cup-red) !important;
+
+        font-weight:
+            700 !important;
     }
+
+    /* =====================================================
+       TYPE BADGE
+       ===================================================== */
+
+    #sapo-customers-page
+    .cup-type-badge {
+        display:
+            inline-flex !important;
+
+        min-height:
+            24px !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
+
+        padding:
+            4px
+            9px !important;
+
+        color:
+            var(--cup-slate) !important;
+
+        font-size:
+            11.5px !important;
+
+        font-weight:
+            600 !important;
+
+        text-transform:
+            capitalize !important;
+
+        white-space:
+            nowrap !important;
+
+        background:
+            var(--cup-slate-light) !important;
+
+        border-radius:
+            999px !important;
+    }
+
+    /* =====================================================
+       STATUS BADGES
+       ===================================================== */
 
     #sapo-customers-page
     .cup-status-badge {
-        display: inline-flex !important;
-        min-height: 24px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        padding: 3px 9px !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        white-space: nowrap !important;
-        border-radius: 999px !important;
+        display:
+            inline-flex !important;
+
+        min-height:
+            24px !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
+
+        padding:
+            4px
+            9px !important;
+
+        font-size:
+            11.5px !important;
+
+        font-weight:
+            600 !important;
+
+        white-space:
+            nowrap !important;
+
+        border-radius:
+            999px !important;
     }
 
     #sapo-customers-page
     .cup-status-active {
-        color: var(--cup-green-800) !important;
-        background: var(--cup-green-100) !important;
+        color:
+            var(--cup-green-800) !important;
+
+        background:
+            var(--cup-green-100) !important;
     }
 
     #sapo-customers-page
     .cup-status-inactive {
-        color: var(--cup-muted) !important;
-        background: #f1f5f9 !important;
+        color:
+            var(--cup-muted) !important;
+
+        background:
+            #f1f5f9 !important;
     }
+
+    /* =====================================================
+       ACTION BUTTONS
+       ===================================================== */
 
     #sapo-customers-page
     .cup-table-actions {
         display: flex !important;
-        align-items: center !important;
-        gap: 6px !important;
+
+        width:
+            100% !important;
+
+        min-width:
+            0 !important;
+
+        align-items:
+            center !important;
+
+        flex-wrap:
+            wrap !important;
+
+        gap:
+            5px !important;
     }
 
     #sapo-customers-page
     .cup-action-button {
-        min-width: 68px !important;
-        min-height: 32px !important;
-        padding: 5px 10px !important;
-        font-size: 12px !important;
+        min-width:
+            54px !important;
+
+        min-height:
+            30px !important;
+
+        padding:
+            5px
+            8px !important;
+
+        font-size:
+            11.5px !important;
     }
+
+    /* =====================================================
+       TABLE STATES
+       ===================================================== */
 
     #sapo-customers-page
     .cup-table-state {
-        height: 200px !important;
-        padding: 20px !important;
-        text-align: center !important;
-        white-space: normal !important;
-        color: var(--cup-muted) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        background: var(--cup-white) !important;
+        padding:
+            40px
+            16px !important;
+
+        color:
+            #9ca3af !important;
+
+        font-size:
+            13.5px !important;
+
+        text-align:
+            center !important;
+
+        white-space:
+            normal !important;
+
+        background:
+            var(--cup-white) !important;
     }
 
-    /* ---------- Pagination ---------- */
+    /* =====================================================
+       PAGINATION
+       ===================================================== */
 
     #sapo-customers-page
     .cup-pagination {
         display: flex !important;
-        min-height: 56px !important;
-        align-items: center !important;
-        justify-content: space-between !important;
-        gap: 14px !important;
-        margin: 0 !important;
-        padding: 12px 16px !important;
-        background: var(--cup-white) !important;
-        border-top: 1px solid var(--cup-border) !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
+
+        gap:
+            16px !important;
+
+        padding-top:
+            4px !important;
     }
 
     #sapo-customers-page
     .cup-pagination span {
-        color: var(--cup-muted) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
+        color:
+            var(--cup-muted) !important;
+
+        font-size:
+            13px !important;
+
+        font-weight:
+            500 !important;
+
+        background:
+            transparent !important;
     }
 
     #sapo-customers-page
     .cup-pagination-button {
-        min-width: 88px !important;
-        min-height: 34px !important;
-        padding: 6px 10px !important;
-        font-size: 13px !important;
+        min-width:
+            90px !important;
+
+        padding:
+            7px
+            16px !important;
+
+        color:
+            #374151 !important;
+
+        font-size:
+            13px !important;
+
+        font-weight:
+            600 !important;
+
+        background:
+            var(--cup-white) !important;
+
+        border:
+            1px solid
+            var(--cup-border-strong) !important;
+
+        border-radius:
+            6px !important;
+
+        cursor:
+            pointer !important;
     }
 
-    /* ---------- Responsive ---------- */
+    #sapo-customers-page
+    .cup-pagination-button:hover:not(:disabled) {
+        background:
+            #f9fafb !important;
 
-    @media (max-width: 760px) {
-        #sapo-customers-page {
-            height: calc(100vh - 72px) !important;
-            height: calc(100dvh - 72px) !important;
-            max-height: calc(100vh - 72px) !important;
-            max-height: calc(100dvh - 72px) !important;
+        border-color:
+            #9ca3af !important;
+    }
+
+    #sapo-customers-page
+    .cup-pagination-button:disabled {
+        opacity:
+            0.5 !important;
+
+        cursor:
+            not-allowed !important;
+    }
+
+    /* =====================================================
+       RESPONSIVE
+       ===================================================== */
+
+    @media (
+        max-width: 1050px
+    ) {
+        #sapo-customers-page
+        .cup-table
+        thead th {
+            padding:
+                10px
+                7px !important;
+
+            font-size:
+                10px !important;
         }
 
         #sapo-customers-page
-        .cup-scroll-region {
-            gap: 12px !important;
-            padding: 12px 10px 28px 10px !important;
+        .cup-table
+        tbody td {
+            padding:
+                11px
+                7px !important;
+
+            font-size:
+                11.5px !important;
         }
 
+        #sapo-customers-page
+        .cup-action-button {
+            min-width:
+                48px !important;
+
+            padding:
+                5px
+                6px !important;
+
+            font-size:
+                10.5px !important;
+        }
+    }
+
+    /*
+     * On smaller screens the table becomes
+     * stacked customer cards instead of
+     * introducing horizontal scrolling.
+     */
+
+    @media (
+        max-width: 850px
+    ) {
         #sapo-customers-page
         .cup-header {
-            flex-direction: column !important;
-            align-items: stretch !important;
-            padding: 14px !important;
-            gap: 12px !important;
+            flex-direction:
+                column !important;
+
+            align-items:
+                stretch !important;
         }
 
         #sapo-customers-page
-        .cup-header-copy h2 {
-            font-size: 18px !important;
-        }
-
-        #sapo-customers-page
-        .cup-header .cup-button {
-            width: 100% !important;
+        .cup-header
+        .cup-primary-button {
+            width:
+                100% !important;
         }
 
         #sapo-customers-page
         .cup-toolbar {
-            flex-direction: column !important;
-            align-items: stretch !important;
+            flex-direction:
+                column !important;
         }
 
         #sapo-customers-page
-        .cup-toolbar input[type="search"],
+        .cup-toolbar
+        input[type="search"],
         #sapo-customers-page
         .cup-toolbar select {
-            width: 100% !important;
+            width:
+                100% !important;
+
+            min-width:
+                0 !important;
+        }
+
+        #sapo-customers-page
+        .cup-table-container {
+            max-height:
+                none !important;
+
+            overflow:
+                visible !important;
+
+            background:
+                var(--cup-bg) !important;
+
+            border:
+                none !important;
+        }
+
+        #sapo-customers-page
+        .cup-table,
+        #sapo-customers-page
+        .cup-table tbody,
+        #sapo-customers-page
+        .cup-table tr,
+        #sapo-customers-page
+        .cup-table td {
+            display:
+                block !important;
+
+            width:
+                100% !important;
+        }
+
+        #sapo-customers-page
+        .cup-table thead {
+            display:
+                none !important;
+        }
+
+        #sapo-customers-page
+        .cup-table tbody {
+            display:
+                flex !important;
+
+            flex-direction:
+                column !important;
+
+            gap:
+                12px !important;
+        }
+
+        #sapo-customers-page
+        .cup-table tbody tr {
+            overflow:
+                hidden !important;
+
+            background:
+                var(--cup-white) !important;
+
+            border:
+                1px solid
+                var(--cup-border) !important;
+
+            border-radius:
+                8px !important;
+        }
+
+        #sapo-customers-page
+        .cup-table
+        tbody td {
+            display:
+                grid !important;
+
+            width:
+                100% !important;
+
+            grid-template-columns:
+                140px
+                minmax(
+                    0,
+                    1fr
+                ) !important;
+
+            align-items:
+                center !important;
+
+            gap:
+                12px !important;
+
+            min-height:
+                44px !important;
+
+            padding:
+                10px
+                14px !important;
+
+            border-bottom:
+                1px solid
+                var(--cup-border) !important;
+        }
+
+        #sapo-customers-page
+        .cup-table
+        tbody td:last-child {
+            border-bottom:
+                none !important;
+        }
+
+        #sapo-customers-page
+        .cup-table
+        tbody td::before {
+            content:
+                attr(
+                    data-label
+                ) !important;
+
+            color:
+                var(--cup-muted) !important;
+
+            font-size:
+                11px !important;
+
+            font-weight:
+                650 !important;
+
+            text-transform:
+                uppercase !important;
+        }
+
+        #sapo-customers-page
+        .cup-table
+        .cup-table-state {
+            display:
+                block !important;
+
+            min-height:
+                140px !important;
+
+            padding:
+                40px
+                16px !important;
+
+            text-align:
+                center !important;
+        }
+
+        #sapo-customers-page
+        .cup-table
+        .cup-table-state::before {
+            display:
+                none !important;
+
+            content:
+                none !important;
+        }
+
+        #sapo-customers-page
+        .cup-table-actions {
+            justify-content:
+                flex-start !important;
+        }
+    }
+
+    @media (
+        max-width: 640px
+    ) {
+        #sapo-customers-page {
+            gap:
+                16px !important;
+        }
+
+        #sapo-customers-page
+        .cup-header {
+            padding:
+                16px !important;
+        }
+
+        #sapo-customers-page
+        .cup-content-card {
+            padding:
+                14px !important;
         }
 
         #sapo-customers-page
         .cup-pagination {
-            flex-direction: column !important;
-            align-items: stretch !important;
+            flex-direction:
+                column !important;
+
+            align-items:
+                stretch !important;
         }
 
         #sapo-customers-page
         .cup-pagination-button {
-            width: 100% !important;
+            width:
+                100% !important;
+        }
+
+        #sapo-customers-page
+        .cup-pagination span {
+            text-align:
+                center !important;
+        }
+    }
+
+    @media (
+        max-width: 480px
+    ) {
+        #sapo-customers-page
+        .cup-table
+        tbody td {
+            grid-template-columns:
+                110px
+                minmax(
+                    0,
+                    1fr
+                ) !important;
+        }
+
+        #sapo-customers-page
+        .cup-table-actions {
+            display:
+                grid !important;
+
+            grid-template-columns:
+                repeat(
+                    2,
+                    minmax(
+                        0,
+                        1fr
+                    )
+                ) !important;
+        }
+
+        #sapo-customers-page
+        .cup-action-button {
+            width:
+                100% !important;
         }
     }
 `;
@@ -742,67 +1549,121 @@ export default function CustomersPage() {
     const [
         customers,
         setCustomers,
-    ] = useState<Customer[]>([]);
+    ] =
+        useState<
+            Customer[]
+        >(
+            [],
+        );
 
     const [
         searchInput,
         setSearchInput,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         search,
         setSearch,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         status,
         setStatus,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         page,
         setPage,
-    ] = useState(1);
+    ] =
+        useState(
+            1,
+        );
 
     const [
         lastPage,
         setLastPage,
-    ] = useState(1);
+    ] =
+        useState(
+            1,
+        );
 
     const [
         isLoading,
         setIsLoading,
-    ] = useState(true);
+    ] =
+        useState(
+            true,
+        );
 
     const [
         isSubmitting,
         setIsSubmitting,
-    ] = useState(false);
+    ] =
+        useState(
+            false,
+        );
 
     const [
         errorMessage,
         setErrorMessage,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         successMessage,
         setSuccessMessage,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         formOpen,
         setFormOpen,
-    ] = useState(false);
+    ] =
+        useState(
+            false,
+        );
 
     const [
         selectedCustomer,
         setSelectedCustomer,
-    ] = useState<Customer | null>(
-        null,
-    );
+    ] =
+        useState<
+            Customer
+            | null
+        >(
+            null,
+        );
+
+    const [
+        viewedCustomer,
+        setViewedCustomer,
+    ] =
+        useState<
+            Customer
+            | null
+        >(
+            null,
+        );
 
     const isAdmin =
         user?.role === 'admin';
+
+    /* =====================================================
+       LOAD CUSTOMERS
+       ===================================================== */
 
     const loadCustomers =
         useCallback(
@@ -811,8 +1672,13 @@ export default function CustomersPage() {
                     return;
                 }
 
-                setIsLoading(true);
-                setErrorMessage('');
+                setIsLoading(
+                    true,
+                );
+
+                setErrorMessage(
+                    '',
+                );
 
                 try {
                     const response =
@@ -822,7 +1688,8 @@ export default function CustomersPage() {
                                 search,
                                 status,
                                 page,
-                                perPage: 20,
+                                perPage:
+                                    20,
                             },
                         );
 
@@ -831,11 +1698,16 @@ export default function CustomersPage() {
                     );
 
                     setLastPage(
-                        response
-                            .meta
-                            .last_page,
+                        Math.max(
+                            1,
+                            response
+                                .meta
+                                .last_page,
+                        ),
                     );
-                } catch (error) {
+                } catch (
+                error
+                ) {
                     setErrorMessage(
                         error
                             instanceof ApiError
@@ -843,7 +1715,9 @@ export default function CustomersPage() {
                             : 'Unable to load customers.',
                     );
                 } finally {
-                    setIsLoading(false);
+                    setIsLoading(
+                        false,
+                    );
                 }
             },
             [
@@ -854,67 +1728,108 @@ export default function CustomersPage() {
             ],
         );
 
-    useEffect(() => {
-        void loadCustomers();
-    }, [loadCustomers]);
+    useEffect(
+        () => {
+            void loadCustomers();
+        },
+        [
+            loadCustomers,
+        ],
+    );
 
-    useEffect(() => {
-        const timeout =
-            window.setTimeout(
-                () => {
-                    setSearch(
-                        searchInput.trim(),
-                    );
+    /* =====================================================
+       SEARCH DEBOUNCE
+       ===================================================== */
 
-                    setPage(1);
-                },
-                300,
-            );
+    useEffect(
+        () => {
+            const timeout =
+                window.setTimeout(
+                    () => {
+                        setSearch(
+                            searchInput
+                                .trim(),
+                        );
 
-        return () => {
-            window.clearTimeout(
-                timeout,
-            );
-        };
-    }, [searchInput]);
+                        setPage(
+                            1,
+                        );
+                    },
+                    300,
+                );
 
-    useEffect(() => {
-        if (!successMessage) {
-            return;
-        }
+            return () => {
+                window.clearTimeout(
+                    timeout,
+                );
+            };
+        },
+        [
+            searchInput,
+        ],
+    );
 
-        const timeout =
-            window.setTimeout(
-                () => {
-                    setSuccessMessage('');
-                },
-                3500,
-            );
+    /* =====================================================
+       SUCCESS MESSAGE
+       ===================================================== */
 
-        return () => {
-            window.clearTimeout(
-                timeout,
-            );
-        };
-    }, [successMessage]);
+    useEffect(
+        () => {
+            if (
+                !successMessage
+            ) {
+                return;
+            }
+
+            const timeout =
+                window.setTimeout(
+                    () => {
+                        setSuccessMessage(
+                            '',
+                        );
+                    },
+                    3500,
+                );
+
+            return () => {
+                window.clearTimeout(
+                    timeout,
+                );
+            };
+        },
+        [
+            successMessage,
+        ],
+    );
+
+    /* =====================================================
+       CREATE / UPDATE
+       ===================================================== */
 
     const submitCustomer =
         async (
-            values: CustomerInput,
+            values:
+                CustomerInput,
         ): Promise<void> => {
             if (!token) {
                 return;
             }
 
-            setIsSubmitting(true);
-            setErrorMessage('');
+            setIsSubmitting(
+                true,
+            );
+
+            setErrorMessage(
+                '',
+            );
 
             try {
                 const response =
                     selectedCustomer
                         ? await updateCustomer(
                             token,
-                            selectedCustomer.id,
+                            selectedCustomer
+                                .id,
                             values,
                         )
                         : await createCustomer(
@@ -927,11 +1842,18 @@ export default function CustomersPage() {
                     ?? 'Customer saved successfully.',
                 );
 
-                setFormOpen(false);
-                setSelectedCustomer(null);
+                setFormOpen(
+                    false,
+                );
+
+                setSelectedCustomer(
+                    null,
+                );
 
                 await loadCustomers();
-            } catch (error) {
+            } catch (
+            error
+            ) {
                 setErrorMessage(
                     error
                         instanceof ApiError
@@ -939,13 +1861,20 @@ export default function CustomersPage() {
                         : 'Unable to save customer.',
                 );
             } finally {
-                setIsSubmitting(false);
+                setIsSubmitting(
+                    false,
+                );
             }
         };
 
+    /* =====================================================
+       DELETE
+       ===================================================== */
+
     const removeCustomer =
         async (
-            customer: Customer,
+            customer:
+                Customer,
         ): Promise<void> => {
             if (
                 !token
@@ -959,9 +1888,15 @@ export default function CustomersPage() {
                     `Delete ${customer.name}?`,
                 );
 
-            if (!confirmed) {
+            if (
+                !confirmed
+            ) {
                 return;
             }
+
+            setErrorMessage(
+                '',
+            );
 
             try {
                 const response =
@@ -971,11 +1906,14 @@ export default function CustomersPage() {
                     );
 
                 setSuccessMessage(
-                    response.message,
+                    response.message
+                    ?? 'Customer deleted successfully.',
                 );
 
                 await loadCustomers();
-            } catch (error) {
+            } catch (
+            error
+            ) {
                 setErrorMessage(
                     error
                         instanceof ApiError
@@ -985,339 +1923,493 @@ export default function CustomersPage() {
             }
         };
 
+    /* =====================================================
+       RENDER
+       ===================================================== */
+
     return (
         <div id="sapo-customers-page">
             <style>
                 {customersPageStyles}
             </style>
 
-            <div className="cup-scroll-region">
-                <header className="cup-header">
-                    <div className="cup-header-copy">
-                        <span className="cup-kicker">
-                            Customer Accounts
-                        </span>
+            {/* =============================================
+                HEADER
+               ============================================= */}
 
-                        <h2>Customers</h2>
+            <section className="cup-header">
+                <div className="cup-header-copy">
+                    <span className="cup-kicker">
+                        Customer Accounts
+                    </span>
 
-                        <p>
-                            Manage customer details,
-                            credit limits and current
-                            outstanding balances.
-                        </p>
-                    </div>
+                    <h2>
+                        Customers
+                    </h2>
 
-                    <button
-                        type="button"
-                        className="cup-button cup-primary-button"
-                        onClick={() => {
-                            setSelectedCustomer(
-                                null,
-                            );
+                    <p>
+                        Manage customer details,
+                        credit limits and current
+                        outstanding balances.
+                    </p>
+                </div>
 
-                            setFormOpen(true);
-                        }}
+                <button
+                    type="button"
+                    className="cup-button cup-primary-button"
+                    onClick={() => {
+                        setSelectedCustomer(
+                            null,
+                        );
+
+                        setErrorMessage(
+                            '',
+                        );
+
+                        setFormOpen(
+                            true,
+                        );
+                    }}
+                >
+                    Add Customer
+                </button>
+            </section>
+
+            {/* =============================================
+                ALERTS
+               ============================================= */}
+
+            {successMessage && (
+                <div
+                    className="cup-alert cup-alert-success"
+                    role="status"
+                >
+                    {
+                        successMessage
+                    }
+                </div>
+            )}
+
+            {errorMessage
+                && !formOpen && (
+                    <div
+                        className="cup-alert cup-alert-error"
+                        role="alert"
                     >
-                        Add Customer
-                    </button>
-                </header>
-
-                {successMessage && (
-                    <div className="cup-alert cup-alert-success">
-                        {successMessage}
+                        {
+                            errorMessage
+                        }
                     </div>
                 )}
 
-                {errorMessage
-                    && !formOpen && (
-                        <div className="cup-alert cup-alert-error">
-                            {errorMessage}
-                        </div>
-                    )}
+            {/* =============================================
+                CUSTOMER TABLE CARD
+               ============================================= */}
 
-                <section className="cup-panel">
-                    <div className="cup-toolbar">
-                        <input
-                            type="search"
-                            value={searchInput}
-                            placeholder="Search customer name, mobile or code..."
-                            aria-label="Search customers"
-                            onChange={(event) => {
-                                setSearchInput(
-                                    event.target.value,
-                                );
-                            }}
-                        />
+            <section className="cup-content-card">
+                {/* TOOLBAR */}
 
-                        <select
-                            value={status}
-                            aria-label="Filter by status"
-                            onChange={(event) => {
-                                setStatus(
-                                    event.target.value,
-                                );
+                <div className="cup-toolbar">
+                    <input
+                        type="search"
+                        value={
+                            searchInput
+                        }
+                        placeholder="Search customer name, mobile or code..."
+                        aria-label="Search customers"
+                        onChange={(
+                            event,
+                        ) => {
+                            setSearchInput(
+                                event
+                                    .target
+                                    .value,
+                            );
+                        }}
+                    />
 
-                                setPage(1);
-                            }}
-                        >
-                            <option value="">
-                                All Customers
-                            </option>
+                    <select
+                        value={
+                            status
+                        }
+                        aria-label="Filter by customer status"
+                        onChange={(
+                            event,
+                        ) => {
+                            setStatus(
+                                event
+                                    .target
+                                    .value,
+                            );
 
-                            <option value="active">
-                                Active
-                            </option>
+                            setPage(
+                                1,
+                            );
+                        }}
+                    >
+                        <option value="">
+                            All Customers
+                        </option>
 
-                            <option value="inactive">
-                                Inactive
-                            </option>
-                        </select>
-                    </div>
+                        <option value="active">
+                            Active
+                        </option>
 
-                    <div className="cup-table-container">
-                        <table className="cup-table">
-                            <thead>
+                        <option value="inactive">
+                            Inactive
+                        </option>
+                    </select>
+                </div>
+
+                {/* TABLE */}
+
+                <div className="cup-table-container">
+                    <table className="cup-table">
+                        <thead>
+                            <tr>
+                                <th className="cup-col-customer">
+                                    Customer
+                                </th>
+
+                                <th className="cup-col-mobile">
+                                    Mobile
+                                </th>
+
+                                <th className="cup-col-type">
+                                    Type
+                                </th>
+
+                                <th className="cup-col-money">
+                                    Credit Limit
+                                </th>
+
+                                <th className="cup-col-money">
+                                    Outstanding Due
+                                </th>
+
+                                <th className="cup-col-small">
+                                    Sales
+                                </th>
+
+                                <th className="cup-col-status">
+                                    Status
+                                </th>
+
+                                <th className="cup-col-actions">
+                                    Action
+                                </th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {isLoading ? (
                                 <tr>
-                                    <th className="cup-col-customer">
-                                        Customer
-                                    </th>
-
-                                    <th className="cup-col-mobile">
-                                        Mobile
-                                    </th>
-
-                                    <th className="cup-col-type">
-                                        Type
-                                    </th>
-
-                                    <th className="cup-col-money">
-                                        Credit Limit
-                                    </th>
-
-                                    <th className="cup-col-money">
-                                        Outstanding Due
-                                    </th>
-
-                                    <th className="cup-col-small">
-                                        Sales
-                                    </th>
-
-                                    <th className="cup-col-status">
-                                        Status
-                                    </th>
-
-                                    <th className="cup-col-actions">
-                                        Actions
-                                    </th>
+                                    <td
+                                        colSpan={
+                                            8
+                                        }
+                                        className="cup-table-state"
+                                    >
+                                        Loading customers...
+                                    </td>
                                 </tr>
-                            </thead>
-
-                            <tbody>
-                                {isLoading ? (
-                                    <tr>
-                                        <td
-                                            colSpan={8}
-                                            className="cup-table-state"
+                            ) : customers
+                                .length
+                                === 0 ? (
+                                <tr>
+                                    <td
+                                        colSpan={
+                                            8
+                                        }
+                                        className="cup-table-state"
+                                    >
+                                        No customers found.
+                                    </td>
+                                </tr>
+                            ) : (
+                                customers.map(
+                                    (
+                                        customer,
+                                    ) => (
+                                        <tr
+                                            key={
+                                                customer
+                                                    .id
+                                            }
                                         >
-                                            Loading customers...
-                                        </td>
-                                    </tr>
-                                ) : customers.length
-                                    === 0 ? (
-                                    <tr>
-                                        <td
-                                            colSpan={8}
-                                            className="cup-table-state"
-                                        >
-                                            No customers found.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    customers.map(
-                                        (customer) => (
-                                            <tr
-                                                key={
-                                                    customer.id
-                                                }
-                                            >
-                                                <td>
-                                                    <div className="cup-customer-cell">
-                                                        <strong
-                                                            className="cup-customer-name"
-                                                            title={
-                                                                customer
-                                                                    .name
-                                                            }
-                                                        >
-                                                            {
-                                                                customer
-                                                                    .name
-                                                            }
-                                                        </strong>
+                                            {/* CUSTOMER */}
 
-                                                        <small className="cup-customer-code">
-                                                            {
-                                                                customer
-                                                                    .customer_code
-                                                            }
-                                                        </small>
-                                                    </div>
-                                                </td>
-
-                                                <td>
-                                                    {customer.mobile
-                                                        || '—'}
-                                                </td>
-
-                                                <td>
-                                                    <span className="cup-type-badge">
+                                            <td data-label="Customer">
+                                                <div className="cup-customer-cell">
+                                                    <strong
+                                                        className="cup-customer-name"
+                                                        title={
+                                                            customer
+                                                                .name
+                                                        }
+                                                    >
                                                         {
                                                             customer
-                                                                .customer_type
+                                                                .name
                                                         }
-                                                    </span>
-                                                </td>
+                                                    </strong>
 
-                                                <td>
-                                                    {currencyFormatter
-                                                        .format(
+                                                    <small className="cup-customer-code">
+                                                        {
                                                             customer
-                                                                .credit_limit,
-                                                        )}
-                                                </td>
+                                                                .customer_code
+                                                        }
+                                                    </small>
+                                                </div>
+                                            </td>
 
-                                                <td>
-                                                    <strong
-                                                        className={
+                                            {/* MOBILE */}
+
+                                            <td data-label="Mobile">
+                                                {customer
+                                                    .mobile
+                                                    || '—'}
+                                            </td>
+
+                                            {/* TYPE */}
+
+                                            <td data-label="Type">
+                                                <span className="cup-type-badge">
+                                                    {customer
+                                                        .customer_type
+                                                        === 'wholesale'
+                                                        ? 'Wholesale'
+                                                        : 'Retail'}
+                                                </span>
+                                            </td>
+
+                                            {/* CREDIT LIMIT */}
+
+                                            <td data-label="Credit Limit">
+                                                <span className="cup-money-value">
+                                                    {currencyFormatter.format(
+                                                        Number(
+                                                            customer
+                                                                .credit_limit
+                                                            ?? 0,
+                                                        ),
+                                                    )}
+                                                </span>
+                                            </td>
+
+                                            {/* OUTSTANDING DUE */}
+
+                                            <td data-label="Outstanding Due">
+                                                <strong
+                                                    className={
+                                                        Number(
                                                             customer
                                                                 .outstanding_due
-                                                                > 0
-                                                                ? 'cup-due-value'
-                                                                : ''
-                                                        }
-                                                    >
-                                                        {currencyFormatter
-                                                            .format(
-                                                                customer
-                                                                    .outstanding_due,
-                                                            )}
-                                                    </strong>
-                                                </td>
-
-                                                <td>
-                                                    {
-                                                        customer
-                                                            .sales_count
+                                                            ?? 0,
+                                                        )
+                                                            > 0
+                                                            ? 'cup-due-value cup-money-value'
+                                                            : 'cup-money-value'
                                                     }
-                                                </td>
-
-                                                <td>
-                                                    <span
-                                                        className={
+                                                >
+                                                    {currencyFormatter.format(
+                                                        Number(
                                                             customer
-                                                                .is_active
-                                                                ? 'cup-status-badge cup-status-active'
-                                                                : 'cup-status-badge cup-status-inactive'
-                                                        }
-                                                    >
-                                                        {customer
-                                                            .is_active
-                                                            ? 'Active'
-                                                            : 'Inactive'}
-                                                    </span>
-                                                </td>
+                                                                .outstanding_due
+                                                            ?? 0,
+                                                        ),
+                                                    )}
+                                                </strong>
+                                            </td>
 
-                                                <td>
-                                                    <div className="cup-table-actions">
+                                            {/* SALES */}
+
+                                            <td data-label="Sales">
+                                                {
+                                                    customer
+                                                        .sales_count
+                                                }
+                                            </td>
+
+                                            {/* STATUS */}
+
+                                            <td data-label="Status">
+                                                <span
+                                                    className={
+                                                        customer
+                                                            .is_active
+                                                            ? 'cup-status-badge cup-status-active'
+                                                            : 'cup-status-badge cup-status-inactive'
+                                                    }
+                                                >
+                                                    {customer
+                                                        .is_active
+                                                        ? 'Active'
+                                                        : 'Inactive'}
+                                                </span>
+                                            </td>
+
+                                            {/* ACTIONS */}
+
+                                            <td data-label="Action">
+                                                <div className="cup-table-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="cup-button cup-view-button cup-action-button"
+                                                        onClick={() => {
+                                                            setViewedCustomer(
+                                                                customer,
+                                                            );
+                                                        }}
+                                                    >
+                                                        View
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        className="cup-button cup-secondary-button cup-action-button"
+                                                        onClick={() => {
+                                                            setSelectedCustomer(
+                                                                customer,
+                                                            );
+
+                                                            setErrorMessage(
+                                                                '',
+                                                            );
+
+                                                            setFormOpen(
+                                                                true,
+                                                            );
+                                                        }}
+                                                    >
+                                                        Edit
+                                                    </button>
+
+                                                    {isAdmin && (
                                                         <button
                                                             type="button"
-                                                            className="cup-button cup-secondary-button cup-action-button"
+                                                            className="cup-button cup-danger-button cup-action-button"
                                                             onClick={() => {
-                                                                setSelectedCustomer(
+                                                                void removeCustomer(
                                                                     customer,
-                                                                );
-
-                                                                setFormOpen(
-                                                                    true,
                                                                 );
                                                             }}
                                                         >
-                                                            Edit
+                                                            Delete
                                                         </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ),
+                                )
+                            )}
+                        </tbody>
+                    </table>
+                </div>
 
-                                                        {isAdmin && (
-                                                            <button
-                                                                type="button"
-                                                                className="cup-button cup-danger-button cup-action-button"
-                                                                onClick={() => {
-                                                                    void removeCustomer(
-                                                                        customer,
-                                                                    );
-                                                                }}
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ),
-                                    )
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                {/* PAGINATION */}
 
-                    <footer className="cup-pagination">
-                        <button
-                            type="button"
-                            className="cup-button cup-secondary-button cup-pagination-button"
-                            disabled={page <= 1}
-                            onClick={() => {
-                                setPage(
-                                    (current) =>
-                                        Math.max(
-                                            1,
-                                            current - 1,
-                                        ),
-                                );
-                            }}
-                        >
-                            Previous
-                        </button>
+                <footer className="cup-pagination">
+                    <button
+                        type="button"
+                        className="cup-pagination-button"
+                        disabled={
+                            page
+                            <= 1
+                        }
+                        onClick={() => {
+                            setPage(
+                                (
+                                    current,
+                                ) =>
+                                    Math.max(
+                                        1,
+                                        current
+                                        - 1,
+                                    ),
+                            );
+                        }}
+                    >
+                        Previous
+                    </button>
 
-                        <span>
-                            Page {page} of{' '}
-                            {lastPage}
-                        </span>
+                    <span>
+                        Page
+                        {' '}
 
-                        <button
-                            type="button"
-                            className="cup-button cup-secondary-button cup-pagination-button"
-                            disabled={
-                                page >= lastPage
+                        <strong>
+                            {
+                                page
                             }
-                            onClick={() => {
-                                setPage(
-                                    (current) =>
-                                        Math.min(
-                                            lastPage,
-                                            current + 1,
-                                        ),
-                                );
-                            }}
-                        >
-                            Next
-                        </button>
-                    </footer>
-                </section>
-            </div>
+                        </strong>
+
+                        {' '}
+                        of
+                        {' '}
+
+                        <strong>
+                            {
+                                lastPage
+                            }
+                        </strong>
+                    </span>
+
+                    <button
+                        type="button"
+                        className="cup-pagination-button"
+                        disabled={
+                            page
+                            >= lastPage
+                        }
+                        onClick={() => {
+                            setPage(
+                                (
+                                    current,
+                                ) =>
+                                    Math.min(
+                                        lastPage,
+                                        current
+                                        + 1,
+                                    ),
+                            );
+                        }}
+                    >
+                        Next
+                    </button>
+                </footer>
+            </section>
+
+            {/* =============================================
+                VIEW CUSTOMER
+               ============================================= */}
+
+            <CustomerViewModal
+                customer={
+                    viewedCustomer
+                }
+                isOpen={
+                    viewedCustomer
+                    !== null
+                }
+                onClose={() => {
+                    setViewedCustomer(
+                        null,
+                    );
+                }}
+            />
+
+            {/* =============================================
+                ADD / EDIT CUSTOMER
+               ============================================= */}
 
             <CustomerFormModal
                 customer={
                     selectedCustomer
                 }
-                isOpen={formOpen}
+                isOpen={
+                    formOpen
+                }
                 isSubmitting={
                     isSubmitting
                 }
@@ -1327,16 +2419,25 @@ export default function CustomersPage() {
                         : ''
                 }
                 onClose={() => {
-                    if (!isSubmitting) {
-                        setFormOpen(false);
+                    if (
+                        !isSubmitting
+                    ) {
+                        setFormOpen(
+                            false,
+                        );
+
                         setSelectedCustomer(
                             null,
                         );
 
-                        setErrorMessage('');
+                        setErrorMessage(
+                            '',
+                        );
                     }
                 }}
-                onSubmit={(values) => {
+                onSubmit={(
+                    values,
+                ) => {
                     void submitCustomer(
                         values,
                     );

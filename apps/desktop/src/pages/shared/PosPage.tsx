@@ -403,6 +403,40 @@ function getProductAvailableLabel(
         }`;
 }
 
+function hasSellableBatch(
+    product: PosProduct,
+): boolean {
+    return product.batches.some(
+        (batch) =>
+            Number(
+                batch.available_quantity
+                ?? 0,
+            ) > 0
+            && (batch.sale_options ?? []).some(
+                (option) =>
+                    Number(
+                        option.available_quantity
+                        ?? 0,
+                    ) > 0,
+            ),
+    );
+}
+
+function getVisibleProducts(
+    products: PosProduct[],
+): PosProduct[] {
+    return products.filter(
+        (product) =>
+            Number(
+                product.total_available_quantity
+                ?? 0,
+            ) > 0
+            && hasSellableBatch(
+                product,
+            ),
+    );
+}
+
 function isFullPrimaryUnit(
     item: PosCartItem,
 ): boolean {
@@ -3193,8 +3227,13 @@ export default function PosPage() {
                             },
                         );
 
+                    const visibleProducts =
+                        getVisibleProducts(
+                            response.data,
+                        );
+
                     setProducts(
-                        response.data,
+                        visibleProducts,
                     );
 
                     setPagination(
@@ -3216,8 +3255,7 @@ export default function PosPage() {
                             }
 
                             return (
-                                response
-                                    .data
+                                visibleProducts
                                     .find(
                                         (
                                             product,

@@ -63,6 +63,290 @@ const emptyPagination: PosPaginationMeta = {
     to: null,
 };
 
+const moneyInputFormatter =
+    new Intl.NumberFormat(
+        'en-GB',
+        {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+            useGrouping: true,
+        },
+    );
+
+function formatMoneyInputValue(
+    value: number,
+): string {
+    if (!Number.isFinite(value)) {
+        return '0.00';
+    }
+
+    return moneyInputFormatter.format(
+        Math.max(
+            0,
+            value,
+        ),
+    );
+}
+
+function sanitiseMoneyInput(
+    value: string,
+): string {
+    const cleaned =
+        value
+            .replace(
+                /,/g,
+                '',
+            )
+            .replace(
+                /[^\d.]/g,
+                '',
+            );
+
+    const [
+        rawInteger = '',
+        ...decimalParts
+    ] =
+        cleaned.split('.');
+
+    const integerDigits =
+        rawInteger.replace(
+            /^0+(?=\d)/,
+            '',
+        );
+
+    const decimalDigits =
+        decimalParts
+            .join('')
+            .slice(
+                0,
+                2,
+            );
+
+    const integerValue =
+        integerDigits === ''
+            ? '0'
+            : integerDigits;
+
+    const groupedInteger =
+        Number(
+            integerValue,
+        ).toLocaleString(
+            'en-GB',
+            {
+                maximumFractionDigits: 0,
+            },
+        );
+
+    if (
+        cleaned.includes('.')
+    ) {
+        return `${groupedInteger}.${decimalDigits}`;
+    }
+
+    return groupedInteger;
+}
+
+function parseMoneyInput(
+    value: string,
+): number {
+    const parsed =
+        Number(
+            value.replace(
+                /,/g,
+                '',
+            ),
+        );
+
+    return Number.isFinite(
+        parsed,
+    )
+        ? parsed
+        : 0;
+}
+
+interface MoneyInputProps {
+    value: number;
+    disabled?: boolean;
+    min?: number;
+    onChange: (
+        value: number,
+    ) => void;
+    onClearError?: () => void;
+}
+
+function MoneyInput({
+    value,
+    disabled = false,
+    min = 0,
+    onChange,
+    onClearError,
+}: MoneyInputProps) {
+    const [
+        displayValue,
+        setDisplayValue,
+    ] =
+        useState(
+            () =>
+                formatMoneyInputValue(
+                    value,
+                ),
+        );
+
+    const [
+        isFocused,
+        setIsFocused,
+    ] =
+        useState(
+            false,
+        );
+
+    useEffect(
+        () => {
+            if (!isFocused) {
+                setDisplayValue(
+                    formatMoneyInputValue(
+                        value,
+                    ),
+                );
+            }
+        },
+        [
+            value,
+            isFocused,
+        ],
+    );
+
+    return (
+        <input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={
+                displayValue
+            }
+            disabled={
+                disabled
+            }
+            onFocus={(
+                event,
+            ) => {
+                setIsFocused(
+                    true,
+                );
+
+                /*
+                 * Selecting the complete value means typing
+                 * immediately replaces 0.00 / the old amount
+                 * instead of producing values such as 010000.
+                 */
+                window.setTimeout(
+                    () => {
+                        event
+                            .currentTarget
+                            .select();
+                    },
+                    0,
+                );
+            }}
+            onClick={(
+                event,
+            ) => {
+                event
+                    .currentTarget
+                    .select();
+            }}
+            onChange={(
+                event,
+            ) => {
+                const rawValue =
+                    event
+                        .target
+                        .value;
+
+                /*
+                 * Allow a genuinely empty editing state.
+                 * The numeric value remains 0 until the
+                 * cashier starts entering an amount.
+                 */
+                if (
+                    rawValue.trim()
+                    === ''
+                ) {
+                    setDisplayValue(
+                        '',
+                    );
+
+                    onChange(
+                        0,
+                    );
+
+                    onClearError?.();
+
+                    return;
+                }
+
+                const formatted =
+                    sanitiseMoneyInput(
+                        rawValue,
+                    );
+
+                const numericValue =
+                    parseMoneyInput(
+                        formatted,
+                    );
+
+                setDisplayValue(
+                    formatted,
+                );
+
+                onChange(
+                    Math.max(
+                        min,
+                        numericValue,
+                    ),
+                );
+
+                onClearError?.();
+            }}
+            onBlur={() => {
+                setIsFocused(
+                    false,
+                );
+
+                const numericValue =
+                    Math.max(
+                        min,
+                        parseMoneyInput(
+                            displayValue,
+                        ),
+                    );
+
+                onChange(
+                    numericValue,
+                );
+
+                setDisplayValue(
+                    formatMoneyInputValue(
+                        numericValue,
+                    ),
+                );
+            }}
+            onKeyDown={(
+                event,
+            ) => {
+                if (
+                    event.key
+                    === 'Enter'
+                ) {
+                    event
+                        .currentTarget
+                        .blur();
+                }
+            }}
+        />
+    );
+}
+
 function formatDateTime(
     value: string | null,
 ): string {
@@ -1544,21 +1828,18 @@ export default function ShiftRegisterPage() {
                                     Opening Cash
                                 </span>
 
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={openingCash}
-                                    disabled={isSubmitting}
-                                    onChange={(event) => {
-                                        setOpeningCash(
-                                            Number(
-                                                event
-                                                    .target
-                                                    .value,
-                                            ),
-                                        );
-
+                                <MoneyInput
+                                    value={
+                                        openingCash
+                                    }
+                                    min={0}
+                                    disabled={
+                                        isSubmitting
+                                    }
+                                    onChange={
+                                        setOpeningCash
+                                    }
+                                    onClearError={() => {
                                         setFormError('');
                                     }}
                                 />
@@ -1860,25 +2141,18 @@ export default function ShiftRegisterPage() {
                                             Amount
                                         </span>
 
-                                        <input
-                                            type="number"
-                                            min="0.01"
-                                            step="0.01"
+                                        <MoneyInput
                                             value={
                                                 movementAmount
                                             }
+                                            min={0}
                                             disabled={
                                                 isSubmitting
                                             }
-                                            onChange={(event) => {
-                                                setMovementAmount(
-                                                    Number(
-                                                        event
-                                                            .target
-                                                            .value,
-                                                    ),
-                                                );
-
+                                            onChange={
+                                                setMovementAmount
+                                            }
+                                            onClearError={() => {
                                                 setFormError('');
                                             }}
                                         />
@@ -1972,23 +2246,18 @@ export default function ShiftRegisterPage() {
                                             Actual Counted Cash
                                         </span>
 
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={actualCash}
+                                        <MoneyInput
+                                            value={
+                                                actualCash
+                                            }
+                                            min={0}
                                             disabled={
                                                 isSubmitting
                                             }
-                                            onChange={(event) => {
-                                                setActualCash(
-                                                    Number(
-                                                        event
-                                                            .target
-                                                            .value,
-                                                    ),
-                                                );
-
+                                            onChange={
+                                                setActualCash
+                                            }
+                                            onClearError={() => {
                                                 setFormError('');
                                             }}
                                         />

@@ -24,9 +24,9 @@ use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\SupplierPayableController;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
     ->group(function (): void {
@@ -36,28 +36,17 @@ Route::prefix('v1')
          * =====================================================
          */
 
-        /*
-         * Health check.
-         */
         Route::get(
             '/health',
             function (): JsonResponse {
                 return response()->json([
-                    'status' =>
-                    'ok',
-
-                    'application' =>
-                    'Samarakoon Agro POS API',
-
-                    'timestamp' =>
-                    now()->toISOString(),
+                    'status' => 'ok',
+                    'application' => 'Samarakoon Agro POS API',
+                    'timestamp' => now()->toISOString(),
                 ]);
             },
         );
 
-        /*
-         * Login.
-         */
         Route::post(
             '/auth/login',
             [
@@ -76,22 +65,11 @@ Route::prefix('v1')
         Route::middleware(
             'auth:sanctum',
         )->group(function (): void {
-
             /*
-                 * =====================================================
-                 * PRIVATE WEBSOCKET CHANNEL AUTHORIZATION
-                 * =====================================================
-                 *
-                 * Used by Cashier PC 1 / Cashier PC 2 to subscribe
-                 * securely to live POS stock changes.
-                 *
-                 * Final URL:
-                 *
-                 * POST /api/v1/broadcasting/auth
-                 *
-                 * The route is protected by Sanctum because this code
-                 * lives inside the existing auth:sanctum group.
-                 */
+             * =====================================================
+             * PRIVATE WEBSOCKET CHANNEL AUTHORIZATION
+             * =====================================================
+             */
             Route::post(
                 '/broadcasting/auth',
                 function (
@@ -102,10 +80,7 @@ Route::prefix('v1')
                     );
                 },
             );
-            
-            /*
-             * Current user.
-             */
+
             Route::get(
                 '/auth/me',
                 [
@@ -114,9 +89,6 @@ Route::prefix('v1')
                 ],
             );
 
-            /*
-             * Logout.
-             */
             Route::post(
                 '/auth/logout',
                 [
@@ -133,9 +105,6 @@ Route::prefix('v1')
             Route::middleware(
                 'role:admin,cashier',
             )->group(function (): void {
-                /*
-                 * Cashier dashboard.
-                 */
                 Route::get(
                     '/dashboard/cashier',
                     [
@@ -144,10 +113,6 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * Business settings used by
-                 * receipts and invoices.
-                 */
                 Route::get(
                     '/business-settings',
                     [
@@ -156,12 +121,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * POS
-                 * =================================================
-                 */
-
+                /* POS */
                 Route::get(
                     '/pos/categories',
                     [
@@ -186,12 +146,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * STOCK
-                 * =================================================
-                 */
-
+                /* STOCK */
                 Route::get(
                     '/stock/products',
                     [
@@ -208,16 +163,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * CUSTOMERS
-                 * =================================================
-                 */
-
-                /*
-                 * Static route before resource
-                 * routes.
-                 */
+                /* CUSTOMERS */
                 Route::get(
                     '/customers/options',
                     [
@@ -236,12 +182,7 @@ Route::prefix('v1')
                     'update',
                 ]);
 
-                /*
-                 * =================================================
-                 * CUSTOMER DUES
-                 * =================================================
-                 */
-
+                /* CUSTOMER DUES */
                 Route::get(
                     '/customer-dues',
                     [
@@ -273,10 +214,9 @@ Route::prefix('v1')
                  * SALES RETURNS
                  * =================================================
                  *
-                 * These routes must remain before
-                 * the dynamic /sales/{sale} route.
+                 * Keep these routes before the dynamic
+                 * /sales/{sale} route.
                  */
-
                 Route::get(
                     '/sales/{sale}/return-options',
                     [
@@ -312,11 +252,23 @@ Route::prefix('v1')
                 );
 
                 /*
-                 * =================================================
-                 * SALES
-                 * =================================================
+                 * Restore a returned item that was originally
+                 * marked as "Not Restocked".
+                 *
+                 * The controller prevents duplicate restocking
+                 * and restores the exact original batch.
                  */
+                Route::post(
+                    '/sales-returns/{salesReturn}/items/{saleReturnItem}/restock',
+                    [
+                        SalesReturnController::class,
+                        'restockItem',
+                    ],
+                )->middleware(
+                    'shift.open',
+                );
 
+                /* SALES */
                 Route::get(
                     '/sales',
                     [
@@ -343,15 +295,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * CASHIER SHIFTS
-                 * =================================================
-                 *
-                 * Static routes stay before the
-                 * dynamic {cashierShift} routes.
-                 */
-
+                /* CASHIER SHIFTS */
                 Route::get(
                     '/cashier-shifts/current',
                     [
@@ -409,12 +353,6 @@ Route::prefix('v1')
             Route::middleware(
                 'role:admin',
             )->group(function (): void {
-                /*
-                 * =================================================
-                 * ADMIN DASHBOARD
-                 * =================================================
-                 */
-
                 Route::get(
                     '/dashboard/admin',
                     [
@@ -422,12 +360,6 @@ Route::prefix('v1')
                         'admin',
                     ],
                 );
-
-                /*
-                 * =================================================
-                 * BUSINESS SETTINGS
-                 * =================================================
-                 */
 
                 Route::put(
                     '/business-settings',
@@ -437,12 +369,6 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * REPORTS
-                 * =================================================
-                 */
-
                 Route::get(
                     '/reports/overview',
                     [
@@ -451,21 +377,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * DATABASE BACKUP & RESTORE
-                 * =================================================
-                 *
-                 * All endpoints remain protected
-                 * by:
-                 *
-                 * auth:sanctum
-                 * role:admin
-                 */
-
-                /*
-                 * List backup history.
-                 */
+                /* DATABASE BACKUP & RESTORE */
                 Route::get(
                     '/database-backups',
                     [
@@ -474,9 +386,6 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * Create a new backup.
-                 */
                 Route::post(
                     '/database-backups',
                     [
@@ -485,25 +394,6 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * Upload an external .sql file and
-                 * restore it.
-                 *
-                 * The controller/service will:
-                 *
-                 * 1. Validate uploaded SQL
-                 * 2. Save uploaded SQL locally
-                 * 3. Copy uploaded SQL to R2
-                 * 4. Create safety backup of the
-                 *    CURRENT database
-                 * 5. Copy safety backup to R2
-                 * 6. Restore uploaded SQL
-                 *
-                 * IMPORTANT:
-                 * Keep this static route before
-                 * routes containing
-                 * {databaseBackup}.
-                 */
                 Route::post(
                     '/database-backups/upload-restore',
                     [
@@ -512,9 +402,6 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * Download existing backup.
-                 */
                 Route::get(
                     '/database-backups/{databaseBackup}/download',
                     [
@@ -523,9 +410,6 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * Restore existing backup.
-                 */
                 Route::post(
                     '/database-backups/{databaseBackup}/restore',
                     [
@@ -534,9 +418,6 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * Delete existing backup.
-                 */
                 Route::delete(
                     '/database-backups/{databaseBackup}',
                     [
@@ -545,12 +426,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * BARCODE MANAGEMENT
-                 * =================================================
-                 */
-
+                /* BARCODE MANAGEMENT */
                 Route::get(
                     '/barcodes/products',
                     [
@@ -583,12 +459,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * INVENTORY ALERTS
-                 * =================================================
-                 */
-
+                /* INVENTORY ALERTS */
                 Route::get(
                     '/inventory-alerts',
                     [
@@ -605,15 +476,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * CHEQUES
-                 * =================================================
-                 *
-                 * Static alerts route stays before
-                 * dynamic cheque resource routes.
-                 */
-
+                /* CHEQUES */
                 Route::get(
                     '/cheques/alerts',
                     [
@@ -635,12 +498,7 @@ Route::prefix('v1')
                     ChequeController::class,
                 );
 
-                /*
-                 * =================================================
-                 * SUPPLIER PAYABLES
-                 * =================================================
-                 */
-
+                /* SUPPLIER PAYABLES */
                 Route::get(
                     '/supplier-payables',
                     [
@@ -673,12 +531,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * CUSTOMER ADMIN OPERATIONS
-                 * =================================================
-                 */
-
+                /* CUSTOMER ADMIN OPERATIONS */
                 Route::delete(
                     '/customers/{customer}',
                     [
@@ -686,12 +539,6 @@ Route::prefix('v1')
                         'destroy',
                     ],
                 );
-
-                /*
-                 * =================================================
-                 * ADMIN ACCESS TEST
-                 * =================================================
-                 */
 
                 Route::get(
                     '/admin/access-check',
@@ -703,15 +550,7 @@ Route::prefix('v1')
                     },
                 );
 
-                /*
-                 * =================================================
-                 * STATIC DROPDOWN ROUTES
-                 * =================================================
-                 *
-                 * Keep these before dynamic
-                 * resource routes.
-                 */
-
+                /* STATIC DROPDOWN ROUTES */
                 Route::get(
                     '/categories/options',
                     [
@@ -744,12 +583,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * PURCHASE RECEIVING
-                 * =================================================
-                 */
-
+                /* PURCHASE RECEIVING */
                 Route::post(
                     '/purchases/{purchase}/receive',
                     [
@@ -758,12 +592,7 @@ Route::prefix('v1')
                     ],
                 );
 
-                /*
-                 * =================================================
-                 * CORE ADMIN RESOURCES
-                 * =================================================
-                 */
-
+                /* CORE ADMIN RESOURCES */
                 Route::apiResource(
                     'categories',
                     CategoryController::class,
@@ -794,12 +623,7 @@ Route::prefix('v1')
                     ExpenseController::class,
                 );
 
-                /*
-                 * =================================================
-                 * CASHIER ACCOUNT MANAGEMENT
-                 * =================================================
-                 */
-
+                /* CASHIER ACCOUNT MANAGEMENT */
                 Route::get(
                     '/cashiers',
                     [

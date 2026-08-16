@@ -1,13 +1,17 @@
 import {
     useEffect,
+    useRef,
     useState,
 } from 'react';
 
 import type {
     FormEvent,
+    KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 
-import { createPortal } from 'react-dom';
+import {
+    createPortal,
+} from 'react-dom';
 
 import type {
     Customer,
@@ -65,36 +69,65 @@ const customerFormModalStyles = `
         --cfm-green-700: #15803d;
         --cfm-green-100: #dcfce7;
         --cfm-green-50: #f0fdf4;
+
         --cfm-red: #dc2626;
         --cfm-red-light: #fef2f2;
+
         --cfm-text: #0f172a;
         --cfm-text-secondary: #334155;
         --cfm-muted: #64748b;
+
         --cfm-border: #e2e8f0;
         --cfm-border-strong: #cbd5e1;
+
         --cfm-bg: #f8fafc;
         --cfm-white: #ffffff;
+
         --cfm-radius: 10px;
         --cfm-radius-sm: 6px;
-        --cfm-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+        --cfm-font:
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Roboto,
+            Helvetica,
+            Arial,
+            sans-serif;
 
         position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
+
+        inset: 0 !important;
+
         z-index: 2147483000 !important;
+
         display: flex !important;
+
         width: 100vw !important;
+
         height: 100vh !important;
         height: 100dvh !important;
+
         align-items: center !important;
         justify-content: center !important;
+
         margin: 0 !important;
+
         padding: 24px !important;
-        font-family: var(--cfm-font) !important;
-        background: rgba(15, 23, 42, 0.55) !important;
-        backdrop-filter: blur(2px) !important;
+
+        font-family:
+            var(--cfm-font) !important;
+
+        background:
+            rgba(
+                15,
+                23,
+                42,
+                0.55
+            ) !important;
+
+        backdrop-filter:
+            blur(2px) !important;
     }
 
     #sapo-customer-form-modal *,
@@ -110,9 +143,14 @@ const customerFormModalStyles = `
     #sapo-customer-form-modal select,
     #sapo-customer-form-modal textarea,
     #sapo-customer-form-modal button {
-        font-family: var(--cfm-font) !important;
-        text-transform: none !important;
-        letter-spacing: normal !important;
+        font-family:
+            var(--cfm-font) !important;
+
+        text-transform:
+            none !important;
+
+        letter-spacing:
+            normal !important;
     }
 
     #sapo-customer-form-modal h1,
@@ -123,195 +161,377 @@ const customerFormModalStyles = `
         padding: 0 !important;
     }
 
-    /* ---------- Panel ---------- */
+    /* =====================================================
+       PANEL
+       ===================================================== */
 
     #sapo-customer-form-modal
     .cfm-panel {
         display: flex !important;
+
         width: 100% !important;
         max-width: 720px !important;
+
         height: 100% !important;
         max-height: 88vh !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
-        background: var(--cfm-white) !important;
-        border-radius: var(--cfm-radius) !important;
-        box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28) !important;
+
+        overflow:
+            hidden !important;
+
+        background:
+            var(--cfm-white) !important;
+
+        border-radius:
+            var(--cfm-radius) !important;
+
+        box-shadow:
+            0 24px 48px
+            rgba(
+                15,
+                23,
+                42,
+                0.28
+            ) !important;
     }
 
-    /* ---------- Header ---------- */
+    /* =====================================================
+       HEADER
+       ===================================================== */
 
     #sapo-customer-form-modal
     .cfm-header {
         display: flex !important;
-        flex: 0 0 auto !important;
-        align-items: flex-start !important;
-        justify-content: space-between !important;
+
+        flex:
+            0 0 auto !important;
+
+        align-items:
+            flex-start !important;
+
+        justify-content:
+            space-between !important;
+
         gap: 16px !important;
+
         margin: 0 !important;
-        padding: 18px 22px !important;
-        background: var(--cfm-white) !important;
-        border-bottom: 1px solid var(--cfm-border) !important;
+
+        padding:
+            18px
+            22px !important;
+
+        background:
+            var(--cfm-white) !important;
+
+        border-bottom:
+            1px solid
+            var(--cfm-border) !important;
     }
 
     #sapo-customer-form-modal
     .cfm-header-copy {
         display: flex !important;
+
         min-width: 0 !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 3px !important;
     }
 
     #sapo-customer-form-modal
     .cfm-kicker {
         display: block !important;
-        color: var(--cfm-green-700) !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.06em !important;
-        text-transform: uppercase !important;
+
+        color:
+            var(--cfm-green-700) !important;
+
+        font-size:
+            11px !important;
+
+        font-weight:
+            700 !important;
+
+        letter-spacing:
+            0.06em !important;
+
+        text-transform:
+            uppercase !important;
     }
 
     #sapo-customer-form-modal
     .cfm-header-copy h2 {
-        color: var(--cfm-text) !important;
-        font-size: 18px !important;
-        font-weight: 700 !important;
-        line-height: 1.3 !important;
-        letter-spacing: -0.01em !important;
+        color:
+            var(--cfm-text) !important;
+
+        font-size:
+            18px !important;
+
+        font-weight:
+            700 !important;
+
+        line-height:
+            1.3 !important;
+
+        letter-spacing:
+            -0.01em !important;
     }
 
     #sapo-customer-form-modal
     .cfm-close-button {
         display: grid !important;
+
         width: 32px !important;
         height: 32px !important;
+
         min-width: 32px !important;
+
         flex-shrink: 0 !important;
-        place-items: center !important;
+
+        place-items:
+            center !important;
+
         margin: 0 !important;
         padding: 0 !important;
-        color: var(--cfm-muted) !important;
-        font-size: 20px !important;
-        font-weight: 400 !important;
-        line-height: 1 !important;
-        appearance: none !important;
-        background: var(--cfm-bg) !important;
-        border: 1px solid var(--cfm-border) !important;
-        border-radius: var(--cfm-radius-sm) !important;
-        cursor: pointer !important;
-        transition: background-color 120ms ease, color 120ms ease !important;
+
+        color:
+            var(--cfm-muted) !important;
+
+        font-size:
+            20px !important;
+
+        font-weight:
+            400 !important;
+
+        line-height:
+            1 !important;
+
+        appearance:
+            none !important;
+
+        background:
+            var(--cfm-bg) !important;
+
+        border:
+            1px solid
+            var(--cfm-border) !important;
+
+        border-radius:
+            var(--cfm-radius-sm) !important;
+
+        cursor:
+            pointer !important;
     }
 
     #sapo-customer-form-modal
     .cfm-close-button:hover:not(:disabled) {
-        color: var(--cfm-text) !important;
-        background: #eef2f6 !important;
+        color:
+            var(--cfm-text) !important;
+
+        background:
+            #eef2f6 !important;
     }
 
     #sapo-customer-form-modal
     .cfm-close-button:disabled {
-        opacity: 0.55 !important;
-        cursor: not-allowed !important;
+        opacity:
+            0.55 !important;
+
+        cursor:
+            not-allowed !important;
     }
 
-    /* ---------- Form / scrollable body ---------- */
+    /* =====================================================
+       FORM
+       ===================================================== */
 
     #sapo-customer-form-modal
     .cfm-form {
         display: flex !important;
-        flex: 1 1 auto !important;
-        min-height: 0 !important;
-        flex-direction: column !important;
+
+        flex:
+            1 1 auto !important;
+
+        min-height:
+            0 !important;
+
+        flex-direction:
+            column !important;
+
         margin: 0 !important;
         padding: 0 !important;
     }
 
     #sapo-customer-form-modal
     .cfm-body {
-        flex: 1 1 auto !important;
-        min-height: 0 !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
-        overscroll-behavior-y: contain !important;
-        scrollbar-gutter: stable !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: var(--cfm-border-strong) transparent !important;
+        flex:
+            1 1 auto !important;
+
+        min-height:
+            0 !important;
+
+        overflow-x:
+            hidden !important;
+
+        overflow-y:
+            auto !important;
+
+        overscroll-behavior-y:
+            contain !important;
+
+        scrollbar-gutter:
+            stable !important;
+
+        scrollbar-width:
+            thin !important;
+
+        scrollbar-color:
+            var(--cfm-border-strong)
+            transparent !important;
     }
 
     #sapo-customer-form-modal
     .cfm-body::-webkit-scrollbar {
-        width: 10px !important;
+        width:
+            10px !important;
     }
 
     #sapo-customer-form-modal
     .cfm-body::-webkit-scrollbar-track {
-        background: transparent !important;
+        background:
+            transparent !important;
     }
 
     #sapo-customer-form-modal
     .cfm-body::-webkit-scrollbar-thumb {
-        background: var(--cfm-border-strong) !important;
-        border: 2px solid transparent !important;
-        border-radius: 999px !important;
-        background-clip: content-box !important;
+        background:
+            var(--cfm-border-strong) !important;
+
+        border:
+            2px solid
+            transparent !important;
+
+        border-radius:
+            999px !important;
+
+        background-clip:
+            content-box !important;
     }
 
     #sapo-customer-form-modal
     .cfm-body-inner {
         display: flex !important;
-        flex-direction: column !important;
+
+        flex-direction:
+            column !important;
+
         gap: 16px !important;
-        padding: 20px 22px !important;
+
+        padding:
+            20px
+            22px !important;
     }
 
-    /* ---------- Alert ---------- */
+    /* =====================================================
+       ALERT
+       ===================================================== */
 
     #sapo-customer-form-modal
     .cfm-alert {
         display: flex !important;
-        align-items: center !important;
+
+        align-items:
+            center !important;
+
         gap: 8px !important;
-        padding: 10px 14px !important;
-        color: var(--cfm-red) !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.4 !important;
-        background: var(--cfm-red-light) !important;
-        border: 1px solid #fecaca !important;
-        border-radius: var(--cfm-radius-sm) !important;
+
+        padding:
+            10px
+            14px !important;
+
+        color:
+            var(--cfm-red) !important;
+
+        font-size:
+            13px !important;
+
+        font-weight:
+            600 !important;
+
+        line-height:
+            1.4 !important;
+
+        background:
+            var(--cfm-red-light) !important;
+
+        border:
+            1px solid
+            #fecaca !important;
+
+        border-radius:
+            var(--cfm-radius-sm) !important;
     }
 
-    /* ---------- Field grid ---------- */
+    /* =====================================================
+       FIELD GRID
+       ===================================================== */
 
     #sapo-customer-form-modal
     .cfm-grid {
         display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 14px 16px !important;
+
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+
+        gap:
+            14px
+            16px !important;
     }
 
     #sapo-customer-form-modal
     .cfm-field {
         display: flex !important;
-        min-width: 0 !important;
-        flex-direction: column !important;
+
+        min-width:
+            0 !important;
+
+        flex-direction:
+            column !important;
+
         gap: 6px !important;
     }
 
     #sapo-customer-form-modal
     .cfm-field-wide {
-        grid-column: 1 / -1 !important;
+        grid-column:
+            1 / -1 !important;
     }
 
     #sapo-customer-form-modal
     .cfm-field > span {
-        color: var(--cfm-text-secondary) !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
+        color:
+            var(--cfm-text-secondary) !important;
+
+        font-size:
+            12px !important;
+
+        font-weight:
+            600 !important;
+
+        line-height:
+            1.3 !important;
     }
 
     #sapo-customer-form-modal
@@ -321,48 +541,89 @@ const customerFormModalStyles = `
     #sapo-customer-form-modal
     .cfm-field textarea {
         display: block !important;
+
         width: 100% !important;
+
         margin: 0 !important;
-        padding: 0 12px !important;
-        color: var(--cfm-text) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        line-height: normal !important;
-        outline: none !important;
-        background: var(--cfm-white) !important;
-        border: 1px solid var(--cfm-border-strong) !important;
-        border-radius: var(--cfm-radius-sm) !important;
-        box-shadow: none !important;
-        appearance: auto !important;
+
+        padding:
+            0
+            12px !important;
+
+        color:
+            var(--cfm-text) !important;
+
+        font-size:
+            13px !important;
+
+        font-weight:
+            500 !important;
+
+        line-height:
+            normal !important;
+
+        outline:
+            none !important;
+
+        background:
+            var(--cfm-white) !important;
+
+        border:
+            1px solid
+            var(--cfm-border-strong) !important;
+
+        border-radius:
+            var(--cfm-radius-sm) !important;
+
+        box-shadow:
+            none !important;
+
+        appearance:
+            auto !important;
     }
 
     #sapo-customer-form-modal
     .cfm-field input,
     #sapo-customer-form-modal
     .cfm-field select {
-        height: 38px !important;
-        min-height: 38px !important;
+        height:
+            38px !important;
+
+        min-height:
+            38px !important;
     }
 
     #sapo-customer-form-modal
     .cfm-field select {
-        cursor: pointer !important;
+        cursor:
+            pointer !important;
     }
 
     #sapo-customer-form-modal
     .cfm-field textarea {
-        padding: 9px 12px !important;
-        line-height: 1.5 !important;
-        resize: vertical !important;
-        min-height: 64px !important;
+        min-height:
+            64px !important;
+
+        padding:
+            9px
+            12px !important;
+
+        line-height:
+            1.5 !important;
+
+        resize:
+            vertical !important;
     }
 
     #sapo-customer-form-modal
     .cfm-field input::placeholder,
     #sapo-customer-form-modal
     .cfm-field textarea::placeholder {
-        color: #94a3b8 !important;
-        opacity: 1 !important;
+        color:
+            #94a3b8 !important;
+
+        opacity:
+            1 !important;
     }
 
     #sapo-customer-form-modal
@@ -371,9 +632,14 @@ const customerFormModalStyles = `
     .cfm-field select:disabled,
     #sapo-customer-form-modal
     .cfm-field textarea:disabled {
-        color: var(--cfm-muted) !important;
-        background: var(--cfm-bg) !important;
-        cursor: not-allowed !important;
+        color:
+            var(--cfm-muted) !important;
+
+        background:
+            var(--cfm-bg) !important;
+
+        cursor:
+            not-allowed !important;
     }
 
     #sapo-customer-form-modal
@@ -382,150 +648,407 @@ const customerFormModalStyles = `
     .cfm-field select:focus,
     #sapo-customer-form-modal
     .cfm-field textarea:focus {
-        border-color: var(--cfm-green-700) !important;
-        box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.12) !important;
+        border-color:
+            var(--cfm-green-700) !important;
+
+        box-shadow:
+            0 0 0 3px
+            rgba(
+                21,
+                128,
+                61,
+                0.12
+            ) !important;
     }
 
     #sapo-customer-form-modal
     .cfm-field small {
-        color: var(--cfm-muted) !important;
-        font-size: 11px !important;
-        font-weight: 500 !important;
-        line-height: 1.3 !important;
+        color:
+            var(--cfm-muted) !important;
+
+        font-size:
+            11px !important;
+
+        font-weight:
+            500 !important;
+
+        line-height:
+            1.3 !important;
     }
 
-    /* ---------- Active checkbox row ---------- */
+    /* =====================================================
+       ACTIVE CHECKBOX
+       ===================================================== */
 
     #sapo-customer-form-modal
     .cfm-active-field {
-        grid-column: 1 / -1 !important;
+        grid-column:
+            1 / -1 !important;
+
         display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
+
+        flex-direction:
+            row !important;
+
+        align-items:
+            center !important;
+
         gap: 9px !important;
-        padding: 11px 14px !important;
-        background: var(--cfm-bg) !important;
-        border: 1px solid var(--cfm-border) !important;
-        border-radius: var(--cfm-radius-sm) !important;
-        cursor: pointer !important;
+
+        padding:
+            11px
+            14px !important;
+
+        background:
+            var(--cfm-bg) !important;
+
+        border:
+            1px solid
+            var(--cfm-border) !important;
+
+        border-radius:
+            var(--cfm-radius-sm) !important;
+
+        cursor:
+            pointer !important;
+    }
+
+    #sapo-customer-form-modal
+    .cfm-active-field:focus-within {
+        border-color:
+            var(--cfm-green-700) !important;
+
+        box-shadow:
+            0 0 0 3px
+            rgba(
+                21,
+                128,
+                61,
+                0.12
+            ) !important;
     }
 
     #sapo-customer-form-modal
     .cfm-active-field input[type="checkbox"] {
-        width: 16px !important;
-        height: 16px !important;
-        min-width: 16px !important;
-        margin: 0 !important;
-        accent-color: var(--cfm-green-700) !important;
-        cursor: pointer !important;
+        width:
+            16px !important;
+
+        height:
+            16px !important;
+
+        min-width:
+            16px !important;
+
+        margin:
+            0 !important;
+
+        accent-color:
+            var(--cfm-green-700) !important;
+
+        cursor:
+            pointer !important;
     }
 
     #sapo-customer-form-modal
     .cfm-active-field span {
-        color: var(--cfm-text-secondary) !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
+        color:
+            var(--cfm-text-secondary) !important;
+
+        font-size:
+            13px !important;
+
+        font-weight:
+            500 !important;
     }
 
-    /* ---------- Footer / actions ---------- */
+    /* =====================================================
+       KEYBOARD HELP
+       ===================================================== */
+
+    #sapo-customer-form-modal
+    .cfm-keyboard-help {
+        display: flex !important;
+
+        grid-column:
+            1 / -1 !important;
+
+        align-items:
+            center !important;
+
+        gap:
+            8px !important;
+
+        padding:
+            9px
+            12px !important;
+
+        color:
+            var(--cfm-muted) !important;
+
+        font-size:
+            11px !important;
+
+        font-weight:
+            500 !important;
+
+        background:
+            var(--cfm-green-50) !important;
+
+        border:
+            1px solid
+            var(--cfm-green-100) !important;
+
+        border-radius:
+            var(--cfm-radius-sm) !important;
+    }
+
+    #sapo-customer-form-modal
+    .cfm-keyboard-key {
+        display:
+            inline-flex !important;
+
+        min-height:
+            22px !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
+
+        padding:
+            2px
+            7px !important;
+
+        color:
+            var(--cfm-text-secondary) !important;
+
+        font-size:
+            10px !important;
+
+        font-weight:
+            700 !important;
+
+        background:
+            var(--cfm-white) !important;
+
+        border:
+            1px solid
+            var(--cfm-border-strong) !important;
+
+        border-radius:
+            4px !important;
+
+        box-shadow:
+            0 1px 1px
+            rgba(
+                15,
+                23,
+                42,
+                0.08
+            ) !important;
+    }
+
+    /* =====================================================
+       FOOTER
+       ===================================================== */
 
     #sapo-customer-form-modal
     .cfm-footer {
         display: flex !important;
-        flex: 0 0 auto !important;
-        align-items: center !important;
-        justify-content: flex-end !important;
+
+        flex:
+            0 0 auto !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            flex-end !important;
+
         gap: 10px !important;
-        padding: 14px 22px !important;
-        background: var(--cfm-white) !important;
-        border-top: 1px solid var(--cfm-border) !important;
+
+        padding:
+            14px
+            22px !important;
+
+        background:
+            var(--cfm-white) !important;
+
+        border-top:
+            1px solid
+            var(--cfm-border) !important;
     }
 
     #sapo-customer-form-modal
     .cfm-button {
         display: inline-flex !important;
-        min-height: 38px !important;
-        min-width: 120px !important;
-        align-items: center !important;
-        justify-content: center !important;
+
+        min-height:
+            38px !important;
+
+        min-width:
+            120px !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
+
         gap: 6px !important;
-        padding: 8px 16px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        line-height: 1.2 !important;
-        appearance: none !important;
-        border-radius: var(--cfm-radius-sm) !important;
-        cursor: pointer !important;
-        transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease !important;
+
+        padding:
+            8px
+            16px !important;
+
+        font-size:
+            13px !important;
+
+        font-weight:
+            600 !important;
+
+        line-height:
+            1.2 !important;
+
+        appearance:
+            none !important;
+
+        border-radius:
+            var(--cfm-radius-sm) !important;
+
+        cursor:
+            pointer !important;
     }
 
     #sapo-customer-form-modal
     .cfm-primary-button {
-        color: #ffffff !important;
-        background: var(--cfm-green-700) !important;
-        border: 1px solid var(--cfm-green-700) !important;
+        color:
+            #ffffff !important;
+
+        background:
+            var(--cfm-green-700) !important;
+
+        border:
+            1px solid
+            var(--cfm-green-700) !important;
     }
 
     #sapo-customer-form-modal
-    .cfm-primary-button:hover:not(:disabled) {
-        background: var(--cfm-green-800) !important;
-        border-color: var(--cfm-green-800) !important;
+    .cfm-primary-button:hover:not(:disabled),
+    #sapo-customer-form-modal
+    .cfm-primary-button:focus-visible {
+        background:
+            var(--cfm-green-800) !important;
+
+        border-color:
+            var(--cfm-green-800) !important;
+
+        outline:
+            none !important;
+
+        box-shadow:
+            0 0 0 3px
+            rgba(
+                21,
+                128,
+                61,
+                0.18
+            ) !important;
     }
 
     #sapo-customer-form-modal
     .cfm-secondary-button {
-        color: var(--cfm-text-secondary) !important;
-        background: var(--cfm-white) !important;
-        border: 1px solid var(--cfm-border-strong) !important;
+        color:
+            var(--cfm-text-secondary) !important;
+
+        background:
+            var(--cfm-white) !important;
+
+        border:
+            1px solid
+            var(--cfm-border-strong) !important;
     }
 
     #sapo-customer-form-modal
     .cfm-secondary-button:hover:not(:disabled) {
-        color: var(--cfm-text) !important;
-        background: var(--cfm-bg) !important;
-        border-color: #94a3b8 !important;
+        color:
+            var(--cfm-text) !important;
+
+        background:
+            var(--cfm-bg) !important;
+
+        border-color:
+            #94a3b8 !important;
     }
 
     #sapo-customer-form-modal
     .cfm-button:disabled {
-        opacity: 0.55 !important;
-        cursor: not-allowed !important;
+        opacity:
+            0.55 !important;
+
+        cursor:
+            not-allowed !important;
     }
 
-    /* ---------- Responsive ---------- */
+    /* =====================================================
+       RESPONSIVE
+       ===================================================== */
 
-    @media (max-width: 640px) {
+    @media (
+        max-width: 640px
+    ) {
         #sapo-customer-form-modal {
-            padding: 0 !important;
+            padding:
+                0 !important;
         }
 
         #sapo-customer-form-modal
         .cfm-panel {
-            max-width: 100% !important;
-            max-height: 100% !important;
-            height: 100% !important;
-            border-radius: 0 !important;
+            width:
+                100% !important;
+
+            max-width:
+                100% !important;
+
+            height:
+                100% !important;
+
+            max-height:
+                100% !important;
+
+            border-radius:
+                0 !important;
         }
 
         #sapo-customer-form-modal
         .cfm-grid {
-            grid-template-columns: 1fr !important;
+            grid-template-columns:
+                minmax(
+                    0,
+                    1fr
+                ) !important;
         }
 
         #sapo-customer-form-modal
         .cfm-field-wide {
-            grid-column: 1 !important;
+            grid-column:
+                1 !important;
         }
 
         #sapo-customer-form-modal
         .cfm-footer {
-            flex-direction: column-reverse !important;
-            align-items: stretch !important;
+            flex-direction:
+                column-reverse !important;
+
+            align-items:
+                stretch !important;
         }
 
         #sapo-customer-form-modal
         .cfm-button {
-            width: 100% !important;
+            width:
+                100% !important;
         }
     }
 `;
@@ -541,196 +1064,426 @@ export default function CustomerFormModal({
     const [
         values,
         setValues,
-    ] = useState<CustomerInput>({
-        ...emptyValues,
-    });
+    ] =
+        useState<CustomerInput>({
+            ...emptyValues,
+        });
 
     const [
         localError,
         setLocalError,
-    ] = useState('');
-
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
-        if (customer) {
-            setValues({
-                name:
-                    customer.name,
-
-                mobile:
-                    customer.mobile
-                    ?? '',
-
-                secondary_mobile:
-                    customer
-                        .secondary_mobile
-                    ?? '',
-
-                email:
-                    customer.email
-                    ?? '',
-
-                address:
-                    customer.address
-                    ?? '',
-
-                customer_type:
-                    customer.customer_type,
-
-                credit_limit:
-                    customer.credit_limit,
-
-                notes:
-                    customer.notes
-                    ?? '',
-
-                is_active:
-                    customer.is_active,
-            });
-        } else {
-            setValues({
-                ...emptyValues,
-            });
-        }
-
-        setLocalError('');
-    }, [
-        customer,
-        isOpen,
-    ]);
-
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
-        const handleKeyDown = (
-            event: KeyboardEvent,
-        ): void => {
-            if (
-                event.key === 'Escape'
-                && !isSubmitting
-            ) {
-                onClose();
-            }
-        };
-
-        window.addEventListener(
-            'keydown',
-            handleKeyDown,
+    ] =
+        useState(
+            '',
         );
 
-        const previousOverflow =
-            document.body.style.overflow;
+    const formRef =
+        useRef<HTMLFormElement | null>(
+            null,
+        );
 
-        document.body.style.overflow =
-            'hidden';
+    const submitButtonRef =
+        useRef<HTMLButtonElement | null>(
+            null,
+        );
 
-        return () => {
-            window.removeEventListener(
+    /* =====================================================
+       LOAD CUSTOMER VALUES
+       ===================================================== */
+
+    useEffect(
+        () => {
+            if (!isOpen) {
+                return;
+            }
+
+            if (customer) {
+                setValues({
+                    name:
+                        customer.name,
+
+                    mobile:
+                        customer.mobile
+                        ?? '',
+
+                    secondary_mobile:
+                        customer
+                            .secondary_mobile
+                        ?? '',
+
+                    email:
+                        customer.email
+                        ?? '',
+
+                    address:
+                        customer.address
+                        ?? '',
+
+                    customer_type:
+                        customer
+                            .customer_type,
+
+                    credit_limit:
+                        customer
+                            .credit_limit,
+
+                    notes:
+                        customer.notes
+                        ?? '',
+
+                    is_active:
+                        customer
+                            .is_active,
+                });
+            } else {
+                setValues({
+                    ...emptyValues,
+                });
+            }
+
+            setLocalError(
+                '',
+            );
+        },
+        [
+            customer,
+            isOpen,
+        ],
+    );
+
+    /* =====================================================
+       ESCAPE / BODY SCROLL
+       ===================================================== */
+
+    useEffect(
+        () => {
+            if (!isOpen) {
+                return;
+            }
+
+            const handleKeyDown =
+                (
+                    event:
+                        KeyboardEvent,
+                ): void => {
+                    if (
+                        event.key
+                        === 'Escape'
+                        && !isSubmitting
+                    ) {
+                        onClose();
+                    }
+                };
+
+            window.addEventListener(
                 'keydown',
                 handleKeyDown,
             );
 
-            document.body.style.overflow =
-                previousOverflow;
-        };
-    }, [
-        isOpen,
-        isSubmitting,
-        onClose,
-    ]);
+            const previousOverflow =
+                document.body
+                    .style
+                    .overflow;
+
+            document.body
+                .style
+                .overflow =
+                'hidden';
+
+            return () => {
+                window.removeEventListener(
+                    'keydown',
+                    handleKeyDown,
+                );
+
+                document.body
+                    .style
+                    .overflow =
+                    previousOverflow;
+            };
+        },
+        [
+            isOpen,
+            isSubmitting,
+            onClose,
+        ],
+    );
 
     if (!isOpen) {
         return null;
     }
 
+    /* =====================================================
+       UPDATE VALUE
+       ===================================================== */
+
     const updateValue = <
         Key extends keyof CustomerInput,
     >(
         key: Key,
-        value: CustomerInput[Key],
+        value:
+            CustomerInput[Key],
     ): void => {
         setValues(
-            (current) => ({
+            (
+                current,
+            ) => ({
                 ...current,
-                [key]: value,
+                [key]:
+                    value,
             }),
         );
 
-        setLocalError('');
+        setLocalError(
+            '',
+        );
     };
 
-    const handleSubmit = (
-        event: FormEvent<HTMLFormElement>,
-    ): void => {
-        event.preventDefault();
+    /* =====================================================
+       SUBMIT
+       ===================================================== */
 
-        const customerName =
-            values.name.trim();
+    const handleSubmit =
+        (
+            event:
+                FormEvent<HTMLFormElement>,
+        ): void => {
+            event.preventDefault();
 
-        const creditLimit =
-            Number(
-                values.credit_limit,
+            const customerName =
+                values.name
+                    .trim();
+
+            const creditLimit =
+                Number(
+                    values
+                        .credit_limit,
+                );
+
+            if (!customerName) {
+                setLocalError(
+                    'Customer name is required.',
+                );
+
+                const nameInput =
+                    formRef.current
+                        ?.querySelector<
+                            HTMLInputElement
+                        >(
+                            '[name="customer_name"]',
+                        );
+
+                nameInput
+                    ?.focus();
+
+                return;
+            }
+
+            if (
+                !Number.isFinite(
+                    creditLimit,
+                )
+                || creditLimit
+                < 0
+            ) {
+                setLocalError(
+                    'Enter a valid credit limit.',
+                );
+
+                const creditInput =
+                    formRef.current
+                        ?.querySelector<
+                            HTMLInputElement
+                        >(
+                            '[name="credit_limit"]',
+                        );
+
+                creditInput
+                    ?.focus();
+
+                return;
+            }
+
+            onSubmit({
+                ...values,
+
+                name:
+                    customerName,
+
+                mobile:
+                    values
+                        .mobile
+                        .trim(),
+
+                secondary_mobile:
+                    values
+                        .secondary_mobile
+                        .trim(),
+
+                email:
+                    values
+                        .email
+                        .trim(),
+
+                address:
+                    values
+                        .address
+                        .trim(),
+
+                notes:
+                    values
+                        .notes
+                        .trim(),
+
+                credit_limit:
+                    creditLimit,
+            });
+        };
+
+    /* =====================================================
+       ENTER KEY NAVIGATION
+       ===================================================== */
+
+    const focusNextField =
+        (
+            currentElement:
+                HTMLElement,
+        ): void => {
+            const form =
+                formRef.current;
+
+            if (!form) {
+                return;
+            }
+
+            const fields =
+                Array.from(
+                    form.querySelectorAll<
+                        HTMLElement
+                    >(
+                        '[data-enter-nav="true"]:not([disabled])',
+                    ),
+                );
+
+            const currentIndex =
+                fields.indexOf(
+                    currentElement,
+                );
+
+            if (
+                currentIndex
+                === -1
+            ) {
+                return;
+            }
+
+            const nextField =
+                fields[
+                currentIndex
+                + 1
+                ];
+
+            if (nextField) {
+                nextField
+                    .focus();
+
+                if (
+                    nextField
+                    instanceof HTMLInputElement
+                    && nextField.type
+                    === 'text'
+                ) {
+                    nextField
+                        .select();
+                }
+
+                return;
+            }
+
+            submitButtonRef
+                .current
+                ?.focus();
+        };
+
+    const handleEnterNavigation =
+        (
+            event:
+                ReactKeyboardEvent<
+                    HTMLInputElement
+                    | HTMLSelectElement
+                    | HTMLTextAreaElement
+                >,
+        ): void => {
+            if (
+                event.key
+                !== 'Enter'
+            ) {
+                return;
+            }
+
+            /*
+             * Shift + Enter inside textarea
+             * keeps normal newline behavior.
+             */
+            if (
+                event.currentTarget
+                instanceof HTMLTextAreaElement
+                && event.shiftKey
+            ) {
+                return;
+            }
+
+            event
+                .preventDefault();
+
+            event
+                .stopPropagation();
+
+            focusNextField(
+                event.currentTarget,
+            );
+        };
+
+    const handleCheckboxKeyDown =
+        (
+            event:
+                ReactKeyboardEvent<HTMLInputElement>,
+        ): void => {
+            if (
+                event.key
+                !== 'Enter'
+            ) {
+                return;
+            }
+
+            event
+                .preventDefault();
+
+            event
+                .stopPropagation();
+
+            updateValue(
+                'is_active',
+                !values
+                    .is_active,
             );
 
-        if (!customerName) {
-            setLocalError(
-                'Customer name is required.',
-            );
+            submitButtonRef
+                .current
+                ?.focus();
+        };
 
-            return;
-        }
-
-        if (
-            !Number.isFinite(
-                creditLimit,
-            )
-            || creditLimit < 0
-        ) {
-            setLocalError(
-                'Enter a valid credit limit.',
-            );
-
-            return;
-        }
-
-        onSubmit({
-            ...values,
-
-            name:
-                customerName,
-
-            mobile:
-                values.mobile.trim(),
-
-            secondary_mobile:
-                values
-                    .secondary_mobile
-                    .trim(),
-
-            email:
-                values.email.trim(),
-
-            address:
-                values.address.trim(),
-
-            notes:
-                values.notes.trim(),
-
-            credit_limit:
-                creditLimit,
-        });
-    };
+    /* =====================================================
+       MODAL
+       ===================================================== */
 
     const modalMarkup = (
         <div
             id="sapo-customer-form-modal"
             role="presentation"
-            onMouseDown={(event) => {
+            onMouseDown={(
+                event,
+            ) => {
                 if (
                     !isSubmitting
                     && event.target
@@ -749,10 +1502,15 @@ export default function CustomerFormModal({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="customer-form-title"
-                onMouseDown={(event) => {
-                    event.stopPropagation();
+                onMouseDown={(
+                    event,
+                ) => {
+                    event
+                        .stopPropagation();
                 }}
             >
+                {/* HEADER */}
+
                 <header className="cfm-header">
                     <div className="cfm-header-copy">
                         <span className="cfm-kicker">
@@ -769,17 +1527,28 @@ export default function CustomerFormModal({
                     <button
                         type="button"
                         className="cfm-close-button"
-                        disabled={isSubmitting}
+                        disabled={
+                            isSubmitting
+                        }
                         aria-label="Close customer form"
-                        onClick={onClose}
+                        onClick={
+                            onClose
+                        }
                     >
                         ×
                     </button>
                 </header>
 
+                {/* FORM */}
+
                 <form
+                    ref={
+                        formRef
+                    }
                     className="cfm-form"
-                    onSubmit={handleSubmit}
+                    onSubmit={
+                        handleSubmit
+                    }
                 >
                     <div className="cfm-body">
                         <div className="cfm-body-inner">
@@ -795,18 +1564,35 @@ export default function CustomerFormModal({
                                 )}
 
                             <div className="cfm-grid">
+                                {/* CUSTOMER NAME */}
+
                                 <label className="cfm-field">
                                     <span>
                                         Customer Name *
                                     </span>
 
                                     <input
+                                        name="customer_name"
                                         type="text"
-                                        value={values.name}
-                                        maxLength={160}
+                                        value={
+                                            values
+                                                .name
+                                        }
+                                        maxLength={
+                                            160
+                                        }
                                         autoFocus
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        autoComplete="off"
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onKeyDown={
+                                            handleEnterNavigation
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'name',
                                                 event
@@ -817,15 +1603,32 @@ export default function CustomerFormModal({
                                     />
                                 </label>
 
+                                {/* MOBILE */}
+
                                 <label className="cfm-field">
-                                    <span>Mobile</span>
+                                    <span>
+                                        Mobile
+                                    </span>
 
                                     <input
                                         type="tel"
-                                        value={values.mobile}
-                                        maxLength={30}
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        value={
+                                            values
+                                                .mobile
+                                        }
+                                        maxLength={
+                                            30
+                                        }
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onKeyDown={
+                                            handleEnterNavigation
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'mobile',
                                                 event
@@ -835,6 +1638,8 @@ export default function CustomerFormModal({
                                         }}
                                     />
                                 </label>
+
+                                {/* SECONDARY MOBILE */}
 
                                 <label className="cfm-field">
                                     <span>
@@ -847,9 +1652,19 @@ export default function CustomerFormModal({
                                             values
                                                 .secondary_mobile
                                         }
-                                        maxLength={30}
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        maxLength={
+                                            30
+                                        }
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onKeyDown={
+                                            handleEnterNavigation
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'secondary_mobile',
                                                 event
@@ -860,15 +1675,32 @@ export default function CustomerFormModal({
                                     />
                                 </label>
 
+                                {/* EMAIL */}
+
                                 <label className="cfm-field">
-                                    <span>Email</span>
+                                    <span>
+                                        Email
+                                    </span>
 
                                     <input
                                         type="email"
-                                        value={values.email}
-                                        maxLength={160}
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        value={
+                                            values
+                                                .email
+                                        }
+                                        maxLength={
+                                            160
+                                        }
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onKeyDown={
+                                            handleEnterNavigation
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'email',
                                                 event
@@ -878,6 +1710,8 @@ export default function CustomerFormModal({
                                         }}
                                     />
                                 </label>
+
+                                {/* CUSTOMER TYPE */}
 
                                 <label className="cfm-field">
                                     <span>
@@ -889,8 +1723,16 @@ export default function CustomerFormModal({
                                             values
                                                 .customer_type
                                         }
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onKeyDown={
+                                            handleEnterNavigation
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'customer_type',
 
@@ -912,12 +1754,15 @@ export default function CustomerFormModal({
                                     </select>
                                 </label>
 
+                                {/* CREDIT LIMIT */}
+
                                 <label className="cfm-field">
                                     <span>
                                         Credit Limit
                                     </span>
 
                                     <input
+                                        name="credit_limit"
                                         type="number"
                                         min="0"
                                         step="0.01"
@@ -925,8 +1770,23 @@ export default function CustomerFormModal({
                                             values
                                                 .credit_limit
                                         }
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onFocus={(
+                                            event,
+                                        ) => {
+                                            event
+                                                .currentTarget
+                                                .select();
+                                        }}
+                                        onKeyDown={
+                                            handleEnterNavigation
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'credit_limit',
 
@@ -945,15 +1805,34 @@ export default function CustomerFormModal({
                                     </small>
                                 </label>
 
+                                {/* ADDRESS */}
+
                                 <label className="cfm-field cfm-field-wide">
-                                    <span>Address</span>
+                                    <span>
+                                        Address
+                                    </span>
 
                                     <textarea
-                                        rows={2}
-                                        maxLength={1500}
-                                        value={values.address}
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        rows={
+                                            2
+                                        }
+                                        maxLength={
+                                            1500
+                                        }
+                                        value={
+                                            values
+                                                .address
+                                        }
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onKeyDown={
+                                            handleEnterNavigation
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'address',
                                                 event
@@ -964,15 +1843,34 @@ export default function CustomerFormModal({
                                     />
                                 </label>
 
+                                {/* NOTES */}
+
                                 <label className="cfm-field cfm-field-wide">
-                                    <span>Notes</span>
+                                    <span>
+                                        Notes
+                                    </span>
 
                                     <textarea
-                                        rows={2}
-                                        maxLength={1500}
-                                        value={values.notes}
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        rows={
+                                            2
+                                        }
+                                        maxLength={
+                                            1500
+                                        }
+                                        value={
+                                            values
+                                                .notes
+                                        }
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onKeyDown={
+                                            handleEnterNavigation
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'notes',
                                                 event
@@ -983,14 +1881,25 @@ export default function CustomerFormModal({
                                     />
                                 </label>
 
+                                {/* ACTIVE */}
+
                                 <label className="cfm-active-field">
                                     <input
                                         type="checkbox"
                                         checked={
-                                            values.is_active
+                                            values
+                                                .is_active
                                         }
-                                        disabled={isSubmitting}
-                                        onChange={(event) => {
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        data-enter-nav="true"
+                                        onKeyDown={
+                                            handleCheckboxKeyDown
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) => {
                                             updateValue(
                                                 'is_active',
                                                 event
@@ -1004,24 +1913,59 @@ export default function CustomerFormModal({
                                         Customer account is active
                                     </span>
                                 </label>
+
+                                {/* KEYBOARD INFO */}
+
+                                {/* <div className="cfm-keyboard-help">
+                                    <span className="cfm-keyboard-key">
+                                        Enter
+                                    </span>
+
+                                    <span>
+                                        Next field
+                                    </span>
+
+                                    <span>
+                                        ·
+                                    </span>
+
+                                    <span className="cfm-keyboard-key">
+                                        Shift + Enter
+                                    </span>
+
+                                    <span>
+                                        New line in Address / Notes
+                                    </span>
+                                </div> */}
                             </div>
                         </div>
                     </div>
+
+                    {/* FOOTER */}
 
                     <footer className="cfm-footer">
                         <button
                             type="button"
                             className="cfm-button cfm-secondary-button"
-                            disabled={isSubmitting}
-                            onClick={onClose}
+                            disabled={
+                                isSubmitting
+                            }
+                            onClick={
+                                onClose
+                            }
                         >
                             Cancel
                         </button>
 
                         <button
+                            ref={
+                                submitButtonRef
+                            }
                             type="submit"
                             className="cfm-button cfm-primary-button"
-                            disabled={isSubmitting}
+                            disabled={
+                                isSubmitting
+                            }
                         >
                             {isSubmitting
                                 ? 'Saving...'

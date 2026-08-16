@@ -8,6 +8,17 @@ interface SalesReturnDetailsModalProps {
 
     isLoading: boolean;
     errorMessage: string;
+
+    restockError: string;
+    restockSuccess: string;
+
+    restockingItemId:
+    number | null;
+
+    onRestockItem: (
+        itemId: number,
+    ) => void;
+
     onClose: () => void;
 }
 
@@ -382,6 +393,65 @@ const returnDetailsModalStyles = `
         color: #b91c1c !important;
     }
 
+    /* ---------- Delayed restock action ---------- */
+    #sapo-return-details-modal .rdm-stock-result {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 6px !important;
+    }
+
+    #sapo-return-details-modal .rdm-restock-button {
+        min-height: 30px !important;
+        padding: 5px 10px !important;
+        font-size: 11.5px !important;
+        font-weight: 700 !important;
+        color: #ffffff !important;
+        background: var(--rdm-green-700) !important;
+        border: 1px solid var(--rdm-green-700) !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        transition: background 0.15s ease, opacity 0.15s ease !important;
+    }
+
+    #sapo-return-details-modal
+    .rdm-restock-button:hover:not(:disabled) {
+        background: var(--rdm-green-800) !important;
+    }
+
+    #sapo-return-details-modal
+    .rdm-restock-button:focus-visible {
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18) !important;
+    }
+
+    #sapo-return-details-modal
+    .rdm-restock-button:disabled {
+        opacity: 0.55 !important;
+        cursor: not-allowed !important;
+    }
+
+    #sapo-return-details-modal .rdm-restock-success {
+        padding: 10px 12px !important;
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        color: var(--rdm-green-800) !important;
+        background: #f0fdf4 !important;
+        border: 1px solid #bbf7d0 !important;
+        border-radius: 7px !important;
+    }
+
+    #sapo-return-details-modal .rdm-restock-error {
+        padding: 10px 12px !important;
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        color: #b91c1c !important;
+        background: var(--rdm-red-light) !important;
+        border: 1px solid #fecaca !important;
+        border-radius: 7px !important;
+    }
+
     /* ---------- Profit summary ---------- */
     #sapo-return-details-modal .rdm-profit-summary {
         display: grid !important;
@@ -467,6 +537,10 @@ export default function SalesReturnDetailsModal({
     details,
     isLoading,
     errorMessage,
+    restockError,
+    restockSuccess,
+    restockingItemId,
+    onRestockItem,
     onClose,
 }: SalesReturnDetailsModalProps) {
     if (
@@ -591,6 +665,24 @@ export default function SalesReturnDetailsModal({
                             )}
                         </section>
 
+                        {restockSuccess && (
+                            <div
+                                className="rdm-restock-success"
+                                role="status"
+                            >
+                                {restockSuccess}
+                            </div>
+                        )}
+
+                        {restockError && (
+                            <div
+                                className="rdm-restock-error"
+                                role="alert"
+                            >
+                                {restockError}
+                            </div>
+                        )}
+
                         <div className="rdm-table-container">
                             <table className="rdm-table">
                                 <thead>
@@ -635,6 +727,8 @@ export default function SalesReturnDetailsModal({
                                                     {item.quantity}{' '}
                                                     {
                                                         item
+                                                            .return_unit
+                                                        || item
                                                             .product
                                                             .unit
                                                     }
@@ -659,17 +753,40 @@ export default function SalesReturnDetailsModal({
                                                 </td>
 
                                                 <td>
-                                                    <span
-                                                        className={
-                                                            item.restocked
-                                                                ? 'rdm-restocked-badge'
-                                                                : 'rdm-not-restocked-badge'
-                                                        }
-                                                    >
-                                                        {item.restocked
-                                                            ? 'Restored'
-                                                            : 'Not Restocked'}
-                                                    </span>
+                                                    <div className="rdm-stock-result">
+                                                        <span
+                                                            className={
+                                                                item.restocked
+                                                                    ? 'rdm-restocked-badge'
+                                                                    : 'rdm-not-restocked-badge'
+                                                            }
+                                                        >
+                                                            {item.restocked
+                                                                ? 'Restored'
+                                                                : 'Not Restocked'}
+                                                        </span>
+
+                                                        {!item.restocked && (
+                                                            <button
+                                                                type="button"
+                                                                className="rdm-restock-button"
+                                                                disabled={
+                                                                    restockingItemId
+                                                                    !== null
+                                                                }
+                                                                onClick={() => {
+                                                                    onRestockItem(
+                                                                        item.id,
+                                                                    );
+                                                                }}
+                                                            >
+                                                                {restockingItemId
+                                                                    === item.id
+                                                                    ? 'Restocking...'
+                                                                    : 'Restock Now'}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
 
                                                 {hasProfit && (

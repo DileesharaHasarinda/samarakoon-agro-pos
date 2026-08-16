@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\PosStockUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SalesReturn\StoreSalesReturnRequest;
 use App\Models\Sale;
@@ -17,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -1273,6 +1275,426 @@ class SalesReturnController extends Controller
                 $user->isAdmin(),
             ),
         ], 201);
+    }
+
+    public function restockItem(
+        Request $request,
+        SaleReturn $salesReturn,
+        SaleReturnItem $saleReturnItem,
+    ): JsonResponse {
+        $user = $request->user();
+
+        if (!$user instanceof User) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        $salesReturn->loadMissing(
+            'sale',
+        );
+
+        if (!$salesReturn->sale) {
+            throw ValidationException::withMessages([
+                'return' => [
+                    'The original sale for this return could not be found.',
+                ],
+            ]);
+        }
+
+        $this->ensureSaleAccess(
+            $user,
+            $salesReturn->sale,
+        );
+
+        $result =
+            DB::transaction(
+                function () use (
+                    $salesReturn,
+                    $saleReturnItem,
+                    $user,
+                ): array {
+                    $lockedReturn =
+                        SaleReturn::query()
+                        ->whereKey(
+                            $salesReturn->id,
+                        )
+                        ->lockForUpdate()
+                        ->firstOrFail();
+
+                    $lockedReturn->loadMissing(
+                        'sale',
+                    );
+
+                    $lockedItem =
+                        SaleReturnItem::query()
+                        ->whereKey(
+                            $saleReturnItem->id,
+                        )
+                        ->where(
+                            'sale_return_id',
+                            $lockedReturn->id,
+                        )
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$lockedItem) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The selected returned item does not belong to this sales return.',
+                            ],
+                        ]);
+                    }
+
+                    /*
+                     * Idempotency protection:
+                     * never restore the same returned
+                     * item to stock more than once.
+                     */
+                    if ((bool) $lockedItem->restocked) {
+                        return [
+                            'already_restocked' => true,
+                            'stock_update' => null,
+
+                            'sale_id' =>
+                            (int) $lockedReturn
+                                ->sale_id,
+
+                            'sale_number' =>
+                            (string) (
+                                $lockedReturn
+                                ->sale
+                                ?->sale_number
+                                ?? ''
+                            ),
+                        ];
+                    }
+
+                    $saleItem =
+                        SaleItem::query()
+                        ->whereKey(
+                            $lockedItem
+                                ->sale_item_id,
+                        )
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$saleItem) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The original sale item could not be found. Stock was not changed.',
+                            ],
+                        ]);
+                    }
+
+                    if (
+                        (int) $saleItem->sale_id
+                        !==
+                        (int) $lockedReturn->sale_id
+                    ) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The returned item does not belong to the original sale.',
+                            ],
+                        ]);
+                    }
+
+                    if (
+                        (int) $saleItem->product_id
+                        !==
+                        (int) $lockedItem->product_id
+                    ) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The returned product does not match the original sale item.',
+                            ],
+                        ]);
+                    }
+
+                    if (
+                        (int) $saleItem->stock_batch_id
+                        !==
+                        (int) $lockedItem->stock_batch_id
+                    ) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The returned item does not match the original stock batch.',
+                            ],
+                        ]);
+                    }
+
+                    $returnQuantity =
+                        round(
+                            (float) $lockedItem
+                                ->quantity,
+                            3,
+                        );
+
+                    if ($returnQuantity <= 0) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The returned quantity is invalid. Stock was not changed.',
+                            ],
+                        ]);
+                    }
+
+                    /*
+                     * Prefer the stock quantity saved
+                     * when the return was created.
+                     *
+                     * This preserves the exact original
+                     * Bag/Kg, Pack/Piece, Bottle/etc.
+                     * conversion used by the sale.
+                     *
+                     * The fallback supports older rows.
+                     */
+                    $stockReturnQuantity =
+                        round(
+                            (float) (
+                                $lockedItem
+                                ->stock_quantity
+                                ?? 0
+                            ),
+                            3,
+                        );
+
+                    if ($stockReturnQuantity <= 0) {
+                        $stockReturnQuantity =
+                            round(
+                                $saleItem
+                                    ->stockQuantityFor(
+                                        $returnQuantity,
+                                    ),
+                                3,
+                            );
+                    }
+
+                    if ($stockReturnQuantity <= 0) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The calculated stock quantity is invalid. Stock was not changed.',
+                            ],
+                        ]);
+                    }
+
+                    $batch =
+                        StockBatch::query()
+                        ->whereKey(
+                            $lockedItem
+                                ->stock_batch_id,
+                        )
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$batch) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The original stock batch could not be found. Stock was not changed.',
+                            ],
+                        ]);
+                    }
+
+                    if (
+                        (int) $batch->product_id
+                        !==
+                        (int) $lockedItem->product_id
+                    ) {
+                        throw ValidationException::withMessages([
+                            'item' => [
+                                'The original stock batch does not belong to the returned product.',
+                            ],
+                        ]);
+                    }
+
+                    $quantityBefore =
+                        round(
+                            (float) $batch
+                                ->available_quantity,
+                            3,
+                        );
+
+                    $quantityAfter =
+                        round(
+                            $quantityBefore
+                                + $stockReturnQuantity,
+                            3,
+                        );
+
+                    $batch->update([
+                        'available_quantity' =>
+                        $quantityAfter,
+                    ]);
+
+                    /*
+                     * Mark the return item as restored
+                     * in the same transaction as the
+                     * stock update.
+                     */
+                    $lockedItem->update([
+                        'restocked' => true,
+                    ]);
+
+                    /*
+                     * This field currently stores the
+                     * physical stock quantity restored,
+                     * matching store().
+                     */
+                    $lockedReturn->update([
+                        'restocked_quantity' =>
+                        round(
+                            (float) $lockedReturn
+                                ->restocked_quantity
+                                + $stockReturnQuantity,
+                            3,
+                        ),
+                    ]);
+
+                    StockMovement::query()
+                        ->create([
+                            'product_id' =>
+                            $lockedItem
+                                ->product_id,
+
+                            'stock_batch_id' =>
+                            $batch->id,
+
+                            'movement_type' =>
+                            StockMovement::TYPE_SALE_RETURN,
+
+                            'quantity_before' =>
+                            $quantityBefore,
+
+                            'quantity_change' =>
+                            $stockReturnQuantity,
+
+                            'quantity_after' =>
+                            $quantityAfter,
+
+                            'reference_type' =>
+                            'sale_return',
+
+                            'reference_id' =>
+                            $lockedReturn->id,
+
+                            'reference_number' =>
+                            $lockedReturn
+                                ->return_number,
+
+                            'notes' =>
+                            sprintf(
+                                'Delayed restock: returned %s %s. Restored %s %s to the original stock batch.',
+                                $this->formatQuantity(
+                                    $returnQuantity,
+                                ),
+                                $lockedItem
+                                    ->return_unit
+                                    ?: $saleItem
+                                    ->saleUnitValue(),
+                                $this->formatQuantity(
+                                    $stockReturnQuantity,
+                                ),
+                                $batch
+                                    ->stockUnitValue(),
+                            ),
+
+                            'created_by' =>
+                            $user->id,
+                        ]);
+
+                    return [
+                        'already_restocked' => false,
+
+                        'sale_id' =>
+                        (int) $lockedReturn
+                            ->sale_id,
+
+                        'sale_number' =>
+                        (string) (
+                            $lockedReturn
+                            ->sale
+                            ?->sale_number
+                            ?? ''
+                        ),
+
+                        'stock_update' => [
+                            'stock_batch_id' =>
+                            (int) $batch->id,
+
+                            'product_id' =>
+                            (int) $batch
+                                ->product_id,
+
+                            'available_quantity' =>
+                            $quantityAfter,
+
+                            'stock_unit' =>
+                            $batch
+                                ->stockUnitValue(),
+                        ],
+                    ];
+                },
+                3,
+            );
+
+        /*
+         * The database transaction has already
+         * committed. A realtime broadcast failure
+         * must not undo the inventory change.
+         */
+        if (
+            !$result['already_restocked']
+            && $result['stock_update'] !== null
+        ) {
+            try {
+                PosStockUpdated::dispatch(
+                    saleId: $result['sale_id'],
+
+                    saleNumber: $result['sale_number'],
+
+                    sourceUserId: $user->id,
+
+                    batches: [
+                        $result['stock_update'],
+                    ],
+                );
+            } catch (\Throwable $exception) {
+                Log::warning(
+                    'Unable to broadcast delayed sales-return restock.',
+                    [
+                        'sales_return_id' =>
+                        $salesReturn->id,
+
+                        'sale_return_item_id' =>
+                        $saleReturnItem->id,
+
+                        'message' =>
+                        $exception
+                            ->getMessage(),
+                    ],
+                );
+            }
+        }
+
+        $freshReturn =
+            SaleReturn::query()
+            ->findOrFail(
+                $salesReturn->id,
+            );
+
+        return response()->json([
+            'message' =>
+            $result['already_restocked']
+                ? 'This returned item has already been restored to stock.'
+                : 'Returned item restored to its original stock batch successfully.',
+
+            'data' =>
+            $this->returnData(
+                $this->loadReturn(
+                    $freshReturn,
+                ),
+                $user->isAdmin(),
+            ),
+        ]);
     }
 
     public function show(

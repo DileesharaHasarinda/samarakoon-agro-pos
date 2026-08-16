@@ -275,6 +275,39 @@ class PosController extends Controller
                     $product,
                 ),
             )
+            ->filter(
+                fn(
+                    array $product,
+                ): bool =>
+                (float) (
+                    $product['total_available_quantity']
+                    ?? 0
+                ) > 0
+                    && collect(
+                        $product['batches']
+                            ?? [],
+                    )->contains(
+                        fn(
+                            array $batch,
+                        ): bool =>
+                        (float) (
+                            $batch['available_quantity']
+                            ?? 0
+                        ) > 0
+                            && collect(
+                                $batch['sale_options']
+                                    ?? [],
+                            )->contains(
+                                fn(
+                                    array $option,
+                                ): bool =>
+                                (float) (
+                                    $option['available_quantity']
+                                    ?? 0
+                                ) > 0,
+                            ),
+                    ),
+            )
             ->values();
 
         return response()->json([
@@ -353,11 +386,51 @@ class PosController extends Controller
             },
         ]);
 
-        return response()->json([
-            'data' =>
+        $data =
             $this->productData(
                 $product,
-            ),
+            );
+
+        $hasSellableStock =
+            (float) (
+                $data['total_available_quantity']
+                ?? 0
+            ) > 0
+            && collect(
+                $data['batches']
+                    ?? [],
+            )->contains(
+                fn(
+                    array $batch,
+                ): bool =>
+                (float) (
+                    $batch['available_quantity']
+                    ?? 0
+                ) > 0
+                    && collect(
+                        $batch['sale_options']
+                            ?? [],
+                    )->contains(
+                        fn(
+                            array $option,
+                        ): bool =>
+                        (float) (
+                            $option['available_quantity']
+                            ?? 0
+                        ) > 0,
+                    ),
+            );
+
+        if (! $hasSellableStock) {
+            return response()->json([
+                'message' =>
+                'This product has no available stock for sale.',
+            ], 404);
+        }
+
+        return response()->json([
+            'data' =>
+            $data,
         ]);
     }
 
@@ -547,6 +620,23 @@ class PosController extends Controller
                     $batches,
                 ),
             )
+            ->filter(
+                fn(
+                    array $variant,
+                ): bool =>
+                (bool) (
+                    $variant['has_stock']
+                    ?? false
+                )
+                    && (float) (
+                        $variant['total_available_quantity']
+                        ?? 0
+                    ) > 0
+                    && (int) (
+                        $variant['batches_count']
+                        ?? 0
+                    ) > 0,
+            )
             ->values();
 
         return [
@@ -581,7 +671,8 @@ class PosController extends Controller
              * NEW
              */
             'has_variants' =>
-            $hasVariants,
+            $variantData
+                ->isNotEmpty(),
 
             /*
              * NEW
@@ -994,54 +1085,59 @@ class PosController extends Controller
 
         $saleOptions = [];
 
-        $saleOptions[] = [
-            'key' =>
-            'primary',
+        if (
+            ! $isDualUnit
+            || $availablePrimaryQuantity > 0
+        ) {
+            $saleOptions[] = [
+                'key' =>
+                'primary',
 
-            'label' =>
-            $isDualUnit
-                ? "Full {$primaryUnit}"
-                : $primaryUnit,
+                'label' =>
+                $isDualUnit
+                    ? "Full {$primaryUnit}"
+                    : $primaryUnit,
 
-            'unit' =>
-            $primaryUnit,
+                'unit' =>
+                $primaryUnit,
 
-            /*
-             * Correct selected variant batch price.
-             */
-            'selling_price' =>
-            $primarySellingPrice,
+                /*
+                 * Correct selected variant batch price.
+                 */
+                'selling_price' =>
+                $primarySellingPrice,
 
-            'purchase_cost' =>
-            $purchaseCost,
+                'purchase_cost' =>
+                $purchaseCost,
 
-            'conversion_factor' =>
-            $isDualUnit
-                ? $conversionFactor
-                : 1,
+                'conversion_factor' =>
+                $isDualUnit
+                    ? $conversionFactor
+                    : 1,
 
-            'stock_quantity_per_unit' =>
-            $isDualUnit
-                ? $conversionFactor
-                : 1,
+                'stock_quantity_per_unit' =>
+                $isDualUnit
+                    ? $conversionFactor
+                    : 1,
 
-            'available_quantity' =>
-            $availablePrimaryQuantity,
+                'available_quantity' =>
+                $availablePrimaryQuantity,
 
-            'available_stock_quantity' =>
-            $availableStockQuantity,
+                'available_stock_quantity' =>
+                $availableStockQuantity,
 
-            'stock_unit' =>
-            $stockUnit,
+                'stock_unit' =>
+                $stockUnit,
 
-            'quantity_step' =>
-            $isDualUnit
-                ? 1
-                : 0.001,
+                'quantity_step' =>
+                $isDualUnit
+                    ? 1
+                    : 0.001,
 
-            'allow_decimal_quantity' =>
-            ! $isDualUnit,
-        ];
+                'allow_decimal_quantity' =>
+                ! $isDualUnit,
+            ];
+        }
 
         /*
          * Existing Bag + Kg support.
@@ -1050,6 +1146,7 @@ class PosController extends Controller
             $isDualUnit
             && $secondarySellingPrice
             !== null
+            && $availableStockQuantity > 0
         ) {
             $saleOptions[] = [
                 'key' =>

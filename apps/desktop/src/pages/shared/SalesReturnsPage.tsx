@@ -18,6 +18,7 @@ import {
 import {
     getSalesReturnDetails,
     getSalesReturns,
+    restockSalesReturnItem,
 } from '../../services/salesReturnService';
 
 import type {
@@ -25,6 +26,9 @@ import type {
     SalesReturnHistoryItem,
     SalesReturnSummary,
 } from '../../types/salesReturn';
+
+const BUSINESS_TIME_ZONE =
+    'Asia/Colombo';
 
 const currencyFormatter =
     new Intl.NumberFormat(
@@ -71,6 +75,8 @@ function formatDateTime(
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
+            timeZone:
+                BUSINESS_TIME_ZONE,
         },
     ).format(new Date(value));
 }
@@ -225,6 +231,12 @@ const returnsPageStyles = `
         background: var(--srp-red-light) !important;
         border: 1px solid #fecaca !important;
         color: #b91c1c !important;
+    }
+
+    #sapo-returns-page .srp-alert-success {
+        background: var(--srp-green-50) !important;
+        border: 1px solid #bbf7d0 !important;
+        color: var(--srp-green-800) !important;
     }
 
     /* ---------- Content card ---------- */
@@ -584,6 +596,23 @@ export default function SalesReturnsPage() {
         setDetailsError,
     ] = useState('');
 
+    const [
+        restockingItemId,
+        setRestockingItemId,
+    ] = useState<number | null>(
+        null,
+    );
+
+    const [
+        restockError,
+        setRestockError,
+    ] = useState('');
+
+    const [
+        restockSuccess,
+        setRestockSuccess,
+    ] = useState('');
+
     const isAdmin =
         user?.role === 'admin';
 
@@ -676,6 +705,9 @@ export default function SalesReturnsPage() {
 
             setSelectedDetails(null);
             setDetailsError('');
+            setRestockError('');
+            setRestockSuccess('');
+            setRestockingItemId(null);
             setIsLoadingDetails(true);
 
             try {
@@ -696,6 +728,109 @@ export default function SalesReturnsPage() {
                 );
             } finally {
                 setIsLoadingDetails(false);
+            }
+        };
+
+    const restockReturnedItem =
+        async (
+            itemId: number,
+        ): Promise<void> => {
+            if (
+                !token
+                || !selectedDetails
+                || restockingItemId
+                !== null
+            ) {
+                return;
+            }
+
+            const item =
+                selectedDetails
+                    .items
+                    .find(
+                        (
+                            returnItem,
+                        ) =>
+                            returnItem.id
+                            === itemId,
+                    );
+
+            if (!item) {
+                setRestockError(
+                    'The selected returned item could not be found.',
+                );
+
+                return;
+            }
+
+            if (item.restocked) {
+                setRestockError(
+                    'This returned item is already restored to stock.',
+                );
+
+                return;
+            }
+
+            const batchNumber =
+                item.batch
+                    .batch_number
+                || item.batch
+                    .batch_code;
+
+            const returnUnit =
+                item.return_unit
+                || item.product
+                    .unit;
+
+            const confirmed =
+                window.confirm(
+                    `Restore ${item.quantity} ${returnUnit} of ${item.product.name} to batch ${batchNumber}?`,
+                );
+
+            if (!confirmed) {
+                return;
+            }
+
+            setRestockingItemId(
+                itemId,
+            );
+
+            setRestockError('');
+            setRestockSuccess('');
+
+            try {
+                const response =
+                    await restockSalesReturnItem(
+                        token,
+                        selectedDetails.id,
+                        itemId,
+                    );
+
+                setSelectedDetails(
+                    response.data,
+                );
+
+                setRestockSuccess(
+                    response.message
+                    ?? 'Returned item restored to stock successfully.',
+                );
+
+                /*
+                 * Refresh the history summary so the
+                 * Restocked Quantity card and row value
+                 * update immediately.
+                 */
+                await loadReturns();
+            } catch (error) {
+                setRestockError(
+                    error instanceof ApiError
+                        ? error.message
+                        : 'Unable to restore this returned item to stock.',
+                );
+            } finally {
+                setRestockingItemId(
+                    null,
+                );
             }
         };
 
@@ -1054,9 +1189,20 @@ export default function SalesReturnsPage() {
                 details={selectedDetails}
                 isLoading={isLoadingDetails}
                 errorMessage={detailsError}
+                restockError={restockError}
+                restockSuccess={restockSuccess}
+                restockingItemId={restockingItemId}
+                onRestockItem={(itemId) => {
+                    void restockReturnedItem(
+                        itemId,
+                    );
+                }}
                 onClose={() => {
                     setSelectedDetails(null);
                     setDetailsError('');
+                    setRestockError('');
+                    setRestockSuccess('');
+                    setRestockingItemId(null);
                     setIsLoadingDetails(false);
                 }}
             />

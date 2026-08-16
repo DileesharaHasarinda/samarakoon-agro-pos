@@ -7,6 +7,7 @@ import type {
   SalesReturnHistoryResponse,
   SalesReturnOptionsResponse,
   SalesReturnResponse,
+  SalesReturnRestockResponse,
 } from "../types/salesReturn";
 
 function createHistoryQuery(parameters: SalesReturnHistoryParameters): string {
@@ -43,6 +44,7 @@ export async function getSalesReturnOptions(
     `/sales/${saleId}/return-options`,
     {
       method: "GET",
+
       token,
     }
   );
@@ -55,6 +57,7 @@ export async function createSalesReturn(
 ): Promise<SalesReturnResponse> {
   return apiRequest<SalesReturnResponse>(`/sales/${saleId}/returns`, {
     method: "POST",
+
     token,
 
     body: JSON.stringify({
@@ -83,6 +86,7 @@ export async function getSalesReturns(
     `/sales-returns?${createHistoryQuery(parameters)}`,
     {
       method: "GET",
+
       token,
     }
   );
@@ -94,6 +98,22 @@ export async function getSalesReturnDetails(
 ): Promise<SalesReturnDetailsResponse> {
   return apiRequest<SalesReturnDetailsResponse>(`/sales-returns/${returnId}`, {
     method: "GET",
+
     token,
   });
+}
+
+export async function restockSalesReturnItem(
+  token: string,
+  salesReturnId: number,
+  salesReturnItemId: number
+): Promise<SalesReturnRestockResponse> {
+  return apiRequest<SalesReturnRestockResponse>(
+    `/sales-returns/${salesReturnId}/items/${salesReturnItemId}/restock`,
+    {
+      method: "POST",
+
+      token,
+    }
+  );
 }
