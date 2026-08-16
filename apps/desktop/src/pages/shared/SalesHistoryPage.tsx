@@ -72,6 +72,9 @@ const emptySummary:
     net_profit: null,
 };
 
+const BUSINESS_TIME_ZONE =
+    'Asia/Colombo';
+
 function formatDateTime(
     value: string,
 ): string {
@@ -96,6 +99,8 @@ function formatDateTime(
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
+            timeZone:
+                BUSINESS_TIME_ZONE,
         },
     ).format(
         date,

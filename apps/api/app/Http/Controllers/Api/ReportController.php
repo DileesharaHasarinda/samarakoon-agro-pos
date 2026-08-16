@@ -19,6 +19,9 @@ use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
 {
+    private const BUSINESS_TIME_ZONE =
+    'Asia/Colombo';
+
     public function overview(
         Request $request,
     ): JsonResponse {
@@ -67,15 +70,22 @@ class ReportController extends Controller
             ],
         ]);
 
+        $businessNow =
+            Carbon::now(
+                self::BUSINESS_TIME_ZONE,
+            );
+
         $dateFrom =
             $validated['date_from']
-            ?? now()
+            ?? $businessNow
+            ->copy()
             ->startOfMonth()
             ->toDateString();
 
         $dateTo =
             $validated['date_to']
-            ?? now()->toDateString();
+            ?? $businessNow
+            ->toDateString();
 
         $paymentMethod =
             $validated['payment_method']
@@ -85,24 +95,52 @@ class ReportController extends Controller
             $validated['payment_status']
             ?? null;
 
-        $start =
-            Carbon::parse(
+        /*
+         * Report dates are business-calendar dates in Sri Lanka.
+         *
+         * sale_date and application timestamps are stored/handled as UTC,
+         * so convert the inclusive Sri Lanka date range to an equivalent
+         * UTC half-open interval: [start, next-day-start).
+         */
+        $businessStart =
+            Carbon::createFromFormat(
+                'Y-m-d',
                 $dateFrom,
-            )->startOfDay();
+                self::BUSINESS_TIME_ZONE,
+            )
+            ->startOfDay();
 
-        $end =
-            Carbon::parse(
+        $businessEndDate =
+            Carbon::createFromFormat(
+                'Y-m-d',
                 $dateTo,
-            )->endOfDay();
+                self::BUSINESS_TIME_ZONE,
+            )
+            ->startOfDay();
+
+        $startUtc =
+            $businessStart
+            ->copy()
+            ->utc();
+
+        $endExclusiveUtc =
+            $businessEndDate
+            ->copy()
+            ->addDay()
+            ->startOfDay()
+            ->utc();
 
         $salesQuery =
             Sale::query()
-            ->whereBetween(
+            ->where(
                 'sale_date',
-                [
-                    $start,
-                    $end,
-                ],
+                '>=',
+                $startUtc,
+            )
+            ->where(
+                'sale_date',
+                '<',
+                $endExclusiveUtc,
             )
             ->when(
                 $paymentStatus !== null,
@@ -180,12 +218,15 @@ class ReportController extends Controller
                 'sale_id',
                 clone $saleIds,
             )
-            ->whereBetween(
+            ->where(
                 'created_at',
-                [
-                    $start,
-                    $end,
-                ],
+                '>=',
+                $startUtc,
+            )
+            ->where(
+                'created_at',
+                '<',
+                $endExclusiveUtc,
             )
             ->when(
                 $paymentMethod !== null,
@@ -209,12 +250,15 @@ class ReportController extends Controller
                 'sale_id',
                 clone $saleIds,
             )
-            ->whereBetween(
+            ->where(
                 'return_date',
-                [
-                    $start,
-                    $end,
-                ],
+                '>=',
+                $startUtc,
+            )
+            ->where(
+                'return_date',
+                '<',
+                $endExclusiveUtc,
             );
 
         $returnSummary =
@@ -296,8 +340,8 @@ class ReportController extends Controller
 
         $dailySeries =
             $this->dailySeries(
-                $start,
-                $end,
+                $businessStart,
+                $businessEndDate,
                 $salesQuery,
                 $collectionQuery,
                 $expenseQuery,
@@ -729,6 +773,16 @@ class ReportController extends Controller
             )
             ->values();
 
+        $businessToday =
+            $businessNow
+            ->toDateString();
+
+        $businessExpiryLimit =
+            $businessNow
+            ->copy()
+            ->addDays(30)
+            ->toDateString();
+
         $expiringBatchCount =
             DB::table('stock_batches')
             ->where(
@@ -742,10 +796,8 @@ class ReportController extends Controller
             ->whereBetween(
                 'expiry_date',
                 [
-                    now()->toDateString(),
-                    now()
-                        ->addDays(30)
-                        ->toDateString(),
+                    $businessToday,
+                    $businessExpiryLimit,
                 ],
             )
             ->count();
@@ -763,7 +815,7 @@ class ReportController extends Controller
             ->whereDate(
                 'expiry_date',
                 '<',
-                now()->toDateString(),
+                $businessToday,
             )
             ->count();
 
@@ -920,8 +972,13 @@ class ReportController extends Controller
             (clone $salesQuery)
             ->selectRaw(
                 '
-                        DATE(sale_date)
-                            AS report_date,
+                        DATE(
+                            CONVERT_TZ(
+                                sale_date,
+                                \'+00:00\',
+                                \'+05:30\'
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(grand_total),
@@ -941,8 +998,13 @@ class ReportController extends Controller
             (clone $collectionQuery)
             ->selectRaw(
                 '
-                        DATE(created_at)
-                            AS report_date,
+                        DATE(
+                            CONVERT_TZ(
+                                created_at,
+                                \'+00:00\',
+                                \'+05:30\'
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(amount),
@@ -983,8 +1045,13 @@ class ReportController extends Controller
             (clone $returnQuery)
             ->selectRaw(
                 '
-                        DATE(return_date)
-                            AS report_date,
+                        DATE(
+                            CONVERT_TZ(
+                                return_date,
+                                \'+00:00\',
+                                \'+05:30\'
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(refund_amount),

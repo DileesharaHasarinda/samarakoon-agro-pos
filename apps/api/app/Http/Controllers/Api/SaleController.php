@@ -13,6 +13,7 @@ use App\Models\SalePayment;
 use App\Models\StockBatch;
 use App\Models\StockMovement;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,8 @@ use Illuminate\Validation\ValidationException;
 
 class SaleController extends Controller
 {
+    private const BUSINESS_TIME_ZONE = 'Asia/Colombo';
+
     public function index(
         Request $request,
     ): JsonResponse {
@@ -108,6 +111,28 @@ class SaleController extends Controller
         $dateTo =
             $validated['date_to']
             ?? null;
+
+        $dateFromUtc =
+            $dateFrom !== null
+            ? Carbon::parse(
+                $dateFrom,
+                self::BUSINESS_TIME_ZONE,
+            )
+            ->startOfDay()
+            ->utc()
+            ->toDateTimeString()
+            : null;
+
+        $dateToUtc =
+            $dateTo !== null
+            ? Carbon::parse(
+                $dateTo,
+                self::BUSINESS_TIME_ZONE,
+            )
+            ->endOfDay()
+            ->utc()
+            ->toDateTimeString()
+            : null;
 
         $perPage = (int) (
             $validated['per_page']
@@ -218,23 +243,23 @@ class SaleController extends Controller
                 ),
             )
             ->when(
-                $dateFrom !== null,
+                $dateFromUtc !== null,
                 fn(
                     Builder $saleQuery,
-                ) => $saleQuery->whereDate(
+                ) => $saleQuery->where(
                     'sale_date',
                     '>=',
-                    $dateFrom,
+                    $dateFromUtc,
                 ),
             )
             ->when(
-                $dateTo !== null,
+                $dateToUtc !== null,
                 fn(
                     Builder $saleQuery,
-                ) => $saleQuery->whereDate(
+                ) => $saleQuery->where(
                     'sale_date',
                     '<=',
-                    $dateTo,
+                    $dateToUtc,
                 ),
             );
 
@@ -1147,17 +1172,34 @@ class SaleController extends Controller
                         $user->id,
                     ]);
 
+                $saleDate =
+                    $sale
+                    ->sale_date
+                    ->copy();
+
                 $sale->update([
                     'sale_number' =>
                     sprintf(
                         'SAL-%s-%06d',
-                        $sale
-                            ->sale_date
+                        $saleDate
+                            ->copy()
+                            ->setTimezone(
+                                self::BUSINESS_TIME_ZONE,
+                            )
                             ->format(
                                 'Ymd',
                             ),
                         $sale->id,
                     ),
+
+                    /*
+                     * Keep sale_date explicit while updating sale_number.
+                     * This is defensive for installations that still have
+                     * the old MySQL ON UPDATE CURRENT_TIMESTAMP definition
+                     * until the corrective migration has been applied.
+                     */
+                    'sale_date' =>
+                    $saleDate,
                 ]);
 
                 foreach (

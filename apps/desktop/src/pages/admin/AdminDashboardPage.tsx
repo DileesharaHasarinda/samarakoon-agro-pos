@@ -30,9 +30,8 @@ import type {
     Cheque,
 } from '../../types/cheque';
 
-/* =========================================================
-   FORMATTERS
-   ========================================================= */
+const BUSINESS_TIME_ZONE =
+    'Asia/Colombo';
 
 const currencyFormatter =
     new Intl.NumberFormat(
@@ -69,6 +68,8 @@ function formatDateTime(
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
+            timeZone:
+                BUSINESS_TIME_ZONE,
         },
     ).format(
         date,
@@ -98,7 +99,7 @@ function formatDate(
 
     const date =
         new Date(
-            `${dateOnly}T00:00:00`,
+            `${dateOnly}T00:00:00+05:30`,
         );
 
     if (
@@ -115,34 +116,65 @@ function formatDate(
             day: '2-digit',
             month: 'short',
             year: 'numeric',
+            timeZone:
+                BUSINESS_TIME_ZONE,
         },
     ).format(
         date,
     );
 }
 
-function localDateKey(
+function sriLankaDateKey(
     date: Date,
 ): string {
+    const parts =
+        new Intl.DateTimeFormat(
+            'en-CA',
+            {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                timeZone:
+                    BUSINESS_TIME_ZONE,
+            },
+        ).formatToParts(
+            date,
+        );
+
     const year =
-        date.getFullYear();
+        parts.find(
+            (
+                part,
+            ) =>
+                part.type
+                === 'year',
+        )?.value;
 
     const month =
-        String(
-            date.getMonth()
-            + 1,
-        ).padStart(
-            2,
-            '0',
-        );
+        parts.find(
+            (
+                part,
+            ) =>
+                part.type
+                === 'month',
+        )?.value;
 
     const day =
-        String(
-            date.getDate(),
-        ).padStart(
-            2,
-            '0',
-        );
+        parts.find(
+            (
+                part,
+            ) =>
+                part.type
+                === 'day',
+        )?.value;
+
+    if (
+        !year
+        || !month
+        || !day
+    ) {
+        return '';
+    }
 
     return `${year}-${month}-${day}`;
 }
@@ -150,27 +182,48 @@ function localDateKey(
 function relativeDateKey(
     offsetDays: number,
 ): string {
-    const date =
-        new Date();
-
     /*
-     * Midday avoids edge cases caused by
-     * daylight-saving/timezone transitions.
+     * Start from Sri Lanka's current calendar
+     * date, not the computer's local timezone.
+     *
+     * Noon UTC is intentionally used as a stable
+     * anchor before shifting calendar days.
      */
-    date.setHours(
-        12,
-        0,
-        0,
-        0,
-    );
+    const todayKey =
+        sriLankaDateKey(
+            new Date(),
+        );
 
-    date.setDate(
-        date.getDate()
-        + offsetDays,
-    );
+    const match =
+        todayKey.match(
+            /^(\d{4})-(\d{2})-(\d{2})$/,
+        );
 
-    return localDateKey(
-        date,
+    if (!match) {
+        return todayKey;
+    }
+
+    const anchor =
+        new Date(
+            Date.UTC(
+                Number(
+                    match[1],
+                ),
+                Number(
+                    match[2],
+                ) - 1,
+                Number(
+                    match[3],
+                ) + offsetDays,
+                12,
+                0,
+                0,
+                0,
+            ),
+        );
+
+    return sriLankaDateKey(
+        anchor,
     );
 }
 

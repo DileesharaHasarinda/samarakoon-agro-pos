@@ -17,6 +17,23 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    /**
+     * Samarakoon Agro operates in Sri Lanka.
+     *
+     * Laravel remains configured in UTC. Business-day calculations are
+     * explicitly evaluated in Asia/Colombo and then converted to UTC for
+     * timestamp comparisons.
+     */
+    private const BUSINESS_TIME_ZONE = 'Asia/Colombo';
+
+    /**
+     * Sri Lanka is UTC+05:30 and does not currently observe DST.
+     * This fixed offset is used only for SQL grouping of UTC timestamps into
+     * Sri Lanka calendar dates. Carbon still uses the named timezone for all
+     * range calculations.
+     */
+    private const BUSINESS_UTC_OFFSET_MINUTES = 330;
+
     public function admin(
         Request $request,
     ): JsonResponse {
@@ -32,22 +49,46 @@ class DashboardController extends Controller
             ], 403);
         }
 
+        $businessNow =
+            now(
+                self::BUSINESS_TIME_ZONE,
+            );
+
         $today =
-            now()->toDateString();
+            $businessNow
+            ->toDateString();
+
+        [
+            $todayStartUtc,
+            $todayEndUtc,
+        ] = $this->businessPeriodToUtcStrings(
+            $businessNow
+                ->copy()
+                ->startOfDay(),
+            $businessNow
+                ->copy()
+                ->endOfDay(),
+        );
 
         $periodStart =
-            now()
+            $businessNow
+            ->copy()
             ->subDays(6)
             ->startOfDay();
 
         $periodEnd =
-            now()->endOfDay();
+            $businessNow
+            ->copy()
+            ->endOfDay();
 
         $todaySalesQuery =
             Sale::query()
-            ->whereDate(
+            ->whereBetween(
                 'sale_date',
-                $today,
+                [
+                    $todayStartUtc,
+                    $todayEndUtc,
+                ],
             );
 
         $todaySalesCount =
@@ -80,12 +121,19 @@ class DashboardController extends Controller
 
         $todayCollectedAmount =
             (float) SalePayment::query()
-                ->whereDate(
+                ->whereBetween(
                     'created_at',
-                    $today,
+                    [
+                        $todayStartUtc,
+                        $todayEndUtc,
+                    ],
                 )
                 ->sum('amount');
 
+        /*
+         * expense_date is a DATE business field, not an instant timestamp.
+         * It must therefore be compared directly with the Sri Lanka date.
+         */
         $todayExpenses =
             (float) Expense::query()
                 ->whereDate(
@@ -96,17 +144,23 @@ class DashboardController extends Controller
 
         $todayReturnRefund =
             (float) SaleReturn::query()
-                ->whereDate(
+                ->whereBetween(
                     'return_date',
-                    $today,
+                    [
+                        $todayStartUtc,
+                        $todayEndUtc,
+                    ],
                 )
                 ->sum('refund_amount');
 
         $todayProfitReversal =
             (float) SaleReturn::query()
-                ->whereDate(
+                ->whereBetween(
                     'return_date',
-                    $today,
+                    [
+                        $todayStartUtc,
+                        $todayEndUtc,
+                    ],
                 )
                 ->sum('profit_reversal');
 
@@ -169,7 +223,8 @@ class DashboardController extends Controller
                 'expiry_date',
                 [
                     $today,
-                    now()
+                    $businessNow
+                        ->copy()
                         ->addDays(30)
                         ->toDateString(),
                 ],
@@ -234,9 +289,12 @@ class DashboardController extends Controller
 
         $paymentBreakdown =
             SalePayment::query()
-            ->whereDate(
+            ->whereBetween(
                 'created_at',
-                $today,
+                [
+                    $todayStartUtc,
+                    $todayEndUtc,
+                ],
             )
             ->selectRaw(
                 '
@@ -272,6 +330,25 @@ class DashboardController extends Controller
             )
             ->values();
 
+        $last30Start =
+            $businessNow
+            ->copy()
+            ->subDays(29)
+            ->startOfDay();
+
+        $last30End =
+            $businessNow
+            ->copy()
+            ->endOfDay();
+
+        [
+            $last30StartUtc,
+            $last30EndUtc,
+        ] = $this->businessPeriodToUtcStrings(
+            $last30Start,
+            $last30End,
+        );
+
         $topProducts =
             DB::table('sale_items')
             ->join(
@@ -286,12 +363,12 @@ class DashboardController extends Controller
                 '=',
                 'sale_items.product_id',
             )
-            ->whereDate(
+            ->whereBetween(
                 'sales.sale_date',
-                '>=',
-                now()
-                    ->subDays(29)
-                    ->toDateString(),
+                [
+                    $last30StartUtc,
+                    $last30EndUtc,
+                ],
             )
             ->selectRaw(
                 '
@@ -537,16 +614,33 @@ class DashboardController extends Controller
             ], 401);
         }
 
-        $today =
-            now()->toDateString();
+        $businessNow =
+            now(
+                self::BUSINESS_TIME_ZONE,
+            );
+
+        [
+            $todayStartUtc,
+            $todayEndUtc,
+        ] = $this->businessPeriodToUtcStrings(
+            $businessNow
+                ->copy()
+                ->startOfDay(),
+            $businessNow
+                ->copy()
+                ->endOfDay(),
+        );
 
         $periodStart =
-            now()
+            $businessNow
+            ->copy()
             ->subDays(6)
             ->startOfDay();
 
         $periodEnd =
-            now()->endOfDay();
+            $businessNow
+            ->copy()
+            ->endOfDay();
 
         $todaySalesQuery =
             Sale::query()
@@ -554,9 +648,12 @@ class DashboardController extends Controller
                 'created_by',
                 $user->id,
             )
-            ->whereDate(
+            ->whereBetween(
                 'sale_date',
-                $today,
+                [
+                    $todayStartUtc,
+                    $todayEndUtc,
+                ],
             );
 
         $todaySalesCount =
@@ -593,9 +690,12 @@ class DashboardController extends Controller
                     'created_by',
                     $user->id,
                 )
-                ->whereDate(
+                ->whereBetween(
                     'created_at',
-                    $today,
+                    [
+                        $todayStartUtc,
+                        $todayEndUtc,
+                    ],
                 )
                 ->sum('amount');
 
@@ -605,9 +705,12 @@ class DashboardController extends Controller
                 'created_by',
                 $user->id,
             )
-            ->whereDate(
+            ->whereBetween(
                 'return_date',
-                $today,
+                [
+                    $todayStartUtc,
+                    $todayEndUtc,
+                ],
             )
             ->count();
 
@@ -617,9 +720,12 @@ class DashboardController extends Controller
                     'created_by',
                     $user->id,
                 )
-                ->whereDate(
+                ->whereBetween(
                     'return_date',
-                    $today,
+                    [
+                        $todayStartUtc,
+                        $todayEndUtc,
+                    ],
                 )
                 ->sum('refund_amount');
 
@@ -636,9 +742,12 @@ class DashboardController extends Controller
                 'created_by',
                 $user->id,
             )
-            ->whereDate(
+            ->whereBetween(
                 'created_at',
-                $today,
+                [
+                    $todayStartUtc,
+                    $todayEndUtc,
+                ],
             )
             ->selectRaw(
                 '
@@ -758,25 +867,40 @@ class DashboardController extends Controller
         Carbon $start,
         Carbon $end,
     ): Collection {
+        [
+            $startUtc,
+            $endUtc,
+        ] = $this->businessPeriodToUtcStrings(
+            $start,
+            $end,
+        );
+
+        $offsetMinutes =
+            self::BUSINESS_UTC_OFFSET_MINUTES;
+
         $sales =
             Sale::query()
             ->whereBetween(
                 'sale_date',
                 [
-                    $start,
-                    $end,
+                    $startUtc,
+                    $endUtc,
                 ],
             )
             ->selectRaw(
-                '
-                        DATE(sale_date)
-                            AS report_date,
+                "
+                        DATE(
+                            DATE_ADD(
+                                sale_date,
+                                INTERVAL {$offsetMinutes} MINUTE
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(grand_total),
                             0
                         ) AS total
-                    ',
+                    ",
             )
             ->groupBy(
                 'report_date',
@@ -791,20 +915,24 @@ class DashboardController extends Controller
             ->whereBetween(
                 'created_at',
                 [
-                    $start,
-                    $end,
+                    $startUtc,
+                    $endUtc,
                 ],
             )
             ->selectRaw(
-                '
-                        DATE(created_at)
-                            AS report_date,
+                "
+                        DATE(
+                            DATE_ADD(
+                                created_at,
+                                INTERVAL {$offsetMinutes} MINUTE
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(amount),
                             0
                         ) AS total
-                    ',
+                    ",
             )
             ->groupBy(
                 'report_date',
@@ -847,20 +975,24 @@ class DashboardController extends Controller
             ->whereBetween(
                 'return_date',
                 [
-                    $start,
-                    $end,
+                    $startUtc,
+                    $endUtc,
                 ],
             )
             ->selectRaw(
-                '
-                        DATE(return_date)
-                            AS report_date,
+                "
+                        DATE(
+                            DATE_ADD(
+                                return_date,
+                                INTERVAL {$offsetMinutes} MINUTE
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(refund_amount),
                             0
                         ) AS total
-                    ',
+                    ",
             )
             ->groupBy(
                 'report_date',
@@ -888,6 +1020,17 @@ class DashboardController extends Controller
         Carbon $start,
         Carbon $end,
     ): Collection {
+        [
+            $startUtc,
+            $endUtc,
+        ] = $this->businessPeriodToUtcStrings(
+            $start,
+            $end,
+        );
+
+        $offsetMinutes =
+            self::BUSINESS_UTC_OFFSET_MINUTES;
+
         $sales =
             Sale::query()
             ->where(
@@ -897,20 +1040,24 @@ class DashboardController extends Controller
             ->whereBetween(
                 'sale_date',
                 [
-                    $start,
-                    $end,
+                    $startUtc,
+                    $endUtc,
                 ],
             )
             ->selectRaw(
-                '
-                        DATE(sale_date)
-                            AS report_date,
+                "
+                        DATE(
+                            DATE_ADD(
+                                sale_date,
+                                INTERVAL {$offsetMinutes} MINUTE
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(grand_total),
                             0
                         ) AS total
-                    ',
+                    ",
             )
             ->groupBy(
                 'report_date',
@@ -929,20 +1076,24 @@ class DashboardController extends Controller
             ->whereBetween(
                 'created_at',
                 [
-                    $start,
-                    $end,
+                    $startUtc,
+                    $endUtc,
                 ],
             )
             ->selectRaw(
-                '
-                        DATE(created_at)
-                            AS report_date,
+                "
+                        DATE(
+                            DATE_ADD(
+                                created_at,
+                                INTERVAL {$offsetMinutes} MINUTE
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(amount),
                             0
                         ) AS total
-                    ',
+                    ",
             )
             ->groupBy(
                 'report_date',
@@ -961,20 +1112,24 @@ class DashboardController extends Controller
             ->whereBetween(
                 'return_date',
                 [
-                    $start,
-                    $end,
+                    $startUtc,
+                    $endUtc,
                 ],
             )
             ->selectRaw(
-                '
-                        DATE(return_date)
-                            AS report_date,
+                "
+                        DATE(
+                            DATE_ADD(
+                                return_date,
+                                INTERVAL {$offsetMinutes} MINUTE
+                            )
+                        ) AS report_date,
 
                         COALESCE(
                             SUM(refund_amount),
                             0
                         ) AS total
-                    ',
+                    ",
             )
             ->groupBy(
                 'report_date',
@@ -1013,10 +1168,17 @@ class DashboardController extends Controller
         $series = collect();
 
         $date =
-            $start->copy();
+            $start
+            ->copy()
+            ->startOfDay();
+
+        $lastDate =
+            $end
+            ->copy()
+            ->startOfDay();
 
         while (
-            $date->lte($end)
+            $date->lte($lastDate)
         ) {
             $key =
                 $date->toDateString();
@@ -1057,6 +1219,35 @@ class DashboardController extends Controller
         }
 
         return $series;
+    }
+
+    /**
+     * Convert a Sri Lanka business-period boundary to the UTC wall-clock
+     * strings used by this application's Laravel-managed timestamps.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function businessPeriodToUtcStrings(
+        Carbon $start,
+        Carbon $end,
+    ): array {
+        return [
+            $start
+                ->copy()
+                ->setTimezone(
+                    self::BUSINESS_TIME_ZONE,
+                )
+                ->utc()
+                ->toDateTimeString(),
+
+            $end
+                ->copy()
+                ->setTimezone(
+                    self::BUSINESS_TIME_ZONE,
+                )
+                ->utc()
+                ->toDateTimeString(),
+        ];
     }
 
     /**
