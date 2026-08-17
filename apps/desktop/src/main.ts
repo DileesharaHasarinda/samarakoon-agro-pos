@@ -231,7 +231,8 @@ interface EscPosReceiptPayload {
   paperWidthMm: 58 | 80;
 
   businessName: string;
-  addressLines: string[];
+  businessAddressLine?: string | null;
+  businessContactLine?: string | null;
   receiptTitle: string;
 
   metaLines: EscPosReceiptLine[];
@@ -592,19 +593,50 @@ async function rasterizeUnicodeReceipt(
     }
 
     /*
-     * Keep the monochrome bitmap at its natural thickness.
+     * Trim only completely white rows above the first visible pixel.
      *
-     * Earlier versions expanded every black pixel into its neighbours. That
-     * helped extremely thin glyphs, but it also made normal English and
-     * Sinhala lettering look excessively heavy on 203-DPI thermal paper.
-     * The 2x render + high-quality downsample already preserves the character
-     * shapes, so a moderate threshold is enough for a cleaner receipt.
+     * This removes Chromium/window capture whitespace without changing
+     * any spacing INSIDE the receipt. The first visible receipt content
+     * therefore starts as close as possible to the physical top edge.
      */
-    const bits = thresholdBits;
+    let firstBlackRow = 0;
+    let foundBlackPixel = false;
+
+    for (let y = 0; y < size.height; y += 1) {
+      for (let x = 0; x < size.width; x += 1) {
+        if (thresholdBits[y * size.width + x] === 1) {
+          firstBlackRow = y;
+          foundBlackPixel = true;
+          break;
+        }
+      }
+
+      if (foundBlackPixel) {
+        break;
+      }
+    }
+
+    if (!foundBlackPixel) {
+      return null;
+    }
+
+    /*
+     * Keep only one white dot above the first visible pixel.
+     */
+    const cropStartRow = Math.max(0, firstBlackRow - 1);
+    const croppedHeight = size.height - cropStartRow;
+    const bits = new Uint8Array(size.width * croppedHeight);
+
+    for (let y = 0; y < croppedHeight; y += 1) {
+      const sourceStart = (y + cropStartRow) * size.width;
+      const sourceEnd = sourceStart + size.width;
+
+      bits.set(thresholdBits.subarray(sourceStart, sourceEnd), y * size.width);
+    }
 
     return {
       widthDots: size.width,
-      heightDots: size.height,
+      heightDots: croppedHeight,
       bits,
     };
   } finally {
@@ -636,14 +668,41 @@ function buildLegacyEscPosBitImage(bitmap: MonochromeReceiptBitmap): Buffer {
   const { widthDots, heightDots, bits } = bitmap;
   const chunks: Buffer[] = [];
 
-  // Reset and use left alignment for image output.
+  /*
+   * Reset the printer twice before graphics output. Some inexpensive
+   * ESC/POS clones need one extra command boundary after a raw spool
+   * job starts. No line feed is sent here, so this adds ZERO paper
+   * space above the receipt.
+   */
   chunks.push(Buffer.from([0x1b, 0x40])); // ESC @
+  chunks.push(Buffer.from([0x1b, 0x40])); // ESC @ again for clone-printer sync
   chunks.push(Buffer.from([0x1b, 0x61, 0x00])); // ESC a 0
+  chunks.push(Buffer.from([0x1b, 0x32])); // ESC 2 normal spacing
 
   const bandHeight = 24;
   const mode = 33; // 24-dot double-density bit-image mode
   const nL = widthDots & 0xff;
   const nH = (widthDots >> 8) & 0xff;
+
+  /*
+   * PRIME THE PRINTER'S ESC * GRAPHICS PARSER.
+   *
+   * The receipt photo showed characters such as ?, < and other garbage
+   * ABOVE the Sinhala business name. Those are bitmap data bytes being
+   * interpreted as ordinary printer text when the clone printer misses
+   * the very first ESC * command after a raw job starts.
+   *
+   * We therefore send two tiny 1-column, completely blank graphics
+   * commands first. They do not contain printable character data and do
+   * not feed the paper. ESC $ then returns the horizontal position to 0.
+   * After this warm-up, the first REAL image band starts immediately at
+   * the top and its bytes are parsed as graphics instead of text.
+   */
+  for (let warmup = 0; warmup < 2; warmup += 1) {
+    chunks.push(Buffer.from([0x1b, 0x2a, mode, 0x01, 0x00]));
+    chunks.push(Buffer.from([0x00, 0x00, 0x00]));
+    chunks.push(Buffer.from([0x1b, 0x24, 0x00, 0x00])); // ESC $ 0
+  }
 
   // ESC 3 24: one line feed advances exactly one 24-dot image band.
   chunks.push(Buffer.from([0x1b, 0x33, bandHeight]));
@@ -1039,6 +1098,23 @@ class EscPosBuilder {
     return this;
   }
 
+  /**
+   * Set ESC/POS character scaling using GS ! n.
+   *
+   * widthMultiplier / heightMultiplier support values 1..8.
+   * The business name uses 2x width and 3x height so it becomes
+   * noticeably larger without making every other header line huge.
+   */
+  characterSize(widthMultiplier: number, heightMultiplier: number): this {
+    const safeWidth = Math.max(1, Math.min(8, Math.trunc(widthMultiplier)));
+    const safeHeight = Math.max(1, Math.min(8, Math.trunc(heightMultiplier)));
+
+    const commandValue = (safeWidth - 1) | ((safeHeight - 1) << 4);
+
+    this.push([0x1d, 0x21, commandValue]);
+    return this;
+  }
+
   println(value = ""): this {
     this.text(value);
     this.push([0x0a]);
@@ -1099,15 +1175,62 @@ function buildEscPosBuffer(payload: EscPosReceiptPayload): Buffer {
         .newLine();
     }
 
-    doc.alignCenter().bold(true).doubleSize(true);
-    doc.println(payload.businessName);
-    doc.doubleSize(false).bold(false);
+    /*
+     * BUSINESS NAME
+     * -----------------------------------------------------
+     * Print it immediately after ESC/POS initialization.
+     * There is deliberately NO leading line feed here, which keeps
+     * the business name as close as possible to the top of the bill.
+     *
+     * Use 2x width + 3x height so ONLY the business name becomes
+     * substantially larger. Address and contact lines keep their
+     * existing size below.
+     */
+    doc.alignCenter().bold(true).characterSize(2, 3);
 
-    payload.addressLines
-      .filter((line) => line && line.trim().length > 0)
-      .forEach((line) => {
-        doc.println(line);
-      });
+    doc.println(payload.businessName);
+
+    doc.characterSize(1, 1);
+
+    /*
+     * BUSINESS ADDRESS
+     * -----------------------------------------------------
+     * Keep the address large and readable, but smaller than
+     * the combined contact-number line below.
+     */
+    if (
+      payload.businessAddressLine &&
+      payload.businessAddressLine.trim().length > 0
+    ) {
+      doc
+        .bold(true)
+        .characterSize(1, 2)
+        .println(payload.businessAddressLine)
+        .characterSize(1, 1)
+        .bold(false);
+    }
+
+    /*
+     * CONTACT NUMBERS
+     * -----------------------------------------------------
+     * Print both phone numbers on ONE line:
+     *
+     * Tel: 0252234383 / 0253252227
+     *
+     * Use 3x height with normal width so the line is much
+     * larger while still fitting on 58mm / 80mm paper.
+     */
+    if (
+      payload.businessContactLine &&
+      payload.businessContactLine.trim().length > 0
+    ) {
+      doc
+        .bold(true)
+        .characterSize(1, 3)
+        .println(payload.businessContactLine)
+        .characterSize(1, 1)
+        .bold(false);
+    }
 
     doc.newLine().bold(true);
     doc.println(payload.receiptTitle.toUpperCase());
@@ -1299,7 +1422,8 @@ ipcMain.handle(
         printerName,
         paperWidthMm: payload.paperWidthMm === 58 ? 58 : 80,
         businessName: "SAMARAKOON AGRO",
-        addressLines: ["DEVICE PRINTER TEST"],
+        businessAddressLine: "DEVICE PRINTER TEST",
+        businessContactLine: null,
         receiptTitle: "TEST PRINT",
         metaLines: [
           {

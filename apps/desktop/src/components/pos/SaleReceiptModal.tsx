@@ -33,7 +33,8 @@ interface EscPosReceiptPayload {
     paperWidthMm: 58 | 80;
 
     businessName: string;
-    addressLines: string[];
+    businessAddressLine?: string | null;
+    businessContactLine?: string | null;
     receiptTitle: string;
 
     metaLines: EscPosReceiptLine[];
@@ -328,6 +329,24 @@ function paymentStatusName(
     }
 
     return 'Completed';
+}
+
+function businessContactText(
+    settings: BusinessSetting,
+): string | null {
+    const contacts = [
+        settings.phone?.trim(),
+        settings.secondary_phone?.trim(),
+    ].filter(
+        (value): value is string =>
+            Boolean(value),
+    );
+
+    if (contacts.length === 0) {
+        return null;
+    }
+
+    return `Tel: ${contacts.join(' / ')}`;
 }
 
 function itemUnitPrice(
@@ -836,40 +855,60 @@ function buildUnicodeThermalPrintHtml(
     const containerWidthPx =
         printableWidthMm * PX_PER_MM;
 
+    /*
+     * =========================================================
+     * THERMAL RECEIPT FONT SIZES
+     * =========================================================
+     *
+     * The client requested a larger and easier-to-read business
+     * header. Business name is the largest line, while address
+     * and both contact numbers are also intentionally larger than
+     * the rest of the receipt.
+     */
     const businessFontPx =
         paperWidthMm === 58
-            ? 64
-            : 72
+            ? 92
+            : 112;
+
+    const businessAddressFontPx =
+        paperWidthMm === 58
+            ? 40
+            : 46;
+
+    const businessContactFontPx =
+        paperWidthMm === 58
+            ? 52
+            : 70;
 
     const titleFontPx =
         paperWidthMm === 58
             ? 46
-            : 52
+            : 52;
 
     const normalFontPx =
         paperWidthMm === 58
             ? 40
-            : 44
+            : 44;
 
     const smallFontPx =
         paperWidthMm === 58
             ? 32
-            : 34
+            : 34;
 
     const productFontPx =
         paperWidthMm === 58
             ? 44
-            : 48
+            : 48;
 
     const grandFontPx =
         paperWidthMm === 58
             ? 54
-            : 60
+            : 60;
 
     const footerFontPx =
         paperWidthMm === 58
             ? 40
-            : 44
+            : 44;
 
     /*
      * Developer credit is deliberately a little larger than ordinary
@@ -879,17 +918,26 @@ function buildUnicodeThermalPrintHtml(
     const softwareCreditFontPx =
         paperWidthMm === 58
             ? 22
-            : 34
+            : 34;
 
     const sidePaddingPx =
         paperWidthMm === 58
             ? px(1.0)
             : px(1.1);
 
-    const topPaddingPx =
-        paperWidthMm === 58
-            ? px(1.8)
-            : px(2.0);
+    /*
+     * Keep the first printed line very close to the top of the
+     * thermal paper. Most printers already have a small physical
+     * non-printable edge, so the HTML should not add another large
+     * blank area before the business name.
+     */
+    /*
+     * No artificial HTML top padding. The printer itself already
+     * has a tiny physical non-printable edge. main.ts also trims
+     * any fully white rows that Chromium may capture above the
+     * first visible receipt content.
+     */
+    const topPaddingPx = 0;
 
     const bottomPaddingPx =
         paperWidthMm === 58
@@ -1049,6 +1097,8 @@ function buildUnicodeThermalPrintHtml(
                 }
 
                 #sale-document-modal .thermal-header {
+                    margin: 0 !important;
+                    padding: 0 !important;
                     text-align: center !important;
                 }
 
@@ -1077,14 +1127,20 @@ function buildUnicodeThermalPrintHtml(
                     color: #000000 !important;
 
                     font-size: ${businessFontPx}px !important;
-                    font-weight: 700 !important;
-                    line-height: 1.28 !important;
+                    font-weight: 800 !important;
+                    line-height: 1.16 !important;
 
                     letter-spacing: 0 !important;
 
+                    text-align: center !important;
                     overflow-wrap: anywhere !important;
                 }
 
+                /*
+                 * Default business-information style.
+                 * Email, registration number and tax number keep
+                 * the normal smaller header size.
+                 */
                 #sale-document-modal .thermal-header p {
                     margin: ${px(0.6)}px 0 0 !important;
 
@@ -1094,6 +1150,44 @@ function buildUnicodeThermalPrintHtml(
                     font-weight: 500 !important;
                     line-height: 1.38 !important;
 
+                    text-align: center !important;
+                    overflow-wrap: anywhere !important;
+                }
+
+                /*
+                 * Client-requested larger business address.
+                 */
+                #sale-document-modal
+                .thermal-header
+                .thermal-business-address {
+                    margin-top: ${px(0.9)}px !important;
+
+                    color: #000000 !important;
+
+                    font-size: ${businessAddressFontPx}px !important;
+                    font-weight: 650 !important;
+                    line-height: 1.34 !important;
+
+                    text-align: center !important;
+                    overflow-wrap: anywhere !important;
+                }
+
+                /*
+                 * Client-requested larger primary and secondary
+                 * contact numbers.
+                 */
+                #sale-document-modal
+                .thermal-header
+                .thermal-business-contact {
+                    margin-top: ${px(0.65)}px !important;
+
+                    color: #000000 !important;
+
+                    font-size: ${businessContactFontPx}px !important;
+                    font-weight: 800 !important;
+                    line-height: 1.28 !important;
+
+                    text-align: center !important;
                     overflow-wrap: anywhere !important;
                 }
 
@@ -1472,6 +1566,11 @@ function ThermalReceipt({
         currencyFormatter.format(value)
     );
 
+    const businessContactLine =
+        businessContactText(
+            settings,
+        );
+
     return (
         <article
             className={`
@@ -1508,20 +1607,14 @@ function ThermalReceipt({
                 {settings
                     .show_business_address
                     && settings.address && (
-                        <p>
+                        <p className="thermal-business-address">
                             {settings.address}
                         </p>
                     )}
 
-                {settings.phone && (
-                    <p>
-                        Tel: {settings.phone}
-                    </p>
-                )}
-
-                {settings.secondary_phone && (
-                    <p>
-                        {settings.secondary_phone}
+                {businessContactLine && (
+                    <p className="thermal-business-contact">
+                        {businessContactLine}
                     </p>
                 )}
 
@@ -1873,6 +1966,11 @@ function A4Invoice({
         currencyFormatter.format(value)
     );
 
+    const businessContactLine =
+        businessContactText(
+            settings,
+        );
+
     return (
         <article className="print-document-invoice">
             <header className="invoice-header">
@@ -1900,15 +1998,9 @@ function A4Invoice({
                             </p>
                         )}
 
-                    {settings.phone && (
-                        <p>
-                            Tel: {settings.phone}
-                        </p>
-                    )}
-
-                    {settings.secondary_phone && (
-                        <p>
-                            {settings.secondary_phone}
+                    {businessContactLine && (
+                        <p className="invoice-business-contact">
+                            {businessContactLine}
                         </p>
                     )}
 
@@ -2812,7 +2904,11 @@ const styles = `
 
     min-height: 300px !important;
 
-    padding: 14px 12px !important;
+    /*
+     * Reduce the blank area before the business name in the
+     * on-screen thermal preview.
+     */
+    padding: 0 12px 14px !important;
 
     font-size: 11px !important;
     line-height: 1.35 !important;
@@ -2842,6 +2938,8 @@ const styles = `
 }
 
 #sale-document-modal .thermal-header {
+    margin: 0 !important;
+    padding: 0 !important;
     text-align: center !important;
 }
 
@@ -2858,22 +2956,68 @@ const styles = `
 }
 
 #sale-document-modal .thermal-header h2 {
+    margin: 0 !important;
+
     color: #111111 !important;
 
-    font-size: 15px !important;
-    font-weight: 750 !important;
-    line-height: 1.2 !important;
+    font-size: 28px !important;
+    font-weight: 800 !important;
+    line-height: 1.14 !important;
+
+    text-align: center !important;
+    overflow-wrap: anywhere !important;
 }
 
+/*
+ * Default smaller business information such as email,
+ * registration number and tax number.
+ */
 #sale-document-modal .thermal-header p {
     margin-top: 2px !important;
 
     color: #222222 !important;
 
     font-size: 9px !important;
+    font-weight: 500 !important;
     line-height: 1.35 !important;
 
+    text-align: center !important;
     overflow-wrap: anywhere !important;
+}
+
+/*
+ * Client-requested larger business address.
+ */
+#sale-document-modal
+.thermal-header
+.thermal-business-address {
+    margin-top: 4px !important;
+
+    color: #111111 !important;
+
+    font-size: 13px !important;
+    font-weight: 650 !important;
+    line-height: 1.4 !important;
+
+    text-align: center !important;
+}
+
+/*
+ * Client-requested larger primary and secondary
+ * business contact numbers.
+ */
+#sale-document-modal
+.thermal-header
+.thermal-business-contact {
+    margin-top: 3px !important;
+
+    color: #000000 !important;
+
+    font-size: 14px !important;
+    font-weight: 750 !important;
+    line-height: 1.3 !important;
+
+    text-align: center !important;
 }
 
 #sale-document-modal .thermal-header > strong {
@@ -3131,6 +3275,19 @@ const styles = `
     font-size: 10px !important;
 
     overflow-wrap: anywhere !important;
+}
+
+#sale-document-modal
+.invoice-business
+.invoice-business-contact {
+    margin-top: 4px !important;
+
+    color: #101828 !important;
+
+    font-size: 13px !important;
+    font-weight: 750 !important;
+
+    white-space: nowrap !important;
 }
 
 #sale-document-modal .invoice-title {
@@ -3913,26 +4070,16 @@ export default function SaleReceiptModal({
                     currencyFormatter.format(value)
                 );
 
-                const addressLines: string[] = [];
-
-                if (
+                const businessAddressLine =
                     settings.show_business_address
-                    && settings.address
-                ) {
-                    addressLines.push(settings.address);
-                }
+                        && settings.address
+                        ? settings.address
+                        : null;
 
-                if (settings.phone) {
-                    addressLines.push(
-                        `Tel: ${settings.phone}`,
+                const businessContactLine =
+                    businessContactText(
+                        settings,
                     );
-                }
-
-                if (settings.secondary_phone) {
-                    addressLines.push(
-                        settings.secondary_phone,
-                    );
-                }
 
                 const metaLines: EscPosReceiptLine[] = [
                     { left: `Sale: ${saleDocument.saleNumber}` },
@@ -4102,7 +4249,8 @@ export default function SaleReceiptModal({
                             : 80,
 
                     businessName: settings.business_name,
-                    addressLines,
+                    businessAddressLine,
+                    businessContactLine,
                     receiptTitle: settings.receipt_title,
 
                     metaLines,
