@@ -10,6 +10,12 @@ class PurchasePayment extends Model
 {
     use HasFactory;
 
+    /*
+     * =====================================================
+     * PAYMENT METHODS
+     * =====================================================
+     */
+
     public const METHOD_CASH =
     'cash';
 
@@ -22,11 +28,45 @@ class PurchasePayment extends Model
     public const METHOD_CHEQUE =
     'cheque';
 
+    /**
+     * All supported supplier payment methods.
+     *
+     * @var array<int, string>
+     */
+    public const PAYMENT_METHODS = [
+        self::METHOD_CASH,
+        self::METHOD_CARD,
+        self::METHOD_BANK_TRANSFER,
+        self::METHOD_CHEQUE,
+    ];
+
+    /*
+     * =====================================================
+     * PAYMENT TYPES
+     * =====================================================
+     */
+
+    /*
+     * Initial payment made while configuring
+     * the purchase settlement.
+     */
     public const TYPE_INITIAL =
     'initial_payment';
 
+    /*
+     * Later payment made against an existing
+     * supplier due.
+     */
     public const TYPE_DUE =
     'supplier_due_payment';
+
+    /**
+     * @var array<int, string>
+     */
+    public const PAYMENT_TYPES = [
+        self::TYPE_INITIAL,
+        self::TYPE_DUE,
+    ];
 
     /**
      * @var array<int, string>
@@ -63,6 +103,8 @@ class PurchasePayment extends Model
     }
 
     /**
+     * Purchase belonging to this payment.
+     *
      * @return BelongsTo<Purchase, PurchasePayment>
      */
     public function purchase(): BelongsTo
@@ -73,6 +115,8 @@ class PurchasePayment extends Model
     }
 
     /**
+     * User who recorded this payment.
+     *
      * @return BelongsTo<User, PurchasePayment>
      */
     public function createdBy(): BelongsTo
@@ -81,5 +125,25 @@ class PurchasePayment extends Model
             User::class,
             'created_by',
         );
+    }
+
+    /**
+     * Determine whether this is the payment
+     * recorded during initial settlement.
+     */
+    public function isInitialPayment(): bool
+    {
+        return $this->payment_type
+            === self::TYPE_INITIAL;
+    }
+
+    /**
+     * Determine whether this is a later
+     * supplier due payment.
+     */
+    public function isDuePayment(): bool
+    {
+        return $this->payment_type
+            === self::TYPE_DUE;
     }
 }

@@ -5,7 +5,20 @@ import type {
   SupplierPayableDetailsResponse,
   SupplierPayableResponse,
   SupplierPaymentInput,
+  SupplierPaymentLineInput,
 } from "../types/supplierPayable";
+
+function normalisePaymentLine(payment: SupplierPaymentLineInput) {
+  return {
+    payment_method: payment.payment_method,
+
+    amount: Number(payment.amount),
+
+    reference_number: payment.reference_number.trim() || null,
+
+    notes: payment.notes.trim() || null,
+  };
+}
 
 export async function getSupplierPayables(
   token: string,
@@ -61,22 +74,17 @@ export async function configurePurchaseSettlement(
     `/purchases/${purchaseId}/settlement`,
     {
       method: "PUT",
+
       token,
 
       body: JSON.stringify({
         settlement_type: values.settlement_type,
 
-        initial_paid_amount: values.initial_paid_amount,
+        payments: values.payments.map(normalisePaymentLine),
 
-        payment_method: values.payment_method,
-
-        due_date: values.due_date || null,
+        due_date: values.due_date.trim() || null,
 
         payment_terms: values.payment_terms.trim() || null,
-
-        reference_number: values.reference_number.trim() || null,
-
-        notes: values.notes.trim() || null,
       }),
     }
   );
@@ -91,16 +99,11 @@ export async function recordSupplierPayment(
     `/purchases/${purchaseId}/supplier-payments`,
     {
       method: "POST",
+
       token,
 
       body: JSON.stringify({
-        amount: values.amount,
-
-        payment_method: values.payment_method,
-
-        reference_number: values.reference_number.trim() || null,
-
-        notes: values.notes.trim() || null,
+        payments: values.payments.map(normalisePaymentLine),
       }),
     }
   );

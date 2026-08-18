@@ -19,18 +19,23 @@ import {
     useAuth,
 } from '../../auth/AuthContext';
 
+import EditStockBatchModal
+    from '../../components/products/EditStockBatchModal';
+
 import {
     ApiError,
 } from '../../lib/api';
 
 import {
     getProductDetails,
+    updateStockBatch,
 } from '../../services/productService';
 
 import type {
     ProductBatchStatus,
     ProductDetails,
     ProductPriceOption,
+    UpdateStockBatchValues,
 } from '../../types/product';
 
 type ProductBatch =
@@ -1558,6 +1563,50 @@ const pageStyles = `
     background: var(--blue-700) !important;
 }
 
+#product-details-page .pdp-stock-actions,
+#product-detail-modal .pdm-stock-actions {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+}
+
+#product-details-page .pdp-edit,
+#product-detail-modal .pdm-edit {
+    display: inline-flex !important;
+    min-height: 34px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    padding: 5px 10px !important;
+    color: var(--green-900) !important;
+    font-size: 10px !important;
+    font-weight: 850 !important;
+    background: var(--green-50) !important;
+    border: 1px solid #b8dfc3 !important;
+    border-radius: 7px !important;
+    cursor: pointer !important;
+}
+
+#product-details-page .pdp-edit:hover,
+#product-detail-modal .pdm-edit:hover {
+    color: #ffffff !important;
+    background: var(--green-700) !important;
+    border-color: var(--green-700) !important;
+}
+
+#product-details-page .pdp-update-success {
+    display: flex !important;
+    align-items: center !important;
+    padding: 10px 12px !important;
+    color: var(--green-900) !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    background: var(--green-50) !important;
+    border: 1px solid #b8dfc3 !important;
+    border-radius: 9px !important;
+}
+
 #product-details-page .pdp-status,
 #product-detail-modal .pdp-status {
     display: inline-flex !important;
@@ -2450,6 +2499,35 @@ export default function ProductDetailsPage() {
             null,
         );
 
+    const [
+        editingBatch,
+        setEditingBatch,
+    ] =
+        useState<
+            ProductBatch
+            | null
+        >(
+            null,
+        );
+
+    const [
+        isUpdatingBatch,
+        setIsUpdatingBatch,
+    ] =
+        useState(false);
+
+    const [
+        updateBatchError,
+        setUpdateBatchError,
+    ] =
+        useState('');
+
+    const [
+        updateBatchSuccess,
+        setUpdateBatchSuccess,
+    ] =
+        useState('');
+
     const numericProductId =
         Number(
             productId,
@@ -2563,6 +2641,27 @@ export default function ProductDetailsPage() {
         [
             loadProduct,
         ],
+    );
+
+    useEffect(
+        () => {
+            if (!updateBatchSuccess) {
+                return;
+            }
+
+            const timeout =
+                window.setTimeout(
+                    () => {
+                        setUpdateBatchSuccess('');
+                    },
+                    3500,
+                );
+
+            return () => {
+                window.clearTimeout(timeout);
+            };
+        },
+        [updateBatchSuccess],
     );
 
     useEffect(
@@ -2706,6 +2805,70 @@ export default function ProductDetailsPage() {
             setSelectedVariant(
                 variant,
             );
+        };
+
+    const openEditBatch =
+        (
+            batch: ProductBatch,
+        ): void => {
+            setSelectedBatch(null);
+            setSelectedVariant(null);
+            setUpdateBatchError('');
+            setUpdateBatchSuccess('');
+            setEditingBatch(batch);
+        };
+
+    const closeEditBatch =
+        (): void => {
+            if (isUpdatingBatch) {
+                return;
+            }
+
+            setEditingBatch(null);
+            setUpdateBatchError('');
+        };
+
+    const submitBatchUpdate =
+        async (
+            values: UpdateStockBatchValues,
+        ): Promise<void> => {
+            if (
+                !token
+                || !editingBatch
+                || isUpdatingBatch
+            ) {
+                return;
+            }
+
+            setIsUpdatingBatch(true);
+            setUpdateBatchError('');
+            setUpdateBatchSuccess('');
+
+            try {
+                const response =
+                    await updateStockBatch(
+                        token,
+                        editingBatch.id,
+                        values,
+                    );
+
+                setEditingBatch(null);
+
+                await loadProduct();
+
+                setUpdateBatchSuccess(
+                    response.message
+                    || 'Price and stock updated successfully.',
+                );
+            } catch (error) {
+                setUpdateBatchError(
+                    error instanceof ApiError
+                        ? error.message
+                        : 'Unable to update the stock batch.',
+                );
+            } finally {
+                setIsUpdatingBatch(false);
+            }
         };
 
     if (
@@ -3304,19 +3467,33 @@ export default function ProductDetailsPage() {
                                                                         </td>
 
                                                                         <td>
-                                                                            <button
-                                                                                type="button"
-                                                                                className="pdm-row-button"
-                                                                                onClick={() => {
-                                                                                    openBatch(
-                                                                                        batch,
-                                                                                    );
-                                                                                }}
-                                                                            >
-                                                                                <Icon name="eye" />
+                                                                            <div className="pdm-stock-actions">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="pdm-row-button"
+                                                                                    onClick={() => {
+                                                                                        openBatch(
+                                                                                            batch,
+                                                                                        );
+                                                                                    }}
+                                                                                >
+                                                                                    <Icon name="eye" />
 
-                                                                                View Batch
-                                                                            </button>
+                                                                                    View Batch
+                                                                                </button>
+
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="pdm-edit"
+                                                                                    onClick={() => {
+                                                                                        openEditBatch(
+                                                                                            batch,
+                                                                                        );
+                                                                                    }}
+                                                                                >
+                                                                                    Edit
+                                                                                </button>
+                                                                            </div>
                                                                         </td>
                                                                     </tr>
                                                                 );
@@ -4001,14 +4178,28 @@ export default function ProductDetailsPage() {
                             </div>
 
                             <footer className="pdm-footer">
-                                <button
-                                    type="button"
-                                    onClick={
-                                        closeModals
-                                    }
-                                >
-                                    Close
-                                </button>
+                                <div className="pdm-stock-actions">
+                                    <button
+                                        type="button"
+                                        className="pdm-edit"
+                                        onClick={() => {
+                                            openEditBatch(
+                                                selectedBatch,
+                                            );
+                                        }}
+                                    >
+                                        Edit Price &amp; Stock
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={
+                                            closeModals
+                                        }
+                                    >
+                                        Close
+                                    </button>
+                                </div>
                             </footer>
                         </section>
                     </div>,
@@ -4046,6 +4237,15 @@ export default function ProductDetailsPage() {
                         }
                     </span>
                 </div>
+
+                {updateBatchSuccess && (
+                    <div
+                        className="pdp-update-success"
+                        role="status"
+                    >
+                        {updateBatchSuccess}
+                    </div>
+                )}
 
                 <header className="pdp-hero">
                     <div className="pdp-hero-main">
@@ -4834,19 +5034,33 @@ export default function ProductDetailsPage() {
                                                         </td>
 
                                                         <td>
-                                                            <button
-                                                                type="button"
-                                                                className="pdp-view"
-                                                                onClick={() => {
-                                                                    openBatch(
-                                                                        batch,
-                                                                    );
-                                                                }}
-                                                            >
-                                                                <Icon name="eye" />
+                                                            <div className="pdp-stock-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    className="pdp-view"
+                                                                    onClick={() => {
+                                                                        openBatch(
+                                                                            batch,
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    <Icon name="eye" />
 
-                                                                View Details
-                                                            </button>
+                                                                    View Details
+                                                                </button>
+
+                                                                <button
+                                                                    type="button"
+                                                                    className="pdp-edit"
+                                                                    onClick={() => {
+                                                                        openEditBatch(
+                                                                            batch,
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 );
@@ -4891,6 +5105,29 @@ export default function ProductDetailsPage() {
             {variantModal}
 
             {batchModal}
+
+            <EditStockBatchModal
+                batch={
+                    editingBatch
+                }
+                productName={
+                    product.name
+                }
+                isSubmitting={
+                    isUpdatingBatch
+                }
+                errorMessage={
+                    updateBatchError
+                }
+                onClose={
+                    closeEditBatch
+                }
+                onSubmit={(values) => {
+                    void submitBatchUpdate(
+                        values,
+                    );
+                }}
+            />
         </>
     );
 }

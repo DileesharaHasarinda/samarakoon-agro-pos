@@ -16,13 +16,19 @@ import {
 import type {
     SupplierPayable,
     SupplierPaymentInput,
+    SupplierPaymentLineInput,
     SupplierPaymentMethod,
 } from '../../types/supplierPayable';
 
 interface RecordSupplierPaymentModalProps {
-    purchase: SupplierPayable | null;
+    purchase:
+    SupplierPayable
+    | null;
+
     isSubmitting: boolean;
+
     errorMessage: string;
+
     onClose: () => void;
 
     onSubmit: (
@@ -31,119 +37,226 @@ interface RecordSupplierPaymentModalProps {
     ) => void;
 }
 
-const money = new Intl.NumberFormat(
-    'en-GB',
-    {
-        style: 'currency',
-        currency: 'LKR',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    },
-);
+interface EditablePaymentLine {
+    id: number;
 
-type IconName =
-    | 'alert'
-    | 'cash'
-    | 'close'
-    | 'info'
-    | 'receipt'
-    | 'save';
+    payment_method:
+    SupplierPaymentMethod;
 
-function Icon({
-    name,
-}: {
-    name: IconName;
-}) {
-    const props = {
-        viewBox: '0 0 24 24',
-        fill: 'none',
-        stroke: 'currentColor',
-        strokeWidth: 2,
-        strokeLinecap: 'round' as const,
-        strokeLinejoin: 'round' as const,
-        'aria-hidden': true,
-    };
+    amount: string;
 
-    switch (name) {
-        case 'alert':
-            return (
-                <svg {...props}>
-                    <path d="M10.3 3.4 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.4a2 2 0 0 0-3.4 0Z" />
-                    <path d="M12 9v4M12 17h.01" />
-                </svg>
-            );
+    reference_number: string;
 
-        case 'close':
-            return (
-                <svg {...props}>
-                    <path d="m6 6 12 12M18 6 6 18" />
-                </svg>
-            );
+    notes: string;
+}
 
-        case 'info':
-            return (
-                <svg {...props}>
-                    <circle
-                        cx="12"
-                        cy="12"
-                        r="9"
-                    />
+const money =
+    new Intl.NumberFormat(
+        'en-GB',
+        {
+            style: 'currency',
+            currency: 'LKR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        },
+    );
 
-                    <path d="M12 11v5M12 8h.01" />
-                </svg>
-            );
+const styles = `
+#supplier-payment-modal
+.spm-list {
+    display:flex!important;
+    flex-direction:column!important;
+    gap:10px!important;
+}
 
-        case 'receipt':
-            return (
-                <svg {...props}>
-                    <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
-                    <path d="M9 8h6M9 12h6M9 16h4" />
-                </svg>
-            );
+#supplier-payment-modal
+.spm-line {
+    display:grid!important;
+    grid-template-columns:
+        minmax(130px,.8fr)
+        minmax(130px,.7fr)
+        minmax(170px,1.1fr)
+        42px!important;
+    gap:8px!important;
+    align-items:end!important;
+    padding:10px!important;
+    background:#f8faf9!important;
+    border:1px solid #dfe6e1!important;
+    border-radius:9px!important;
+}
 
-        case 'save':
-            return (
-                <svg {...props}>
-                    <path d="M5 3h11l3 3v15H5Z" />
-                    <path d="M8 3v6h8V3M8 21v-7h8v7" />
-                </svg>
-            );
+#supplier-payment-modal
+.spm-field {
+    display:flex!important;
+    min-width:0!important;
+    flex-direction:column!important;
+    gap:5px!important;
+}
 
-        default:
-            return (
-                <svg {...props}>
-                    <rect
-                        x="3"
-                        y="6"
-                        width="18"
-                        height="12"
-                        rx="2"
-                    />
+#supplier-payment-modal
+.spm-field span {
+    color:#344054!important;
+    font-size:10px!important;
+    font-weight:800!important;
+}
 
-                    <circle
-                        cx="12"
-                        cy="12"
-                        r="2.5"
-                    />
+#supplier-payment-modal
+.spm-field input,
+#supplier-payment-modal
+.spm-field select {
+    width:100%!important;
+    min-width:0!important;
+    height:40px!important;
+    padding:0 9px!important;
+    color:#101828!important;
+    font-size:12px!important;
+    font-weight:650!important;
+    background:#fff!important;
+    border:1px solid #aebdb2!important;
+    border-radius:7px!important;
+    outline:none!important;
+}
 
-                    <path d="M7 9h.01M17 15h.01" />
-                </svg>
-            );
+#supplier-payment-modal
+.spm-remove {
+    display:grid!important;
+    width:40px!important;
+    height:40px!important;
+    place-items:center!important;
+    padding:0!important;
+    color:#b42318!important;
+    background:#fef3f2!important;
+    border:1px solid #efbbb6!important;
+    border-radius:7px!important;
+    cursor:pointer!important;
+}
+
+#supplier-payment-modal
+.spm-add {
+    display:inline-flex!important;
+    min-height:38px!important;
+    align-items:center!important;
+    justify-content:center!important;
+    margin-top:9px!important;
+    padding:7px 11px!important;
+    color:#166534!important;
+    font-size:11px!important;
+    font-weight:800!important;
+    background:#f0fdf4!important;
+    border:1px solid #b8dfc3!important;
+    border-radius:8px!important;
+    cursor:pointer!important;
+}
+
+#supplier-payment-modal
+.spm-summary {
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;
+    margin-top:12px!important;
+}
+
+#supplier-payment-modal
+.spm-summary div {
+    display:flex!important;
+    min-height:66px!important;
+    flex-direction:column!important;
+    justify-content:center!important;
+    gap:3px!important;
+    padding:9px 10px!important;
+    background:#fff!important;
+    border:1px solid #dfe6e1!important;
+    border-radius:8px!important;
+}
+
+#supplier-payment-modal
+.spm-summary span {
+    color:#667085!important;
+    font-size:9px!important;
+    font-weight:800!important;
+    text-transform:uppercase!important;
+}
+
+#supplier-payment-modal
+.spm-summary strong {
+    color:#101828!important;
+    font-size:14px!important;
+    font-weight:900!important;
+}
+
+#supplier-payment-modal
+.spm-summary .paid strong {
+    color:#166534!important;
+}
+
+#supplier-payment-modal
+.spm-summary .remaining strong {
+    color:#b54708!important;
+}
+
+@media(max-width:800px) {
+    #supplier-payment-modal
+    .spm-line {
+        grid-template-columns:
+            repeat(2,minmax(0,1fr))!important;
     }
+
+    #supplier-payment-modal
+    .spm-remove {
+        width:100%!important;
+        grid-column:1/-1!important;
+    }
+}
+
+@media(max-width:520px) {
+    #supplier-payment-modal
+    .spm-line,
+    #supplier-payment-modal
+    .spm-summary {
+        grid-template-columns:1fr!important;
+    }
+}
+`;
+
+function createLine(
+    id: number,
+    amount = '',
+): EditablePaymentLine {
+    return {
+        id,
+
+        payment_method:
+            'cash',
+
+        amount,
+
+        reference_number:
+            '',
+
+        notes:
+            '',
+    };
 }
 
 function parsePaymentMethod(
     value: string,
 ): SupplierPaymentMethod {
-    if (value === 'card') {
+    if (
+        value === 'card'
+    ) {
         return 'card';
     }
 
-    if (value === 'bank_transfer') {
+    if (
+        value
+        === 'bank_transfer'
+    ) {
         return 'bank_transfer';
     }
 
-    if (value === 'cheque') {
+    if (
+        value === 'cheque'
+    ) {
         return 'cheque';
     }
 
@@ -158,208 +271,356 @@ export default function RecordSupplierPaymentModal({
     onSubmit,
 }: RecordSupplierPaymentModalProps) {
     const [
-        amountInput,
-        setAmountInput,
-    ] = useState('');
-
-    const [
-        paymentMethod,
-        setPaymentMethod,
-    ] = useState<SupplierPaymentMethod>(
-        'cash',
-    );
-
-    const [
-        referenceNumber,
-        setReferenceNumber,
-    ] = useState('');
-
-    const [
-        notes,
-        setNotes,
-    ] = useState('');
+        lines,
+        setLines,
+    ] =
+        useState<
+            EditablePaymentLine[]
+        >(
+            [],
+        );
 
     const [
         localError,
         setLocalError,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
-    const amountRef =
-        useRef<HTMLInputElement | null>(
-            null,
+    const nextIdRef =
+        useRef(
+            2,
         );
 
     const onCloseRef =
-        useRef(onClose);
-
-    const isSubmittingRef =
-        useRef(isSubmitting);
-
-    useEffect(() => {
-        onCloseRef.current = onClose;
-    }, [onClose]);
-
-    useEffect(() => {
-        isSubmittingRef.current =
-            isSubmitting;
-    }, [isSubmitting]);
-
-    useEffect(() => {
-        if (!purchase) {
-            return;
-        }
-
-        setAmountInput(
-            String(
-                purchase.due_amount,
-            ),
+        useRef(
+            onClose,
         );
 
-        setPaymentMethod('cash');
-        setReferenceNumber('');
-        setNotes('');
-        setLocalError('');
-    }, [purchase]);
+    const submittingRef =
+        useRef(
+            isSubmitting,
+        );
 
-    useEffect(() => {
-        if (!purchase) {
-            return;
-        }
+    useEffect(
+        () => {
+            onCloseRef.current =
+                onClose;
+        },
+        [
+            onClose,
+        ],
+    );
 
-        const oldOverflow =
-            document.body.style.overflow;
+    useEffect(
+        () => {
+            submittingRef.current =
+                isSubmitting;
+        },
+        [
+            isSubmitting,
+        ],
+    );
 
-        const oldFocus =
-            document.activeElement
-                instanceof HTMLElement
-                ? document.activeElement
-                : null;
-
-        document.body.style.overflow =
-            'hidden';
-
-        const timer =
-            window.setTimeout(
-                () => {
-                    amountRef.current
-                        ?.focus();
-                },
-                80,
-            );
-
-        const handleKeyDown = (
-            event: KeyboardEvent,
-        ): void => {
-            if (
-                event.key === 'Escape'
-                && !isSubmittingRef.current
-            ) {
-                onCloseRef.current();
+    useEffect(
+        () => {
+            if (!purchase) {
+                return;
             }
-        };
 
-        window.addEventListener(
-            'keydown',
-            handleKeyDown,
-        );
+            setLines([
+                createLine(
+                    1,
+                    String(
+                        purchase
+                            .due_amount,
+                    ),
+                ),
+            ]);
 
-        return () => {
-            window.clearTimeout(timer);
+            nextIdRef.current =
+                2;
+
+            setLocalError(
+                '',
+            );
+        },
+        [
+            purchase,
+        ],
+    );
+
+    useEffect(
+        () => {
+            if (!purchase) {
+                return;
+            }
+
+            const oldOverflow =
+                document.body
+                    .style
+                    .overflow;
 
             document.body.style.overflow =
-                oldOverflow;
+                'hidden';
 
-            window.removeEventListener(
+            const handleKeyDown =
+                (
+                    event:
+                        KeyboardEvent,
+                ): void => {
+                    if (
+                        event.key
+                        === 'Escape'
+                        && !submittingRef
+                            .current
+                    ) {
+                        onCloseRef
+                            .current();
+                    }
+                };
+
+            window.addEventListener(
                 'keydown',
                 handleKeyDown,
             );
 
-            oldFocus?.focus();
-        };
-    }, [purchase]);
+            return () => {
+                document.body.style.overflow =
+                    oldOverflow;
 
-    const amount =
+                window.removeEventListener(
+                    'keydown',
+                    handleKeyDown,
+                );
+            };
+        },
+        [
+            purchase,
+        ],
+    );
+
+    const currentDue =
         Number(
-            amountInput || 0,
+            purchase
+                ?.due_amount
+            ?? 0,
         );
 
-    const remaining =
+    const totalPayment =
         useMemo(
-            () => {
-                if (!purchase) {
-                    return 0;
-                }
+            () =>
+                lines.reduce(
+                    (
+                        total,
+                        line,
+                    ) => {
+                        const amount =
+                            Number(
+                                line
+                                    .amount
+                                || 0,
+                            );
 
-                return Math.max(
+                        return total
+                            + (
+                                Number
+                                    .isFinite(
+                                        amount,
+                                    )
+                                    ? amount
+                                    : 0
+                            );
+                    },
                     0,
-                    Number(
-                        purchase.due_amount,
-                    )
-                    - (
-                        Number.isFinite(
-                            amount,
-                        )
-                            ? amount
-                            : 0
-                    ),
-                );
-            },
+                ),
             [
-                purchase,
-                amount,
+                lines,
             ],
+        );
+
+    const remainingDue =
+        Math.max(
+            0,
+            currentDue
+            - totalPayment,
         );
 
     if (
         !purchase
-        || typeof document === 'undefined'
+        || typeof document
+        === 'undefined'
     ) {
         return null;
     }
 
-    const handleSubmit = (
-        event:
-            FormEvent<HTMLFormElement>,
-    ): void => {
-        event.preventDefault();
-
-        if (
-            !Number.isFinite(amount)
-            || amount <= 0
-            || amount
-            > Number(
-                purchase.due_amount,
-            )
-        ) {
-            setLocalError(
-                `Enter an amount between ${money.format(0.01)} and ${money.format(Number(purchase.due_amount))}.`,
+    const updateLine =
+        (
+            id: number,
+            changes:
+                Partial<
+                    EditablePaymentLine
+                >,
+        ): void => {
+            setLines(
+                (
+                    current,
+                ) =>
+                    current.map(
+                        (
+                            line,
+                        ) =>
+                            line.id
+                                === id
+                                ? {
+                                    ...line,
+                                    ...changes,
+                                }
+                                : line,
+                    ),
             );
 
-            return;
-        }
+            setLocalError(
+                '',
+            );
+        };
 
-        setLocalError('');
+    const addLine =
+        (): void => {
+            setLines(
+                (
+                    current,
+                ) => [
+                        ...current,
 
-        onSubmit({
-            amount,
+                        createLine(
+                            nextIdRef
+                                .current++,
+                        ),
+                    ],
+            );
+        };
 
-            payment_method:
-                paymentMethod,
+    const removeLine =
+        (
+            id: number,
+        ): void => {
+            setLines(
+                (
+                    current,
+                ) =>
+                    current.filter(
+                        (
+                            line,
+                        ) =>
+                            line.id
+                            !== id,
+                    ),
+            );
+        };
 
-            reference_number:
-                referenceNumber.trim(),
+    const handleSubmit =
+        (
+            event:
+                FormEvent<
+                    HTMLFormElement
+                >,
+        ): void => {
+            event.preventDefault();
 
-            notes:
-                notes.trim(),
-        });
-    };
+            if (
+                lines.length
+                === 0
+            ) {
+                setLocalError(
+                    'Add at least one payment method.',
+                );
+
+                return;
+            }
+
+            const payments:
+                SupplierPaymentLineInput[] =
+                lines.map(
+                    (
+                        line,
+                    ) => ({
+                        payment_method:
+                            line
+                                .payment_method,
+
+                        amount:
+                            Number(
+                                line
+                                    .amount
+                                || 0,
+                            ),
+
+                        reference_number:
+                            line
+                                .reference_number
+                                .trim(),
+
+                        notes:
+                            line
+                                .notes
+                                .trim(),
+                    }),
+                );
+
+            if (
+                payments.some(
+                    (
+                        payment,
+                    ) =>
+                        !Number
+                            .isFinite(
+                                payment.amount,
+                            )
+                        || payment
+                            .amount
+                        <= 0,
+                )
+            ) {
+                setLocalError(
+                    'Every payment line must have an amount greater than zero.',
+                );
+
+                return;
+            }
+
+            if (
+                totalPayment
+                > currentDue
+                + 0.01
+            ) {
+                setLocalError(
+                    `The combined payment cannot exceed ${money.format(
+                        currentDue,
+                    )}.`,
+                );
+
+                return;
+            }
+
+            onSubmit({
+                payments,
+            });
+        };
 
     return createPortal(
         <div id="supplier-payment-modal">
+            <style>
+                {styles}
+            </style>
+
             <div
                 className="apm-backdrop"
                 role="presentation"
-                onMouseDown={(event) => {
+                onMouseDown={(
+                    event,
+                ) => {
                     if (
                         event.target
                         === event.currentTarget
@@ -374,362 +635,313 @@ export default function RecordSupplierPaymentModal({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="payment-title"
-                    aria-describedby="payment-description"
                 >
                     <header className="apm-header">
-                        <div className="apm-head-main">
-                            <span className="apm-head-icon">
-                                <Icon name="cash" />
+                        <div className="apm-head-copy">
+                            <span className="apm-kicker">
+                                Record Supplier Payment
                             </span>
 
-                            <div className="apm-head-copy">
-                                <span className="apm-kicker">
-                                    Record Supplier Payment
-                                </span>
+                            <h2
+                                id="payment-title"
+                                className="apm-title"
+                            >
+                                {
+                                    purchase
+                                        .purchase_number
+                                }
+                            </h2>
 
-                                <h2
-                                    id="payment-title"
-                                    className="apm-title"
-                                >
-                                    {
-                                        purchase
-                                            .purchase_number
-                                    }
-                                </h2>
-
-                                <p className="apm-subtitle">
-                                    {
-                                        purchase
-                                            .supplier
-                                            .name
-                                    }
-                                </p>
-                            </div>
+                            <p className="apm-subtitle">
+                                {
+                                    purchase
+                                        .supplier
+                                        .name
+                                }
+                            </p>
                         </div>
 
                         <button
                             type="button"
                             className="apm-close"
-                            aria-label="Close supplier payment form"
-                            disabled={isSubmitting}
-                            onClick={onClose}
+                            aria-label="Close payment form"
+                            disabled={
+                                isSubmitting
+                            }
+                            onClick={
+                                onClose
+                            }
                         >
-                            <Icon name="close" />
+                            ×
                         </button>
                     </header>
 
                     <form
                         className="apm-form"
                         noValidate
-                        onSubmit={handleSubmit}
+                        onSubmit={
+                            handleSubmit
+                        }
                     >
                         <div className="apm-body">
-                            <p
-                                id="payment-description"
-                                className="apm-help"
-                            >
-                                <Icon name="info" />
-
-                                Record the amount paid to
-                                the supplier. The balance
-                                updates after saving.
-                            </p>
-
                             {(localError
                                 || errorMessage) && (
                                     <div
                                         className="apm-alert"
                                         role="alert"
                                     >
-                                        <Icon name="alert" />
-
-                                        {localError
-                                            || errorMessage}
+                                        {
+                                            localError
+                                            || errorMessage
+                                        }
                                     </div>
                                 )}
 
-                            <div className="apm-total warning">
+                            <div className="apm-total">
                                 <div>
                                     <span>
-                                        Outstanding Supplier Due
+                                        Current Supplier Due
                                     </span>
 
                                     <strong>
                                         {money.format(
-                                            Number(
-                                                purchase
-                                                    .due_amount,
-                                            ),
+                                            currentDue,
                                         )}
                                     </strong>
                                 </div>
-
-                                <Icon name="cash" />
                             </div>
 
                             <section className="apm-section">
                                 <div>
                                     <h3>
-                                        Payment Information
+                                        Payment Methods
                                     </h3>
 
                                     <p>
-                                        Enter the amount and
-                                        payment method used.
+                                        Add one or more methods for this payment.
                                     </p>
                                 </div>
 
-                                <div className="apm-grid">
-                                    <label className="apm-field full">
-                                        <span className="apm-label">
-                                            Payment Amount
-
-                                            <span className="apm-required">
-                                                {' '}*
-                                            </span>
-                                        </span>
-
-                                        <span className="apm-wrap">
-                                            <span className="apm-icon">
-                                                <Icon name="cash" />
-                                            </span>
-
-                                            <input
-                                                ref={amountRef}
-                                                type="number"
-                                                className="apm-input"
-                                                min="0.01"
-                                                max={
-                                                    Number(
-                                                        purchase
-                                                            .due_amount,
-                                                    )
+                                <div className="spm-list">
+                                    {lines.map(
+                                        (
+                                            line,
+                                        ) => (
+                                            <div
+                                                key={
+                                                    line.id
                                                 }
-                                                step="0.01"
-                                                inputMode="decimal"
-                                                value={
-                                                    amountInput
-                                                }
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                placeholder="Enter payment amount"
-                                                onChange={(
-                                                    event,
-                                                ) => {
-                                                    setAmountInput(
-                                                        event
-                                                            .target
-                                                            .value,
-                                                    );
-
-                                                    setLocalError(
-                                                        '',
-                                                    );
-                                                }}
-                                            />
-                                        </span>
-
-                                        <div className="apm-amount-row">
-                                            <span>
-                                                Maximum:
-                                                {' '}
-
-                                                {money.format(
-                                                    Number(
-                                                        purchase
-                                                            .due_amount,
-                                                    ),
-                                                )}
-                                            </span>
-
-                                            <button
-                                                type="button"
-                                                className="apm-use-full"
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                onClick={() => {
-                                                    setAmountInput(
-                                                        String(
-                                                            purchase
-                                                                .due_amount,
-                                                        ),
-                                                    );
-
-                                                    setLocalError(
-                                                        '',
-                                                    );
-                                                }}
+                                                className="spm-line"
                                             >
-                                                Use Full Balance
-                                            </button>
-                                        </div>
-                                    </label>
+                                                <label className="spm-field">
+                                                    <span>
+                                                        Method
+                                                    </span>
 
-                                    <label className="apm-field">
-                                        <span className="apm-label">
-                                            Payment Method
+                                                    <select
+                                                        value={
+                                                            line
+                                                                .payment_method
+                                                        }
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        onChange={(
+                                                            event,
+                                                        ) => {
+                                                            updateLine(
+                                                                line.id,
+                                                                {
+                                                                    payment_method:
+                                                                        parsePaymentMethod(
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        ),
+                                                                },
+                                                            );
+                                                        }}
+                                                    >
+                                                        <option value="cash">
+                                                            Cash
+                                                        </option>
 
-                                            <span className="apm-required">
-                                                {' '}*
-                                            </span>
+                                                        <option value="card">
+                                                            Card
+                                                        </option>
+
+                                                        <option value="bank_transfer">
+                                                            Bank Transfer
+                                                        </option>
+
+                                                        <option value="cheque">
+                                                            Cheque
+                                                        </option>
+                                                    </select>
+                                                </label>
+
+                                                <label className="spm-field">
+                                                    <span>
+                                                        Amount
+                                                    </span>
+
+                                                    <input
+                                                        type="number"
+                                                        min="0.01"
+                                                        max={
+                                                            currentDue
+                                                        }
+                                                        step="0.01"
+                                                        inputMode="decimal"
+                                                        value={
+                                                            line
+                                                                .amount
+                                                        }
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        onChange={(
+                                                            event,
+                                                        ) => {
+                                                            updateLine(
+                                                                line.id,
+                                                                {
+                                                                    amount:
+                                                                        event
+                                                                            .target
+                                                                            .value,
+                                                                },
+                                                            );
+                                                        }}
+                                                    />
+                                                </label>
+
+                                                <label className="spm-field">
+                                                    <span>
+                                                        Reference
+                                                        {' '}
+                                                        (Optional)
+                                                    </span>
+
+                                                    <input
+                                                        type="text"
+                                                        maxLength={190}
+                                                        value={
+                                                            line
+                                                                .reference_number
+                                                        }
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        placeholder={
+                                                            line
+                                                                .payment_method
+                                                                === 'cheque'
+                                                                ? 'Cheque number'
+                                                                : 'Receipt / transfer reference'
+                                                        }
+                                                        onChange={(
+                                                            event,
+                                                        ) => {
+                                                            updateLine(
+                                                                line.id,
+                                                                {
+                                                                    reference_number:
+                                                                        event
+                                                                            .target
+                                                                            .value,
+                                                                },
+                                                            );
+                                                        }}
+                                                    />
+                                                </label>
+
+                                                <button
+                                                    type="button"
+                                                    className="spm-remove"
+                                                    aria-label="Remove payment line"
+                                                    disabled={
+                                                        isSubmitting
+                                                    }
+                                                    onClick={() => {
+                                                        removeLine(
+                                                            line.id,
+                                                        );
+                                                    }}
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ),
+                                    )}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="spm-add"
+                                    disabled={
+                                        isSubmitting
+                                        || lines
+                                            .length
+                                        >= 10
+                                    }
+                                    onClick={
+                                        addLine
+                                    }
+                                >
+                                    + Add Payment Method
+                                </button>
+
+                                <div className="spm-summary">
+                                    <div>
+                                        <span>
+                                            Current Due
                                         </span>
 
-                                        <span className="apm-wrap">
-                                            <span className="apm-icon">
-                                                <Icon name="cash" />
-                                            </span>
+                                        <strong>
+                                            {money.format(
+                                                currentDue,
+                                            )}
+                                        </strong>
+                                    </div>
 
-                                            <select
-                                                className="apm-select"
-                                                value={
-                                                    paymentMethod
-                                                }
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                onChange={(
-                                                    event,
-                                                ) => {
-                                                    setPaymentMethod(
-                                                        parsePaymentMethod(
-                                                            event
-                                                                .target
-                                                                .value,
-                                                        ),
-                                                    );
-                                                }}
-                                            >
-                                                <option value="cash">
-                                                    Cash
-                                                </option>
-
-                                                <option value="card">
-                                                    Card
-                                                </option>
-
-                                                <option value="bank_transfer">
-                                                    Bank Transfer
-                                                </option>
-
-                                                <option value="cheque">
-                                                    Cheque
-                                                </option>
-                                            </select>
-                                        </span>
-                                    </label>
-
-                                    <label className="apm-field">
-                                        <span className="apm-label">
-                                            Reference Number
-
-                                            <span className="apm-optional">
-                                                Optional
-                                            </span>
+                                    <div className="paid">
+                                        <span>
+                                            Paying Now
                                         </span>
 
-                                        <span className="apm-wrap">
-                                            <span className="apm-icon">
-                                                <Icon name="receipt" />
-                                            </span>
+                                        <strong>
+                                            {money.format(
+                                                totalPayment,
+                                            )}
+                                        </strong>
+                                    </div>
 
-                                            <input
-                                                type="text"
-                                                className="apm-input"
-                                                value={
-                                                    referenceNumber
-                                                }
-                                                maxLength={190}
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                placeholder="Receipt, transfer or cheque reference"
-                                                onChange={(
-                                                    event,
-                                                ) => {
-                                                    setReferenceNumber(
-                                                        event
-                                                            .target
-                                                            .value,
-                                                    );
-                                                }}
-                                            />
-                                        </span>
-                                    </label>
-
-                                    <label className="apm-field full">
-                                        <span className="apm-label">
-                                            Notes
-
-                                            <span className="apm-optional">
-                                                Optional
-                                            </span>
+                                    <div className="remaining">
+                                        <span>
+                                            Remaining Due
                                         </span>
 
-                                        <textarea
-                                            className="apm-textarea"
-                                            rows={3}
-                                            value={notes}
-                                            maxLength={1000}
-                                            disabled={
-                                                isSubmitting
-                                            }
-                                            placeholder="Internal notes about this payment"
-                                            onChange={(
-                                                event,
-                                            ) => {
-                                                setNotes(
-                                                    event
-                                                        .target
-                                                        .value,
-                                                );
-                                            }}
-                                        />
-                                    </label>
+                                        <strong>
+                                            {money.format(
+                                                remainingDue,
+                                            )}
+                                        </strong>
+                                    </div>
                                 </div>
                             </section>
-
-                            <div className="apm-summary">
-                                <div>
-                                    <span>
-                                        Payment Being Recorded
-                                    </span>
-
-                                    <strong>
-                                        {money.format(
-                                            Number.isFinite(
-                                                amount,
-                                            )
-                                                ? Math.max(
-                                                    0,
-                                                    amount,
-                                                )
-                                                : 0,
-                                        )}
-                                    </strong>
-                                </div>
-
-                                <div className="remaining">
-                                    <span>
-                                        Balance After Payment
-                                    </span>
-
-                                    <strong>
-                                        {money.format(
-                                            remaining,
-                                        )}
-                                    </strong>
-                                </div>
-                            </div>
                         </div>
 
                         <footer className="apm-actions">
                             <button
                                 type="button"
                                 className="apm-button apm-cancel"
-                                disabled={isSubmitting}
-                                onClick={onClose}
+                                disabled={
+                                    isSubmitting
+                                }
+                                onClick={
+                                    onClose
+                                }
                             >
                                 Cancel
                             </button>
@@ -737,17 +949,13 @@ export default function RecordSupplierPaymentModal({
                             <button
                                 type="submit"
                                 className="apm-button apm-submit"
-                                disabled={isSubmitting}
+                                disabled={
+                                    isSubmitting
+                                }
                             >
-                                {isSubmitting ? (
-                                    <span className="apm-spinner" />
-                                ) : (
-                                    <Icon name="save" />
-                                )}
-
                                 {isSubmitting
-                                    ? 'Recording Payment...'
-                                    : 'Record Payment'}
+                                    ? 'Saving Payment...'
+                                    : 'Save Payment'}
                             </button>
                         </footer>
                     </form>

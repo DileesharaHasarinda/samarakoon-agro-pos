@@ -9,6 +9,8 @@ import type {
   ProductListResponse,
   ProductOptionsResponse,
   ProductResponse,
+  UpdateStockBatchResponse,
+  UpdateStockBatchValues,
 } from "../types/product";
 
 function buildProductQuery(filters: ProductListFilters): string {
@@ -54,6 +56,21 @@ function buildProductPayload(values: ProductInput) {
 
       is_active: variant.is_active,
     })),
+  };
+}
+
+function buildStockBatchPayload(values: UpdateStockBatchValues) {
+  return {
+    selling_price: Number(values.selling_price),
+
+    secondary_selling_price:
+      values.secondary_selling_price === null
+        ? null
+        : Number(values.secondary_selling_price),
+
+    available_quantity: Number(values.available_quantity),
+
+    reason: values.reason.trim() || null,
   };
 }
 
@@ -127,5 +144,18 @@ export function deleteProduct(
   return apiRequest(`/products/${productId}`, {
     method: "DELETE",
     token,
+  });
+}
+
+export function updateStockBatch(
+  token: string,
+  stockBatchId: number,
+  values: UpdateStockBatchValues
+): Promise<UpdateStockBatchResponse> {
+  return apiRequest(`/stock-batches/${stockBatchId}`, {
+    method: "PATCH",
+    token,
+
+    body: JSON.stringify(buildStockBatchPayload(values)),
   });
 }

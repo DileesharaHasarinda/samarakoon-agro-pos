@@ -18,6 +18,13 @@ class PosStockUpdated implements ShouldBroadcastNow
      *     product_id: int,
      *     product_variant_id: int|null,
      *     available_quantity: float,
+     *     selling_price?: float|null,
+     *     secondary_selling_price?: float|null,
+     *     is_dual_unit?: bool,
+     *     primary_unit?: string|null,
+     *     stock_unit?: string|null,
+     *     secondary_unit?: string|null,
+     *     conversion_factor?: float|null,
      *     updated_at: string|null
      * }> $batches
      */
@@ -25,11 +32,10 @@ class PosStockUpdated implements ShouldBroadcastNow
         public readonly int $saleId,
         public readonly string $saleNumber,
         public readonly array $batches,
+        public readonly string $source = 'sale',
     ) {}
 
     /**
-     * Broadcast only to authenticated POS users.
-     *
      * @return array<int, PrivateChannel>
      */
     public function broadcastOn(): array
@@ -41,24 +47,17 @@ class PosStockUpdated implements ShouldBroadcastNow
         ];
     }
 
-    /**
-     * Event name received by the desktop application.
-     */
     public function broadcastAs(): string
     {
         return 'stock.updated';
     }
 
     /**
-     * Keep the message deliberately small.
+     * The payload stays intentionally small.
      *
-     * We do NOT send:
-     * - cart information
-     * - customer information
-     * - payment information
-     * - entire sale information
-     *
-     * Only the new stock quantities are sent.
+     * Normal sales may still send only stock quantities.
+     * Admin stock-batch edits can additionally send prices so
+     * cashier carts can immediately adopt the new price.
      *
      * @return array<string, mixed>
      */
@@ -70,6 +69,9 @@ class PosStockUpdated implements ShouldBroadcastNow
 
             'sale_number' =>
             $this->saleNumber,
+
+            'source' =>
+            $this->source,
 
             'batches' =>
             $this->batches,

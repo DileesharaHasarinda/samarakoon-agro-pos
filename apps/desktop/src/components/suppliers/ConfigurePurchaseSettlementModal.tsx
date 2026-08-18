@@ -17,13 +17,19 @@ import type {
     ConfigurePurchaseSettlementInput,
     PurchaseSettlementType,
     SupplierPayable,
+    SupplierPaymentLineInput,
     SupplierPaymentMethod,
 } from '../../types/supplierPayable';
 
 interface ConfigurePurchaseSettlementModalProps {
-    purchase: SupplierPayable | null;
+    purchase:
+    SupplierPayable
+    | null;
+
     isSubmitting: boolean;
+
     errorMessage: string;
+
     onClose: () => void;
 
     onSubmit: (
@@ -32,149 +38,227 @@ interface ConfigurePurchaseSettlementModalProps {
     ) => void;
 }
 
-const money = new Intl.NumberFormat(
-    'en-GB',
-    {
-        style: 'currency',
-        currency: 'LKR',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    },
-);
+interface EditablePaymentLine {
+    id: number;
 
-type IconName =
-    | 'alert'
-    | 'calendar'
-    | 'cash'
-    | 'close'
-    | 'info'
-    | 'receipt'
-    | 'save';
+    payment_method:
+    SupplierPaymentMethod;
 
-function Icon({
-    name,
-}: {
-    name: IconName;
-}) {
-    const props = {
-        viewBox: '0 0 24 24',
-        fill: 'none',
-        stroke: 'currentColor',
-        strokeWidth: 2,
-        strokeLinecap: 'round' as const,
-        strokeLinejoin: 'round' as const,
-        'aria-hidden': true,
-    };
+    amount: string;
 
-    switch (name) {
-        case 'alert':
-            return (
-                <svg {...props}>
-                    <path d="M10.3 3.4 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.4a2 2 0 0 0-3.4 0Z" />
-                    <path d="M12 9v4M12 17h.01" />
-                </svg>
-            );
+    reference_number: string;
 
-        case 'calendar':
-            return (
-                <svg {...props}>
-                    <rect
-                        x="3"
-                        y="5"
-                        width="18"
-                        height="16"
-                        rx="2"
-                    />
+    notes: string;
+}
 
-                    <path d="M16 3v4M8 3v4M3 11h18" />
-                </svg>
-            );
+const money =
+    new Intl.NumberFormat(
+        'en-GB',
+        {
+            style: 'currency',
+            currency: 'LKR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        },
+    );
 
-        case 'cash':
-            return (
-                <svg {...props}>
-                    <rect
-                        x="3"
-                        y="6"
-                        width="18"
-                        height="12"
-                        rx="2"
-                    />
+const styles = `
+#supplier-settlement-modal
+.spm-list {
+    display:flex!important;
+    flex-direction:column!important;
+    gap:10px!important;
+    margin-top:10px!important;
+}
 
-                    <circle
-                        cx="12"
-                        cy="12"
-                        r="2.5"
-                    />
+#supplier-settlement-modal
+.spm-line {
+    display:grid!important;
+    grid-template-columns:
+        minmax(130px,.8fr)
+        minmax(130px,.7fr)
+        minmax(170px,1.1fr)
+        42px!important;
+    gap:8px!important;
+    align-items:end!important;
+    padding:10px!important;
+    background:#f8faf9!important;
+    border:1px solid #dfe6e1!important;
+    border-radius:9px!important;
+}
 
-                    <path d="M7 9h.01M17 15h.01" />
-                </svg>
-            );
+#supplier-settlement-modal
+.spm-field {
+    display:flex!important;
+    min-width:0!important;
+    flex-direction:column!important;
+    gap:5px!important;
+}
 
-        case 'close':
-            return (
-                <svg {...props}>
-                    <path d="m6 6 12 12M18 6 6 18" />
-                </svg>
-            );
+#supplier-settlement-modal
+.spm-field span {
+    color:#344054!important;
+    font-size:10px!important;
+    font-weight:800!important;
+}
 
-        case 'info':
-            return (
-                <svg {...props}>
-                    <circle
-                        cx="12"
-                        cy="12"
-                        r="9"
-                    />
+#supplier-settlement-modal
+.spm-field input,
+#supplier-settlement-modal
+.spm-field select {
+    width:100%!important;
+    min-width:0!important;
+    height:40px!important;
+    padding:0 9px!important;
+    color:#101828!important;
+    font-size:12px!important;
+    font-weight:650!important;
+    background:#fff!important;
+    border:1px solid #aebdb2!important;
+    border-radius:7px!important;
+    outline:none!important;
+}
 
-                    <path d="M12 11v5M12 8h.01" />
-                </svg>
-            );
+#supplier-settlement-modal
+.spm-remove {
+    display:grid!important;
+    width:40px!important;
+    height:40px!important;
+    place-items:center!important;
+    padding:0!important;
+    color:#b42318!important;
+    background:#fef3f2!important;
+    border:1px solid #efbbb6!important;
+    border-radius:7px!important;
+    cursor:pointer!important;
+}
 
-        case 'save':
-            return (
-                <svg {...props}>
-                    <path d="M5 3h11l3 3v15H5Z" />
-                    <path d="M8 3v6h8V3M8 21v-7h8v7" />
-                </svg>
-            );
+#supplier-settlement-modal
+.spm-add {
+    display:inline-flex!important;
+    min-height:38px!important;
+    align-items:center!important;
+    justify-content:center!important;
+    margin-top:9px!important;
+    padding:7px 11px!important;
+    color:#166534!important;
+    font-size:11px!important;
+    font-weight:800!important;
+    background:#f0fdf4!important;
+    border:1px solid #b8dfc3!important;
+    border-radius:8px!important;
+    cursor:pointer!important;
+}
 
-        default:
-            return (
-                <svg {...props}>
-                    <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
-                    <path d="M9 8h6M9 12h6M9 16h4" />
-                </svg>
-            );
+#supplier-settlement-modal
+.spm-summary {
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;
+    margin-top:10px!important;
+}
+
+#supplier-settlement-modal
+.spm-summary div {
+    display:flex!important;
+    min-height:64px!important;
+    flex-direction:column!important;
+    justify-content:center!important;
+    gap:3px!important;
+    padding:9px 10px!important;
+    background:#fff!important;
+    border:1px solid #dfe6e1!important;
+    border-radius:8px!important;
+}
+
+#supplier-settlement-modal
+.spm-summary span {
+    color:#667085!important;
+    font-size:9px!important;
+    font-weight:800!important;
+    text-transform:uppercase!important;
+}
+
+#supplier-settlement-modal
+.spm-summary strong {
+    color:#101828!important;
+    font-size:14px!important;
+    font-weight:900!important;
+}
+
+#supplier-settlement-modal
+.spm-summary .paid strong {
+    color:#166534!important;
+}
+
+#supplier-settlement-modal
+.spm-summary .due strong {
+    color:#b54708!important;
+}
+
+@media(max-width:850px) {
+    #supplier-settlement-modal
+    .spm-line {
+        grid-template-columns:
+            repeat(2,minmax(0,1fr))!important;
+    }
+
+    #supplier-settlement-modal
+    .spm-remove {
+        width:100%!important;
+        grid-column:1/-1!important;
     }
 }
 
-function parseSettlementType(
-    value: string,
-): PurchaseSettlementType {
-    if (value === 'partial') {
-        return 'partial';
+@media(max-width:560px) {
+    #supplier-settlement-modal
+    .spm-line,
+    #supplier-settlement-modal
+    .spm-summary {
+        grid-template-columns:1fr!important;
     }
+}
+`;
 
-    if (value === 'due') {
-        return 'due';
-    }
+function createLine(
+    id: number,
+    amount = '',
+): EditablePaymentLine {
+    return {
+        id,
 
-    return 'full';
+        payment_method:
+            'cash',
+
+        amount,
+
+        reference_number:
+            '',
+
+        notes:
+            '',
+    };
 }
 
 function parsePaymentMethod(
     value: string,
 ): SupplierPaymentMethod {
-    if (value === 'card') {
+    if (
+        value === 'card'
+    ) {
         return 'card';
     }
 
-    if (value === 'bank_transfer') {
+    if (
+        value
+        === 'bank_transfer'
+    ) {
         return 'bank_transfer';
     }
 
-    if (value === 'cheque') {
+    if (
+        value === 'cheque'
+    ) {
         return 'cheque';
     }
 
@@ -191,277 +275,490 @@ export default function ConfigurePurchaseSettlementModal({
     const [
         settlementType,
         setSettlementType,
-    ] = useState<PurchaseSettlementType>(
-        'full',
-    );
+    ] =
+        useState<
+            PurchaseSettlementType
+        >(
+            'full',
+        );
 
     const [
-        initialPaidInput,
-        setInitialPaidInput,
-    ] = useState('');
-
-    const [
-        paymentMethod,
-        setPaymentMethod,
-    ] = useState<SupplierPaymentMethod>(
-        'cash',
-    );
+        lines,
+        setLines,
+    ] =
+        useState<
+            EditablePaymentLine[]
+        >(
+            [],
+        );
 
     const [
         dueDate,
         setDueDate,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         paymentTerms,
         setPaymentTerms,
-    ] = useState('');
-
-    const [
-        referenceNumber,
-        setReferenceNumber,
-    ] = useState('');
-
-    const [
-        notes,
-        setNotes,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
 
     const [
         localError,
         setLocalError,
-    ] = useState('');
+    ] =
+        useState(
+            '',
+        );
+
+    const nextIdRef =
+        useRef(
+            2,
+        );
 
     const onCloseRef =
-        useRef(onClose);
-
-    const isSubmittingRef =
-        useRef(isSubmitting);
-
-    useEffect(() => {
-        onCloseRef.current = onClose;
-    }, [onClose]);
-
-    useEffect(() => {
-        isSubmittingRef.current =
-            isSubmitting;
-    }, [isSubmitting]);
-
-    useEffect(() => {
-        if (!purchase) {
-            return;
-        }
-
-        setSettlementType('full');
-
-        setInitialPaidInput(
-            String(
-                purchase.grand_total,
-            ),
+        useRef(
+            onClose,
         );
 
-        setPaymentMethod('cash');
-        setDueDate('');
-        setPaymentTerms('');
-        setReferenceNumber('');
-        setNotes('');
-        setLocalError('');
-    }, [purchase]);
+    const submittingRef =
+        useRef(
+            isSubmitting,
+        );
 
-    useEffect(() => {
-        if (!purchase) {
-            return;
-        }
+    useEffect(
+        () => {
+            onCloseRef.current =
+                onClose;
+        },
+        [
+            onClose,
+        ],
+    );
 
-        const oldOverflow =
-            document.body.style.overflow;
+    useEffect(
+        () => {
+            submittingRef.current =
+                isSubmitting;
+        },
+        [
+            isSubmitting,
+        ],
+    );
 
-        const oldFocus =
-            document.activeElement
-                instanceof HTMLElement
-                ? document.activeElement
-                : null;
-
-        document.body.style.overflow =
-            'hidden';
-
-        const handleKeyDown = (
-            event: KeyboardEvent,
-        ): void => {
-            if (
-                event.key === 'Escape'
-                && !isSubmittingRef.current
-            ) {
-                onCloseRef.current();
+    useEffect(
+        () => {
+            if (!purchase) {
+                return;
             }
-        };
 
-        window.addEventListener(
-            'keydown',
-            handleKeyDown,
-        );
+            setSettlementType(
+                'full',
+            );
 
-        return () => {
+            setLines([
+                createLine(
+                    1,
+                    String(
+                        purchase
+                            .grand_total,
+                    ),
+                ),
+            ]);
+
+            nextIdRef.current =
+                2;
+
+            setDueDate(
+                '',
+            );
+
+            setPaymentTerms(
+                '',
+            );
+
+            setLocalError(
+                '',
+            );
+        },
+        [
+            purchase,
+        ],
+    );
+
+    useEffect(
+        () => {
+            if (!purchase) {
+                return;
+            }
+
+            const oldOverflow =
+                document.body
+                    .style
+                    .overflow;
+
             document.body.style.overflow =
-                oldOverflow;
+                'hidden';
 
-            window.removeEventListener(
+            const handleKeyDown =
+                (
+                    event:
+                        KeyboardEvent,
+                ): void => {
+                    if (
+                        event.key
+                        === 'Escape'
+                        && !submittingRef
+                            .current
+                    ) {
+                        onCloseRef
+                            .current();
+                    }
+                };
+
+            window.addEventListener(
                 'keydown',
                 handleKeyDown,
             );
 
-            oldFocus?.focus();
-        };
-    }, [purchase]);
+            return () => {
+                document.body.style.overflow =
+                    oldOverflow;
 
-    const initialPaid =
+                window.removeEventListener(
+                    'keydown',
+                    handleKeyDown,
+                );
+            };
+        },
+        [
+            purchase,
+        ],
+    );
+
+    const grandTotal =
         Number(
-            initialPaidInput || 0,
+            purchase
+                ?.grand_total
+            ?? 0,
+        );
+
+    const totalPaid =
+        useMemo(
+            () =>
+                lines.reduce(
+                    (
+                        total,
+                        line,
+                    ) => {
+                        const amount =
+                            Number(
+                                line
+                                    .amount
+                                || 0,
+                            );
+
+                        return total
+                            + (
+                                Number
+                                    .isFinite(
+                                        amount,
+                                    )
+                                    ? amount
+                                    : 0
+                            );
+                    },
+                    0,
+                ),
+            [
+                lines,
+            ],
         );
 
     const remainingDue =
-        useMemo(
-            () => {
-                if (!purchase) {
-                    return 0;
-                }
-
-                if (
-                    settlementType === 'full'
-                ) {
-                    return 0;
-                }
-
-                if (
-                    settlementType === 'due'
-                ) {
-                    return Number(
-                        purchase.grand_total,
-                    );
-                }
-
-                return Math.max(
-                    0,
-                    Number(
-                        purchase.grand_total,
-                    ) - initialPaid,
-                );
-            },
-            [
-                purchase,
-                settlementType,
-                initialPaid,
-            ],
+        Math.max(
+            0,
+            grandTotal
+            - totalPaid,
         );
 
     if (
         !purchase
-        || typeof document === 'undefined'
+        || typeof document
+        === 'undefined'
     ) {
         return null;
     }
 
-    const selectSettlement = (
-        value:
-            PurchaseSettlementType,
-    ): void => {
-        setSettlementType(value);
-        setLocalError('');
+    const setType =
+        (
+            next:
+                PurchaseSettlementType,
+        ): void => {
+            setSettlementType(
+                next,
+            );
 
-        if (value === 'full') {
-            setInitialPaidInput(
-                String(
-                    purchase.grand_total,
+            setLocalError(
+                '',
+            );
+
+            if (
+                next === 'full'
+            ) {
+                setLines([
+                    createLine(
+                        1,
+                        String(
+                            purchase
+                                .grand_total,
+                        ),
+                    ),
+                ]);
+
+                nextIdRef.current =
+                    2;
+
+                setDueDate(
+                    '',
+                );
+
+                return;
+            }
+
+            if (
+                next === 'due'
+            ) {
+                setLines(
+                    [],
+                );
+
+                return;
+            }
+
+            setLines([
+                createLine(
+                    1,
+                    '',
                 ),
+            ]);
+
+            nextIdRef.current =
+                2;
+        };
+
+    const updateLine =
+        (
+            id: number,
+            changes:
+                Partial<
+                    EditablePaymentLine
+                >,
+        ): void => {
+            setLines(
+                (
+                    current,
+                ) =>
+                    current.map(
+                        (
+                            line,
+                        ) =>
+                            line.id
+                                === id
+                                ? {
+                                    ...line,
+                                    ...changes,
+                                }
+                                : line,
+                    ),
             );
 
-            setDueDate('');
-        } else if (value === 'due') {
-            setInitialPaidInput('0');
-        } else {
-            setInitialPaidInput('');
-        }
-    };
-
-    const handleSubmit = (
-        event:
-            FormEvent<HTMLFormElement>,
-    ): void => {
-        event.preventDefault();
-
-        if (
-            settlementType === 'partial'
-            && (
-                !Number.isFinite(
-                    initialPaid,
-                )
-                || initialPaid <= 0
-                || initialPaid
-                >= Number(
-                    purchase.grand_total,
-                )
-            )
-        ) {
             setLocalError(
-                'Enter an initial payment greater than zero and lower than the purchase total.',
+                '',
             );
+        };
 
-            return;
-        }
+    const addLine =
+        (): void => {
+            setLines(
+                (
+                    current,
+                ) => [
+                        ...current,
 
-        if (
-            settlementType !== 'full'
-            && !dueDate
-        ) {
-            setLocalError(
-                'Select the date by which the remaining balance must be paid.',
+                        createLine(
+                            nextIdRef
+                                .current++,
+                        ),
+                    ],
             );
+        };
 
-            return;
-        }
+    const removeLine =
+        (
+            id: number,
+        ): void => {
+            setLines(
+                (
+                    current,
+                ) =>
+                    current.filter(
+                        (
+                            line,
+                        ) =>
+                            line.id
+                            !== id,
+                    ),
+            );
+        };
 
-        setLocalError('');
+    const handleSubmit =
+        (
+            event:
+                FormEvent<
+                    HTMLFormElement
+                >,
+        ): void => {
+            event.preventDefault();
 
-        onSubmit({
-            settlement_type:
-                settlementType,
+            const payments:
+                SupplierPaymentLineInput[] =
+                lines.map(
+                    (
+                        line,
+                    ) => ({
+                        payment_method:
+                            line
+                                .payment_method,
 
-            initial_paid_amount:
-                settlementType === 'full'
-                    ? Number(
-                        purchase.grand_total,
-                    )
-                    : settlementType === 'due'
-                        ? 0
-                        : initialPaid,
+                        amount:
+                            Number(
+                                line
+                                    .amount
+                                || 0,
+                            ),
 
-            payment_method:
-                settlementType === 'due'
-                    ? null
-                    : paymentMethod,
+                        reference_number:
+                            line
+                                .reference_number
+                                .trim(),
 
-            due_date:
-                settlementType === 'full'
-                    ? ''
-                    : dueDate,
+                        notes:
+                            line
+                                .notes
+                                .trim(),
+                    }),
+                );
 
-            payment_terms:
-                paymentTerms.trim(),
+            if (
+                settlementType
+                !== 'due'
+                && payments.length
+                === 0
+            ) {
+                setLocalError(
+                    'Add at least one payment method.',
+                );
 
-            reference_number:
-                referenceNumber.trim(),
+                return;
+            }
 
-            notes:
-                notes.trim(),
-        });
-    };
+            if (
+                payments.some(
+                    (
+                        payment,
+                    ) =>
+                        !Number
+                            .isFinite(
+                                payment.amount,
+                            )
+                        || payment
+                            .amount
+                        <= 0,
+                )
+            ) {
+                setLocalError(
+                    'Every payment line must have an amount greater than zero.',
+                );
+
+                return;
+            }
+
+            if (
+                settlementType
+                === 'full'
+                && Math.abs(
+                    totalPaid
+                    - grandTotal,
+                ) > 0.01
+            ) {
+                setLocalError(
+                    `The combined payments must equal ${money.format(
+                        grandTotal,
+                    )}.`,
+                );
+
+                return;
+            }
+
+            if (
+                settlementType
+                === 'partial'
+                && (
+                    totalPaid <= 0
+                    || totalPaid
+                    >= grandTotal
+                )
+            ) {
+                setLocalError(
+                    'For a partial payment, the combined payment must be greater than zero and lower than the purchase total.',
+                );
+
+                return;
+            }
+
+            onSubmit({
+                settlement_type:
+                    settlementType,
+
+                payments:
+                    settlementType
+                        === 'due'
+                        ? []
+                        : payments,
+
+                /*
+                 * Due date is optional.
+                 */
+                due_date:
+                    settlementType
+                        === 'full'
+                        ? ''
+                        : dueDate,
+
+                payment_terms:
+                    paymentTerms
+                        .trim(),
+            });
+        };
 
     return createPortal(
         <div id="supplier-settlement-modal">
+            <style>
+                {styles}
+            </style>
+
             <div
                 className="apm-backdrop"
                 role="presentation"
-                onMouseDown={(event) => {
+                onMouseDown={(
+                    event,
+                ) => {
                     if (
                         event.target
                         === event.currentTarget
@@ -476,77 +773,65 @@ export default function ConfigurePurchaseSettlementModal({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="settlement-title"
-                    aria-describedby="settlement-description"
                 >
                     <header className="apm-header">
-                        <div className="apm-head-main">
-                            <span className="apm-head-icon">
-                                <Icon name="receipt" />
+                        <div className="apm-head-copy">
+                            <span className="apm-kicker">
+                                Supplier Settlement
                             </span>
 
-                            <div className="apm-head-copy">
-                                <span className="apm-kicker">
-                                    Supplier Settlement
-                                </span>
+                            <h2
+                                id="settlement-title"
+                                className="apm-title"
+                            >
+                                {
+                                    purchase
+                                        .purchase_number
+                                }
+                            </h2>
 
-                                <h2
-                                    id="settlement-title"
-                                    className="apm-title"
-                                >
-                                    {
-                                        purchase
-                                            .purchase_number
-                                    }
-                                </h2>
-
-                                <p className="apm-subtitle">
-                                    {
-                                        purchase
-                                            .supplier
-                                            .name
-                                    }
-                                </p>
-                            </div>
+                            <p className="apm-subtitle">
+                                {
+                                    purchase
+                                        .supplier
+                                        .name
+                                }
+                            </p>
                         </div>
 
                         <button
                             type="button"
                             className="apm-close"
                             aria-label="Close settlement form"
-                            disabled={isSubmitting}
-                            onClick={onClose}
+                            disabled={
+                                isSubmitting
+                            }
+                            onClick={
+                                onClose
+                            }
                         >
-                            <Icon name="close" />
+                            ×
                         </button>
                     </header>
 
                     <form
                         className="apm-form"
                         noValidate
-                        onSubmit={handleSubmit}
+                        onSubmit={
+                            handleSubmit
+                        }
                     >
                         <div className="apm-body">
-                            <p
-                                id="settlement-description"
-                                className="apm-help"
-                            >
-                                <Icon name="info" />
-
-                                Choose how this purchase
-                                will be settled with the
-                                supplier.
-                            </p>
-
                             {(localError
                                 || errorMessage) && (
                                     <div
                                         className="apm-alert"
                                         role="alert"
                                     >
-                                        <Icon name="alert" />
-
-                                        {localError
-                                            || errorMessage}
+                                        {
+                                            localError
+                                            || errorMessage
+                                        }
                                     </div>
                                 )}
 
@@ -558,15 +843,10 @@ export default function ConfigurePurchaseSettlementModal({
 
                                     <strong>
                                         {money.format(
-                                            Number(
-                                                purchase
-                                                    .grand_total,
-                                            ),
+                                            grandTotal,
                                         )}
                                     </strong>
                                 </div>
-
-                                <Icon name="cash" />
                             </div>
 
                             <section className="apm-section">
@@ -576,46 +856,328 @@ export default function ConfigurePurchaseSettlementModal({
                                     </h3>
 
                                     <p>
-                                        Select the payment
-                                        arrangement agreed
-                                        with the supplier.
+                                        Select how this purchase is being settled.
                                     </p>
                                 </div>
 
                                 <div className="apm-type-grid">
-                                    {([
-                                        [
-                                            'full',
-                                            'Fully Paid',
-                                            'Record the complete purchase value as paid now.',
-                                        ],
-                                        [
-                                            'partial',
-                                            'Partial Payment',
-                                            'Pay an amount now and keep the balance as due.',
-                                        ],
-                                        [
-                                            'due',
-                                            'Entirely on Credit',
-                                            'No payment now; the full total remains due.',
-                                        ],
-                                    ] as const).map(
-                                        ([
-                                            value,
-                                            label,
-                                            description,
-                                        ]) => (
-                                            <label
-                                                key={value}
-                                                className="apm-type"
-                                            >
+                                    <label className="apm-type">
+                                        <input
+                                            type="radio"
+                                            checked={
+                                                settlementType
+                                                === 'full'
+                                            }
+                                            disabled={
+                                                isSubmitting
+                                            }
+                                            onChange={() => {
+                                                setType(
+                                                    'full',
+                                                );
+                                            }}
+                                        />
+
+                                        <strong>
+                                            Fully Paid
+                                        </strong>
+                                    </label>
+
+                                    <label className="apm-type">
+                                        <input
+                                            type="radio"
+                                            checked={
+                                                settlementType
+                                                === 'partial'
+                                            }
+                                            disabled={
+                                                isSubmitting
+                                            }
+                                            onChange={() => {
+                                                setType(
+                                                    'partial',
+                                                );
+                                            }}
+                                        />
+
+                                        <strong>
+                                            Partial Payment
+                                        </strong>
+                                    </label>
+
+                                    <label className="apm-type">
+                                        <input
+                                            type="radio"
+                                            checked={
+                                                settlementType
+                                                === 'due'
+                                            }
+                                            disabled={
+                                                isSubmitting
+                                            }
+                                            onChange={() => {
+                                                setType(
+                                                    'due',
+                                                );
+                                            }}
+                                        />
+
+                                        <strong>
+                                            Entirely on Credit
+                                        </strong>
+                                    </label>
+                                </div>
+                            </section>
+
+                            {settlementType
+                                !== 'due' && (
+                                    <section className="apm-section">
+                                        <div>
+                                            <h3>
+                                                Payment Methods
+                                            </h3>
+
+                                            <p>
+                                                Add one or more methods. Example: Cash Rs.2,500 + Cheque Rs.2,500.
+                                            </p>
+                                        </div>
+
+                                        <div className="spm-list">
+                                            {lines.map(
+                                                (
+                                                    line,
+                                                ) => (
+                                                    <div
+                                                        key={
+                                                            line.id
+                                                        }
+                                                        className="spm-line"
+                                                    >
+                                                        <label className="spm-field">
+                                                            <span>
+                                                                Method
+                                                            </span>
+
+                                                            <select
+                                                                value={
+                                                                    line
+                                                                        .payment_method
+                                                                }
+                                                                disabled={
+                                                                    isSubmitting
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) => {
+                                                                    updateLine(
+                                                                        line.id,
+                                                                        {
+                                                                            payment_method:
+                                                                                parsePaymentMethod(
+                                                                                    event
+                                                                                        .target
+                                                                                        .value,
+                                                                                ),
+                                                                        },
+                                                                    );
+                                                                }}
+                                                            >
+                                                                <option value="cash">
+                                                                    Cash
+                                                                </option>
+
+                                                                <option value="card">
+                                                                    Card
+                                                                </option>
+
+                                                                <option value="bank_transfer">
+                                                                    Bank Transfer
+                                                                </option>
+
+                                                                <option value="cheque">
+                                                                    Cheque
+                                                                </option>
+                                                            </select>
+                                                        </label>
+
+                                                        <label className="spm-field">
+                                                            <span>
+                                                                Amount
+                                                            </span>
+
+                                                            <input
+                                                                type="number"
+                                                                min="0.01"
+                                                                step="0.01"
+                                                                inputMode="decimal"
+                                                                value={
+                                                                    line
+                                                                        .amount
+                                                                }
+                                                                disabled={
+                                                                    isSubmitting
+                                                                }
+                                                                placeholder="0.00"
+                                                                onChange={(
+                                                                    event,
+                                                                ) => {
+                                                                    updateLine(
+                                                                        line.id,
+                                                                        {
+                                                                            amount:
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                        },
+                                                                    );
+                                                                }}
+                                                            />
+                                                        </label>
+
+                                                        <label className="spm-field">
+                                                            <span>
+                                                                Reference
+                                                                {' '}
+                                                                (Optional)
+                                                            </span>
+
+                                                            <input
+                                                                type="text"
+                                                                maxLength={190}
+                                                                value={
+                                                                    line
+                                                                        .reference_number
+                                                                }
+                                                                disabled={
+                                                                    isSubmitting
+                                                                }
+                                                                placeholder={
+                                                                    line
+                                                                        .payment_method
+                                                                        === 'cheque'
+                                                                        ? 'Cheque number'
+                                                                        : 'Receipt / transfer reference'
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) => {
+                                                                    updateLine(
+                                                                        line.id,
+                                                                        {
+                                                                            reference_number:
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                        },
+                                                                    );
+                                                                }}
+                                                            />
+                                                        </label>
+
+                                                        <button
+                                                            type="button"
+                                                            className="spm-remove"
+                                                            aria-label="Remove payment line"
+                                                            disabled={
+                                                                isSubmitting
+                                                            }
+                                                            onClick={() => {
+                                                                removeLine(
+                                                                    line.id,
+                                                                );
+                                                            }}
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                ),
+                                            )}
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            className="spm-add"
+                                            disabled={
+                                                isSubmitting
+                                                || lines
+                                                    .length
+                                                >= 10
+                                            }
+                                            onClick={
+                                                addLine
+                                            }
+                                        >
+                                            + Add Payment Method
+                                        </button>
+
+                                        <div className="spm-summary">
+                                            <div>
+                                                <span>
+                                                    Total
+                                                </span>
+
+                                                <strong>
+                                                    {money.format(
+                                                        grandTotal,
+                                                    )}
+                                                </strong>
+                                            </div>
+
+                                            <div className="paid">
+                                                <span>
+                                                    Paid Now
+                                                </span>
+
+                                                <strong>
+                                                    {money.format(
+                                                        totalPaid,
+                                                    )}
+                                                </strong>
+                                            </div>
+
+                                            <div className="due">
+                                                <span>
+                                                    Remaining Due
+                                                </span>
+
+                                                <strong>
+                                                    {money.format(
+                                                        remainingDue,
+                                                    )}
+                                                </strong>
+                                            </div>
+                                        </div>
+                                    </section>
+                                )}
+
+                            {settlementType
+                                !== 'full' && (
+                                    <section className="apm-section">
+                                        <div>
+                                            <h3>
+                                                Credit Details
+                                            </h3>
+
+                                            <p>
+                                                Due date is optional.
+                                            </p>
+                                        </div>
+
+                                        <div className="apm-grid">
+                                            <label className="apm-field">
+                                                <span className="apm-label">
+                                                    Due Date
+
+                                                    <span className="apm-optional">
+                                                        Optional
+                                                    </span>
+                                                </span>
+
                                                 <input
-                                                    type="radio"
-                                                    name="settlement_type"
-                                                    value={value}
-                                                    checked={
-                                                        settlementType
-                                                        === value
+                                                    type="date"
+                                                    className="apm-input"
+                                                    value={
+                                                        dueDate
                                                     }
                                                     disabled={
                                                         isSubmitting
@@ -623,332 +1185,104 @@ export default function ConfigurePurchaseSettlementModal({
                                                     onChange={(
                                                         event,
                                                     ) => {
-                                                        selectSettlement(
-                                                            parseSettlementType(
-                                                                event
-                                                                    .target
-                                                                    .value,
-                                                            ),
+                                                        setDueDate(
+                                                            event
+                                                                .target
+                                                                .value,
                                                         );
                                                     }}
                                                 />
-
-                                                <strong>
-                                                    {label}
-                                                </strong>
-
-                                                <span>
-                                                    {description}
-                                                </span>
                                             </label>
-                                        ),
-                                    )}
-                                </div>
-                            </section>
 
-                            <section className="apm-section">
-                                <div>
-                                    <h3>
-                                        Payment Details
-                                    </h3>
-
-                                    <p>
-                                        Enter the information
-                                        needed for this
-                                        settlement arrangement.
-                                    </p>
-                                </div>
-
-                                <div className="apm-grid">
-                                    {settlementType
-                                        !== 'due' && (
                                             <label className="apm-field">
                                                 <span className="apm-label">
-                                                    Payment Method
+                                                    Payment Terms
 
-                                                    <span className="apm-required">
-                                                        {' '}*
+                                                    <span className="apm-optional">
+                                                        Optional
                                                     </span>
                                                 </span>
 
-                                                <span className="apm-wrap">
-                                                    <span className="apm-icon">
-                                                        <Icon name="cash" />
-                                                    </span>
-
-                                                    <select
-                                                        className="apm-select"
-                                                        value={
-                                                            paymentMethod
-                                                        }
-                                                        disabled={
-                                                            isSubmitting
-                                                        }
-                                                        onChange={(
-                                                            event,
-                                                        ) => {
-                                                            setPaymentMethod(
-                                                                parsePaymentMethod(
-                                                                    event
-                                                                        .target
-                                                                        .value,
-                                                                ),
-                                                            );
-                                                        }}
-                                                    >
-                                                        <option value="cash">
-                                                            Cash
-                                                        </option>
-
-                                                        <option value="card">
-                                                            Card
-                                                        </option>
-
-                                                        <option value="bank_transfer">
-                                                            Bank Transfer
-                                                        </option>
-
-                                                        <option value="cheque">
-                                                            Cheque
-                                                        </option>
-                                                    </select>
-                                                </span>
+                                                <input
+                                                    type="text"
+                                                    className="apm-input"
+                                                    value={
+                                                        paymentTerms
+                                                    }
+                                                    maxLength={
+                                                        255
+                                                    }
+                                                    disabled={
+                                                        isSubmitting
+                                                    }
+                                                    placeholder="Example: Payment within 30 days"
+                                                    onChange={(
+                                                        event,
+                                                    ) => {
+                                                        setPaymentTerms(
+                                                            event
+                                                                .target
+                                                                .value,
+                                                        );
+                                                    }}
+                                                />
                                             </label>
-                                        )}
+                                        </div>
+                                    </section>
+                                )}
 
-                                    {settlementType
-                                        === 'partial' && (
-                                            <label className="apm-field">
-                                                <span className="apm-label">
-                                                    Initial Payment
-
-                                                    <span className="apm-required">
-                                                        {' '}*
-                                                    </span>
-                                                </span>
-
-                                                <span className="apm-wrap">
-                                                    <span className="apm-icon">
-                                                        <Icon name="cash" />
-                                                    </span>
-
-                                                    <input
-                                                        type="number"
-                                                        className="apm-input"
-                                                        min="0.01"
-                                                        max={
-                                                            Number(
-                                                                purchase
-                                                                    .grand_total,
-                                                            )
-                                                            - 0.01
-                                                        }
-                                                        step="0.01"
-                                                        inputMode="decimal"
-                                                        value={
-                                                            initialPaidInput
-                                                        }
-                                                        disabled={
-                                                            isSubmitting
-                                                        }
-                                                        placeholder="Amount paid now"
-                                                        onChange={(
-                                                            event,
-                                                        ) => {
-                                                            setInitialPaidInput(
-                                                                event
-                                                                    .target
-                                                                    .value,
-                                                            );
-
-                                                            setLocalError(
-                                                                '',
-                                                            );
-                                                        }}
-                                                    />
-                                                </span>
-                                            </label>
-                                        )}
-
-                                    {settlementType
-                                        !== 'full' && (
-                                            <label className="apm-field">
-                                                <span className="apm-label">
-                                                    Due Date
-
-                                                    <span className="apm-required">
-                                                        {' '}*
-                                                    </span>
-                                                </span>
-
-                                                <span className="apm-wrap">
-                                                    <span className="apm-icon">
-                                                        <Icon name="calendar" />
-                                                    </span>
-
-                                                    <input
-                                                        type="date"
-                                                        className="apm-input"
-                                                        value={dueDate}
-                                                        disabled={
-                                                            isSubmitting
-                                                        }
-                                                        onChange={(
-                                                            event,
-                                                        ) => {
-                                                            setDueDate(
-                                                                event
-                                                                    .target
-                                                                    .value,
-                                                            );
-
-                                                            setLocalError(
-                                                                '',
-                                                            );
-                                                        }}
-                                                    />
-                                                </span>
-                                            </label>
-                                        )}
-
-                                    <label className="apm-field">
-                                        <span className="apm-label">
-                                            Payment Terms
-
-                                            <span className="apm-optional">
-                                                Optional
+                            {settlementType
+                                === 'due' && (
+                                    <div className="spm-summary">
+                                        <div>
+                                            <span>
+                                                Total
                                             </span>
-                                        </span>
 
-                                        <input
-                                            type="text"
-                                            className="apm-input"
-                                            value={
-                                                paymentTerms
-                                            }
-                                            maxLength={190}
-                                            disabled={
-                                                isSubmitting
-                                            }
-                                            placeholder="Example: Payment within 30 days"
-                                            onChange={(
-                                                event,
-                                            ) => {
-                                                setPaymentTerms(
-                                                    event
-                                                        .target
-                                                        .value,
-                                                );
-                                            }}
-                                        />
-                                    </label>
+                                            <strong>
+                                                {money.format(
+                                                    grandTotal,
+                                                )}
+                                            </strong>
+                                        </div>
 
-                                    <label className="apm-field full">
-                                        <span className="apm-label">
-                                            Reference Number
-
-                                            <span className="apm-optional">
-                                                Optional
+                                        <div className="paid">
+                                            <span>
+                                                Paid Now
                                             </span>
-                                        </span>
 
-                                        <input
-                                            type="text"
-                                            className="apm-input"
-                                            value={
-                                                referenceNumber
-                                            }
-                                            maxLength={190}
-                                            disabled={
-                                                isSubmitting
-                                            }
-                                            placeholder="Receipt, transfer or cheque reference"
-                                            onChange={(
-                                                event,
-                                            ) => {
-                                                setReferenceNumber(
-                                                    event
-                                                        .target
-                                                        .value,
-                                                );
-                                            }}
-                                        />
-                                    </label>
+                                            <strong>
+                                                {money.format(
+                                                    0,
+                                                )}
+                                            </strong>
+                                        </div>
 
-                                    <label className="apm-field full">
-                                        <span className="apm-label">
-                                            Notes
-
-                                            <span className="apm-optional">
-                                                Optional
+                                        <div className="due">
+                                            <span>
+                                                Remaining Due
                                             </span>
-                                        </span>
 
-                                        <textarea
-                                            className="apm-textarea"
-                                            rows={3}
-                                            value={notes}
-                                            maxLength={1000}
-                                            disabled={
-                                                isSubmitting
-                                            }
-                                            placeholder="Internal notes about this settlement"
-                                            onChange={(
-                                                event,
-                                            ) => {
-                                                setNotes(
-                                                    event
-                                                        .target
-                                                        .value,
-                                                );
-                                            }}
-                                        />
-                                    </label>
-                                </div>
-                            </section>
-
-                            <div className="apm-summary">
-                                <div>
-                                    <span>
-                                        Initial Payment
-                                    </span>
-
-                                    <strong>
-                                        {money.format(
-                                            settlementType
-                                                === 'full'
-                                                ? Number(
-                                                    purchase
-                                                        .grand_total,
-                                                )
-                                                : settlementType
-                                                    === 'due'
-                                                    ? 0
-                                                    : initialPaid,
-                                        )}
-                                    </strong>
-                                </div>
-
-                                <div className="remaining">
-                                    <span>
-                                        Remaining Due
-                                    </span>
-
-                                    <strong>
-                                        {money.format(
-                                            remainingDue,
-                                        )}
-                                    </strong>
-                                </div>
-                            </div>
+                                            <strong>
+                                                {money.format(
+                                                    grandTotal,
+                                                )}
+                                            </strong>
+                                        </div>
+                                    </div>
+                                )}
                         </div>
 
                         <footer className="apm-actions">
                             <button
                                 type="button"
                                 className="apm-button apm-cancel"
-                                disabled={isSubmitting}
-                                onClick={onClose}
+                                disabled={
+                                    isSubmitting
+                                }
+                                onClick={
+                                    onClose
+                                }
                             >
                                 Cancel
                             </button>
@@ -956,14 +1290,10 @@ export default function ConfigurePurchaseSettlementModal({
                             <button
                                 type="submit"
                                 className="apm-button apm-submit"
-                                disabled={isSubmitting}
+                                disabled={
+                                    isSubmitting
+                                }
                             >
-                                {isSubmitting ? (
-                                    <span className="apm-spinner" />
-                                ) : (
-                                    <Icon name="save" />
-                                )}
-
                                 {isSubmitting
                                     ? 'Saving Settlement...'
                                     : 'Save Settlement'}

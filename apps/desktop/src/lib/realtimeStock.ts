@@ -13,14 +13,27 @@ export interface RealtimeStockBatchUpdate {
 
   /*
    * Physical available stock.
-   *
-   * Normal product:
-   * Piece / Bottle / Packet etc.
-   *
-   * Dual-unit product:
-   * normally Kg.
    */
   available_quantity: number;
+
+  /*
+   * These fields are optional because normal sale events may
+   * only send the new quantity. Admin stock-batch updates send
+   * them as well so open cashier carts can refresh prices.
+   */
+  selling_price: number | null;
+
+  secondary_selling_price: number | null;
+
+  is_dual_unit: boolean | null;
+
+  primary_unit: string | null;
+
+  stock_unit: string | null;
+
+  secondary_unit: string | null;
+
+  conversion_factor: number | null;
 
   updated_at: string | null;
 }
@@ -29,6 +42,8 @@ export interface RealtimeStockUpdatedEvent {
   sale_id: number;
 
   sale_number: string;
+
+  source: string;
 
   batches: RealtimeStockBatchUpdate[];
 }
@@ -163,6 +178,20 @@ function parseStockEvent(payload: unknown): RealtimeStockUpdatedEvent | null {
         }
       }
 
+      const parseNullableNumber = (value: unknown): number | null => {
+        if (value === null || value === undefined || value === "") {
+          return null;
+        }
+
+        const parsed = Number(value);
+
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+
+      const parseNullableString = (value: unknown): string | null => {
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+      };
+
       return {
         id,
 
@@ -171,6 +200,29 @@ function parseStockEvent(payload: unknown): RealtimeStockUpdatedEvent | null {
         product_variant_id: productVariantId,
 
         available_quantity: Math.max(0, availableQuantity),
+
+        selling_price: parseNullableNumber(item.selling_price),
+
+        secondary_selling_price: parseNullableNumber(
+          item.secondary_selling_price
+        ),
+
+        is_dual_unit:
+          typeof item.is_dual_unit === "boolean"
+            ? item.is_dual_unit
+            : item.is_dual_unit === 1 || item.is_dual_unit === "1"
+              ? true
+              : item.is_dual_unit === 0 || item.is_dual_unit === "0"
+                ? false
+                : null,
+
+        primary_unit: parseNullableString(item.primary_unit),
+
+        stock_unit: parseNullableString(item.stock_unit),
+
+        secondary_unit: parseNullableString(item.secondary_unit),
+
+        conversion_factor: parseNullableNumber(item.conversion_factor),
 
         updated_at:
           typeof item.updated_at === "string" ? item.updated_at : null,
@@ -188,6 +240,8 @@ function parseStockEvent(payload: unknown): RealtimeStockUpdatedEvent | null {
     sale_id: Number.isInteger(saleId) ? saleId : 0,
 
     sale_number: typeof data.sale_number === "string" ? data.sale_number : "",
+
+    source: typeof data.source === "string" ? data.source : "sale",
 
     batches,
   };

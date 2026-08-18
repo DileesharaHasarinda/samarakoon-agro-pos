@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\SalesReturnController;
 use App\Http\Controllers\Api\StockController;
+use App\Http\Controllers\Api\StockBatchController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\SupplierPayableController;
 use Illuminate\Http\JsonResponse;
@@ -589,6 +590,15 @@ Route::prefix('v1')
                     [
                         PurchaseController::class,
                         'receive',
+                    ],
+                );
+
+                /* STOCK BATCH PRICE & STOCK ADJUSTMENT */
+                Route::patch(
+                    '/stock-batches/{stockBatch}',
+                    [
+                        StockBatchController::class,
+                        'update',
                     ],
                 );
 

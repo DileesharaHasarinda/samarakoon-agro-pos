@@ -142,10 +142,10 @@ class SupplierPayableController extends Controller
             ])
             ->selectRaw(
                 '
-                        COUNT(
-                            purchase_payments.id
-                        ) AS payments_count
-                    ',
+                    COUNT(
+                        purchase_payments.id
+                    ) AS payments_count
+                ',
             )
             ->groupBy([
                 'purchases.id',
@@ -166,17 +166,18 @@ class SupplierPayableController extends Controller
             ])
             ->orderByRaw(
                 "
-                        CASE
-                            WHEN purchases.payment_status = 'unconfigured'
-                            THEN 0
-                            WHEN purchases.due_amount > 0
-                                AND purchases.due_date < CURRENT_DATE
-                            THEN 1
-                            WHEN purchases.due_amount > 0
-                            THEN 2
-                            ELSE 3
-                        END
-                    ",
+                    CASE
+                        WHEN purchases.payment_status = 'unconfigured'
+                        THEN 0
+                        WHEN purchases.due_amount > 0
+                            AND purchases.due_date IS NOT NULL
+                            AND purchases.due_date < CURRENT_DATE
+                        THEN 1
+                        WHEN purchases.due_amount > 0
+                        THEN 2
+                        ELSE 3
+                    END
+                ",
             )
             ->orderByDesc(
                 'purchases.purchase_date',
@@ -386,10 +387,10 @@ class SupplierPayableController extends Controller
                     ->exists()
                 ) {
                     throw ValidationException::withMessages([
-                            'settlement_type' => [
-                                'This purchase already has payment records. Record additional payments using the supplier payment option.',
-                            ],
-                        ]);
+                        'settlement_type' => [
+                            'This purchase already has payment records. Record additional payments using the supplier payment option.',
+                        ],
+                    ]);
                 }
 
                 $grandTotal =
@@ -401,62 +402,72 @@ class SupplierPayableController extends Controller
 
                 if ($grandTotal <= 0) {
                     throw ValidationException::withMessages([
-                            'settlement_type' => [
-                                'The purchase total must be greater than zero.',
-                            ],
-                        ]);
+                        'settlement_type' => [
+                            'The purchase total must be greater than zero.',
+                        ],
+                    ]);
                 }
 
                 $settlementType =
-                    $validated['settlement_type'];
+                    (string) $validated['settlement_type'];
 
-                $paymentMethod =
-                    $validated['payment_method'] ?? null;
-
-                $initialPaid =
-                    round(
-                        (float) $validated['initial_paid_amount'],
-                        2,
+                $payments =
+                    $this->normalisePayments(
+                        $validated['payments']
+                            ?? [],
                     );
 
-                $paidAmount = 0.0;
-                $dueAmount = 0.0;
-                $paymentStatus =
-                    'paid';
+                $paidAmount =
+                    round(
+                        (float) $payments
+                            ->sum(
+                                'amount',
+                            ),
+                        2,
+                    );
 
                 if (
                     $settlementType
                     === 'full'
                 ) {
-                    if (! $paymentMethod) {
+                    if (
+                        $payments->isEmpty()
+                        || abs(
+                            $grandTotal
+                                - $paidAmount,
+                        ) > 0.01
+                    ) {
                         throw ValidationException::withMessages([
-                                'payment_method' => [
-                                    'Select the payment method.',
-                                ],
-                            ]);
+                            'payments' => [
+                                'For a fully paid purchase, the combined payment amounts must equal the purchase total.',
+                            ],
+                        ]);
                     }
 
                     $paidAmount =
                         $grandTotal;
+
+                    $dueAmount =
+                        0.0;
+
+                    $paymentStatus =
+                        'paid';
                 } elseif (
                     $settlementType
                     === 'partial'
                 ) {
                     if (
-                        ! $paymentMethod
-                        || $initialPaid <= 0
-                        || $initialPaid
+                        $payments->isEmpty()
+                        || $paidAmount <= 0
+                        || $paidAmount
                         >= $grandTotal
                     ) {
                         throw ValidationException::withMessages([
-                                'initial_paid_amount' => [
-                                    'The initial payment must be greater than zero and less than the purchase total.',
-                                ],
-                            ]);
+                            'payments' => [
+                                'For a partial settlement, the combined payment amount must be greater than zero and lower than the purchase total.',
+                            ],
+                        ]);
                     }
-
-                    $paidAmount =
-                        $initialPaid;
 
                     $dueAmount =
                         round(
@@ -468,21 +479,37 @@ class SupplierPayableController extends Controller
                     $paymentStatus =
                         'partial';
                 } else {
-                    if ($initialPaid > 0) {
+                    if (
+                        ! $payments->isEmpty()
+                        || $paidAmount > 0
+                    ) {
                         throw ValidationException::withMessages([
-                                'initial_paid_amount' => [
-                                    'Use partial payment when an initial payment is made.',
-                                ],
-                            ]);
+                            'payments' => [
+                                'An entirely-on-credit settlement cannot contain an initial payment.',
+                            ],
+                        ]);
                     }
 
-                    $paidAmount = 0;
+                    $paidAmount =
+                        0.0;
+
                     $dueAmount =
                         $grandTotal;
 
                     $paymentStatus =
                         'due';
                 }
+
+                /*
+                 * Due date is OPTIONAL.
+                 */
+                $dueDate =
+                    $dueAmount > 0
+                    ? (
+                        $validated['due_date']
+                        ?? null
+                    )
+                    : null;
 
                 $lockedPurchase->forceFill([
                     'payment_status' =>
@@ -498,9 +525,7 @@ class SupplierPayableController extends Controller
                     $dueAmount,
 
                     'due_date' =>
-                    $dueAmount > 0
-                        ? $validated['due_date']
-                        : null,
+                    $dueDate,
 
                     'payment_terms' =>
                     $validated['payment_terms'] ?? null,
@@ -508,33 +533,15 @@ class SupplierPayableController extends Controller
 
                 $lockedPurchase->save();
 
-                if ($paidAmount > 0) {
-                    PurchasePayment::query()
-                        ->create([
-                            'purchase_id' =>
-                            $lockedPurchase->id,
-
-                            'payment_method' =>
-                            $paymentMethod,
-
-                            'payment_type' =>
-                            PurchasePayment::TYPE_INITIAL,
-
-                            'amount' =>
-                            $paidAmount,
-
-                            'reference_number' =>
-                            $validated['reference_number'] ?? null,
-
-                            'notes' =>
-                            $validated['notes'] ?? null,
-
-                            'payment_date' =>
-                            now(),
-
-                            'created_by' =>
-                            $user->id,
-                        ]);
+                foreach (
+                    $payments as $payment
+                ) {
+                    $this->createPayment(
+                        $lockedPurchase,
+                        $payment,
+                        PurchasePayment::TYPE_INITIAL,
+                        $user,
+                    );
                 }
             },
             3,
@@ -587,10 +594,10 @@ class SupplierPayableController extends Controller
                     === 'unconfigured'
                 ) {
                     throw ValidationException::withMessages([
-                            'amount' => [
-                                'Configure the purchase payment settlement first.',
-                            ],
-                        ]);
+                        'payments' => [
+                            'Configure the purchase payment settlement first.',
+                        ],
+                    ]);
                 }
 
                 $currentDue =
@@ -600,35 +607,71 @@ class SupplierPayableController extends Controller
                         2,
                     );
 
+                if ($currentDue <= 0) {
+                    throw ValidationException::withMessages([
+                        'payments' => [
+                            'This purchase has no outstanding supplier due.',
+                        ],
+                    ]);
+                }
+
+                $payments =
+                    $this->normalisePayments(
+                        $validated['payments'],
+                    );
+
                 $paymentAmount =
                     round(
-                        (float) $validated['amount'],
+                        (float) $payments
+                            ->sum(
+                                'amount',
+                            ),
                         2,
                     );
 
-                if ($currentDue <= 0) {
+                if (
+                    $payments->isEmpty()
+                    || $paymentAmount <= 0
+                ) {
                     throw ValidationException::withMessages([
-                            'amount' => [
-                                'This purchase has no outstanding supplier due.',
-                            ],
-                        ]);
+                        'payments' => [
+                            'Enter at least one supplier payment.',
+                        ],
+                    ]);
                 }
 
                 if (
                     $paymentAmount
                     > $currentDue
+                    + 0.01
                 ) {
                     throw ValidationException::withMessages([
-                            'amount' => [
-                                "The maximum allowed payment is {$currentDue}.",
-                            ],
-                        ]);
+                        'payments' => [
+                            sprintf(
+                                'The combined payment amount cannot exceed the current due of %.2f.',
+                                $currentDue,
+                            ),
+                        ],
+                    ]);
                 }
+
+                /*
+                 * With valid 2-decimal inputs this should not normally
+                 * happen, but keep the aggregate safely capped.
+                 */
+                $paymentAmount =
+                    min(
+                        $paymentAmount,
+                        $currentDue,
+                    );
 
                 $remainingDue =
                     round(
-                        $currentDue
-                            - $paymentAmount,
+                        max(
+                            0,
+                            $currentDue
+                                - $paymentAmount,
+                        ),
                         2,
                     );
 
@@ -645,10 +688,7 @@ class SupplierPayableController extends Controller
                     $newPaidAmount,
 
                     'due_amount' =>
-                    max(
-                        0,
-                        $remainingDue,
-                    ),
+                    $remainingDue,
 
                     'payment_status' =>
                     $remainingDue <= 0
@@ -658,32 +698,16 @@ class SupplierPayableController extends Controller
 
                 $lockedPurchase->save();
 
-                PurchasePayment::query()
-                    ->create([
-                        'purchase_id' =>
-                        $lockedPurchase->id,
-
-                        'payment_method' =>
-                        $validated['payment_method'],
-
-                        'payment_type' =>
+                foreach (
+                    $payments as $payment
+                ) {
+                    $this->createPayment(
+                        $lockedPurchase,
+                        $payment,
                         PurchasePayment::TYPE_DUE,
-
-                        'amount' =>
-                        $paymentAmount,
-
-                        'reference_number' =>
-                        $validated['reference_number'] ?? null,
-
-                        'notes' =>
-                        $validated['notes'] ?? null,
-
-                        'payment_date' =>
-                        now(),
-
-                        'created_by' =>
-                        $user->id,
-                    ]);
+                        $user,
+                    );
+                }
             },
             3,
         );
@@ -697,6 +721,136 @@ class SupplierPayableController extends Controller
                 $purchase->id,
             ),
         ]);
+    }
+
+    /**
+     * @param array<int, mixed> $payments
+     *
+     * @return Collection<int, array{
+     *     payment_method: string,
+     *     amount: float,
+     *     reference_number: string|null,
+     *     notes: string|null
+     * }>
+     */
+    private function normalisePayments(
+        array $payments,
+    ): Collection {
+        return collect(
+            $payments,
+        )
+            ->map(
+                function (
+                    mixed $payment,
+                ): ?array {
+                    if (
+                        ! is_array(
+                            $payment,
+                        )
+                    ) {
+                        return null;
+                    }
+
+                    $amount =
+                        round(
+                            (float) (
+                                $payment['amount']
+                                ?? 0
+                            ),
+                            2,
+                        );
+
+                    if (
+                        $amount <= 0
+                    ) {
+                        return null;
+                    }
+
+                    $referenceNumber =
+                        isset(
+                            $payment['reference_number'],
+                        )
+                        ? trim(
+                            (string) $payment['reference_number'],
+                        )
+                        : '';
+
+                    $notes =
+                        isset(
+                            $payment['notes'],
+                        )
+                        ? trim(
+                            (string) $payment['notes'],
+                        )
+                        : '';
+
+                    return [
+                        'payment_method' =>
+                        (string) (
+                            $payment['payment_method']
+                            ?? 'cash'
+                        ),
+
+                        'amount' =>
+                        $amount,
+
+                        'reference_number' =>
+                        $referenceNumber
+                            !== ''
+                            ? $referenceNumber
+                            : null,
+
+                        'notes' =>
+                        $notes !== ''
+                            ? $notes
+                            : null,
+                    ];
+                },
+            )
+            ->filter()
+            ->values();
+    }
+
+    /**
+     * @param array{
+     *     payment_method: string,
+     *     amount: float,
+     *     reference_number: string|null,
+     *     notes: string|null
+     * } $payment
+     */
+    private function createPayment(
+        Purchase $purchase,
+        array $payment,
+        string $paymentType,
+        User $user,
+    ): void {
+        PurchasePayment::query()
+            ->create([
+                'purchase_id' =>
+                $purchase->id,
+
+                'payment_method' =>
+                $payment['payment_method'],
+
+                'payment_type' =>
+                $paymentType,
+
+                'amount' =>
+                $payment['amount'],
+
+                'reference_number' =>
+                $payment['reference_number'],
+
+                'notes' =>
+                $payment['notes'],
+
+                'payment_date' =>
+                now(),
+
+                'created_by' =>
+                $user->id,
+            ]);
     }
 
     /**
@@ -860,6 +1014,9 @@ class SupplierPayableController extends Controller
                 ->due_date
             : null;
 
+        /*
+         * A purchase without a due date is not overdue.
+         */
         $isOverdue =
             $dueAmount > 0
             && $dueDate !== null

@@ -700,8 +700,51 @@ function applyRealtimeStockEventToCart(
                         ),
                     );
 
+            let nextSellingPrice =
+                item.selling_price;
+
+            const saleUnit =
+                normaliseUnit(
+                    item.sale_unit,
+                );
+
+            const primaryUnit =
+                normaliseUnit(
+                    update.primary_unit
+                    ?? item.primary_unit,
+                );
+
+            const secondaryUnit =
+                normaliseUnit(
+                    update.secondary_unit
+                    ?? update.stock_unit
+                    ?? '',
+                );
+
+            if (
+                update.selling_price
+                !== null
+                && saleUnit
+                === primaryUnit
+            ) {
+                nextSellingPrice =
+                    update.selling_price;
+            } else if (
+                update.secondary_selling_price
+                !== null
+                && secondaryUnit !== ''
+                && saleUnit
+                === secondaryUnit
+            ) {
+                nextSellingPrice =
+                    update.secondary_selling_price;
+            }
+
             return {
                 ...item,
+
+                selling_price:
+                    nextSellingPrice,
 
                 available_quantity:
                     availableSaleQuantity,

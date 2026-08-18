@@ -12,7 +12,6 @@ class Purchase extends Model
     use HasFactory;
 
     public const STATUS_DRAFT = 'draft';
-
     public const STATUS_RECEIVED = 'received';
 
     /**
@@ -33,6 +32,12 @@ class Purchase extends Model
         'created_by',
         'received_by',
         'received_at',
+        'payment_status',
+        'settlement_type',
+        'paid_amount',
+        'due_amount',
+        'due_date',
+        'payment_terms',
     ];
 
     /**
@@ -51,12 +56,12 @@ class Purchase extends Model
             'created_by' => 'integer',
             'received_by' => 'integer',
             'received_at' => 'datetime',
+            'paid_amount' => 'decimal:2',
+            'due_amount' => 'decimal:2',
+            'due_date' => 'date',
         ];
     }
 
-    /**
-     * @return BelongsTo<Supplier, Purchase>
-     */
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(
@@ -64,9 +69,6 @@ class Purchase extends Model
         );
     }
 
-    /**
-     * @return HasMany<PurchaseItem>
-     */
     public function items(): HasMany
     {
         return $this->hasMany(
@@ -74,9 +76,13 @@ class Purchase extends Model
         );
     }
 
-    /**
-     * @return BelongsTo<User, Purchase>
-     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(
+            PurchasePayment::class,
+        );
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(
@@ -85,9 +91,6 @@ class Purchase extends Model
         );
     }
 
-    /**
-     * @return BelongsTo<User, Purchase>
-     */
     public function receivedBy(): BelongsTo
     {
         return $this->belongsTo(

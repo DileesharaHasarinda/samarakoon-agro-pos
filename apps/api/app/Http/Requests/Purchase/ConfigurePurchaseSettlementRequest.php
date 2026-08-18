@@ -14,41 +14,144 @@ class ConfigurePurchaseSettlementRequest extends FormRequest
         return true;
     }
 
+    /*
+     * =====================================================
+     * PREPARE INPUT
+     * =====================================================
+     */
+
     protected function prepareForValidation(): void
     {
-        $reference =
+        /*
+         * Due date is OPTIONAL.
+         *
+         * Convert:
+         *
+         * ""
+         *
+         * into:
+         *
+         * null
+         */
+        $dueDate =
             $this->input(
-                'reference_number',
+                'due_date',
             );
-
-        $notes =
-            $this->input('notes');
 
         $paymentTerms =
             $this->input(
                 'payment_terms',
             );
 
-        $this->merge([
-            'reference_number' =>
-            is_string($reference)
-                && trim($reference) !== ''
-                ? trim($reference)
-                : null,
+        /*
+         * Clean each individual split-payment
+         * reference and notes value.
+         */
+        $payments =
+            $this->input(
+                'payments',
+                [],
+            );
 
-            'notes' =>
-            is_string($notes)
-                && trim($notes) !== ''
-                ? trim($notes)
+        if (
+            !is_array(
+                $payments,
+            )
+        ) {
+            $payments = [];
+        }
+
+        $cleanPayments =
+            collect(
+                $payments,
+            )
+            ->map(
+                function (
+                    mixed $payment,
+                ): mixed {
+                    if (
+                        !is_array(
+                            $payment,
+                        )
+                    ) {
+                        return $payment;
+                    }
+
+                    $reference =
+                        $payment['reference_number']
+                        ?? null;
+
+                    $notes =
+                        $payment['notes']
+                        ?? null;
+
+                    return [
+                        ...$payment,
+
+                        'reference_number' =>
+                        is_string(
+                            $reference,
+                        )
+                            && trim(
+                                $reference,
+                            ) !== ''
+                            ? trim(
+                                $reference,
+                            )
+                            : null,
+
+                        'notes' =>
+                        is_string(
+                            $notes,
+                        )
+                            && trim(
+                                $notes,
+                            ) !== ''
+                            ? trim(
+                                $notes,
+                            )
+                            : null,
+                    ];
+                },
+            )
+            ->values()
+            ->all();
+
+        $this->merge([
+            'due_date' =>
+            is_string(
+                $dueDate,
+            )
+                && trim(
+                    $dueDate,
+                ) !== ''
+                ? trim(
+                    $dueDate,
+                )
                 : null,
 
             'payment_terms' =>
-            is_string($paymentTerms)
-                && trim($paymentTerms) !== ''
-                ? trim($paymentTerms)
+            is_string(
+                $paymentTerms,
+            )
+                && trim(
+                    $paymentTerms,
+                ) !== ''
+                ? trim(
+                    $paymentTerms,
+                )
                 : null,
+
+            'payments' =>
+            $cleanPayments,
         ]);
     }
+
+    /*
+     * =====================================================
+     * VALIDATION RULES
+     * =====================================================
+     */
 
     /**
      * @return array<string, array<int, mixed>>
@@ -56,6 +159,11 @@ class ConfigurePurchaseSettlementRequest extends FormRequest
     public function rules(): array
     {
         return [
+            /*
+             * full
+             * partial
+             * due
+             */
             'settlement_type' => [
                 'required',
 
@@ -66,23 +174,52 @@ class ConfigurePurchaseSettlementRequest extends FormRequest
                 ]),
             ],
 
-            'initial_paid_amount' => [
+            /*
+             * Multiple payments are supported.
+             *
+             * Example:
+             *
+             * Cash    2500
+             * Cheque  2500
+             */
+            'payments' => [
+                'nullable',
+                'array',
+                'max:10',
+            ],
+
+            'payments.*.payment_method' => [
+                'required',
+
+                Rule::in(
+                    PurchasePayment::PAYMENT_METHODS,
+                ),
+            ],
+
+            'payments.*.amount' => [
                 'required',
                 'numeric',
-                'min:0',
+                'min:0.01',
+                'max:999999999999.99',
             ],
 
-            'payment_method' => [
+            'payments.*.reference_number' => [
                 'nullable',
-
-                Rule::in([
-                    PurchasePayment::METHOD_CASH,
-                    PurchasePayment::METHOD_CARD,
-                    PurchasePayment::METHOD_BANK_TRANSFER,
-                    PurchasePayment::METHOD_CHEQUE,
-                ]),
+                'string',
+                'max:160',
             ],
 
+            'payments.*.notes' => [
+                'nullable',
+                'string',
+                'max:1500',
+            ],
+
+            /*
+             * IMPORTANT:
+             *
+             * Due date is now OPTIONAL.
+             */
             'due_date' => [
                 'nullable',
                 'date_format:Y-m-d',
@@ -93,21 +230,18 @@ class ConfigurePurchaseSettlementRequest extends FormRequest
                 'string',
                 'max:255',
             ],
-
-            'reference_number' => [
-                'nullable',
-                'string',
-                'max:160',
-            ],
-
-            'notes' => [
-                'nullable',
-                'string',
-                'max:1500',
-            ],
         ];
     }
 
+    /*
+     * =====================================================
+     * BUSINESS VALIDATION
+     * =====================================================
+     */
+
+    /**
+     * @return array<int, callable>
+     */
     public function after(): array
     {
         return [
@@ -119,6 +253,58 @@ class ConfigurePurchaseSettlementRequest extends FormRequest
                         'settlement_type',
                     );
 
+                $payments =
+                    $this->input(
+                        'payments',
+                        [],
+                    );
+
+                if (
+                    !is_array(
+                        $payments,
+                    )
+                ) {
+                    $payments = [];
+                }
+
+                /*
+                 * Count valid positive payment lines.
+                 */
+                $positivePayments =
+                    collect(
+                        $payments,
+                    )
+                    ->filter(
+                        function (
+                            mixed $payment,
+                        ): bool {
+                            if (
+                                !is_array(
+                                    $payment,
+                                )
+                            ) {
+                                return false;
+                            }
+
+                            $amount =
+                                $payment['amount']
+                                ?? null;
+
+                            return (
+                                is_numeric(
+                                    $amount,
+                                )
+                                && (float) $amount
+                                > 0
+                            );
+                        },
+                    );
+
+                /*
+                 * Fully Paid and Partial Payment
+                 * must have at least one payment
+                 * method.
+                 */
                 if (
                     in_array(
                         $settlementType,
@@ -128,38 +314,51 @@ class ConfigurePurchaseSettlementRequest extends FormRequest
                         ],
                         true,
                     )
-                    && ! $this->input(
-                        'payment_method',
-                    )
+                    && $positivePayments
+                    ->isEmpty()
                 ) {
                     $validator
                         ->errors()
                         ->add(
-                            'payment_method',
-                            'Select the initial payment method.',
+                            'payments',
+                            'Add at least one payment method.',
                         );
                 }
 
+                /*
+                 * Entirely on Credit means:
+                 *
+                 * Paid now = Rs.0
+                 *
+                 * Therefore payment rows are not
+                 * allowed.
+                 */
                 if (
-                    in_array(
-                        $settlementType,
-                        [
-                            'partial',
-                            'due',
-                        ],
-                        true,
-                    )
-                    && ! $this->input(
-                        'due_date',
-                    )
+                    $settlementType
+                    === 'due'
+                    && $positivePayments
+                    ->isNotEmpty()
                 ) {
                     $validator
                         ->errors()
                         ->add(
-                            'due_date',
-                            'Enter the supplier payment due date.',
+                            'payments',
+                            'An entirely-on-credit settlement cannot contain an initial payment.',
                         );
                 }
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * There is intentionally NO
+                 * due_date-required validation here.
+                 *
+                 * Partial:
+                 * due_date can be null.
+                 *
+                 * Due:
+                 * due_date can be null.
+                 */
             },
         ];
     }

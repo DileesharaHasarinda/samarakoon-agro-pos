@@ -8,8 +8,8 @@ export interface ProductCategory {
 }
 
 /* =========================================================
-     STOCK
-     ========================================================= */
+       STOCK
+       ========================================================= */
 
 export interface ProductAvailableStockUnit {
   /*
@@ -32,8 +32,8 @@ export interface ProductAvailableStockUnit {
 }
 
 /* =========================================================
-     PRODUCT VARIANT
-     ========================================================= */
+       PRODUCT VARIANT
+       ========================================================= */
 
 export interface ProductVariant {
   id: number;
@@ -84,8 +84,8 @@ export interface ProductVariant {
 }
 
 /* =========================================================
-     PRODUCT VARIANT INPUT
-     ========================================================= */
+       PRODUCT VARIANT INPUT
+       ========================================================= */
 
 export interface ProductVariantInput {
   /*
@@ -105,8 +105,8 @@ export interface ProductVariantInput {
 }
 
 /* =========================================================
-     PRODUCT
-     ========================================================= */
+       PRODUCT
+       ========================================================= */
 
 export interface Product {
   id: number;
@@ -180,8 +180,8 @@ export interface Product {
 }
 
 /* =========================================================
-     PRODUCT INPUT
-     ========================================================= */
+       PRODUCT INPUT
+       ========================================================= */
 
 export interface ProductInput {
   category_id: number | null;
@@ -196,8 +196,8 @@ export interface ProductInput {
 }
 
 /* =========================================================
-     PRODUCT VARIANT OPTION
-     ========================================================= */
+       PRODUCT VARIANT OPTION
+       ========================================================= */
 
 export interface ProductVariantOption {
   id: number;
@@ -218,8 +218,8 @@ export interface ProductVariantOption {
 }
 
 /* =========================================================
-     PRODUCT OPTION
-     ========================================================= */
+       PRODUCT OPTION
+       ========================================================= */
 
 export interface ProductOption {
   id: number;
@@ -243,8 +243,8 @@ export interface ProductOption {
 }
 
 /* =========================================================
-     PAGINATION
-     ========================================================= */
+       PAGINATION
+       ========================================================= */
 
 export interface ProductPaginationMeta {
   current_page: number;
@@ -269,8 +269,8 @@ export interface ProductListFilters {
 }
 
 /* =========================================================
-     API RESPONSES
-     ========================================================= */
+       API RESPONSES
+       ========================================================= */
 
 export interface ProductListResponse {
   data: Product[];
@@ -297,15 +297,15 @@ export interface ProductDeleteResponse {
 }
 
 /* =========================================================
-     PRODUCT DETAILS
-     ========================================================= */
+       PRODUCT DETAILS
+       ========================================================= */
 
 export type ProductBatchStatus =
   "available" | "expiring_soon" | "expired" | "out_of_stock";
 
 /* =========================================================
-     SUPPLIER
-     ========================================================= */
+       SUPPLIER
+       ========================================================= */
 
 export interface ProductBatchSupplier {
   id: number;
@@ -314,8 +314,8 @@ export interface ProductBatchSupplier {
 }
 
 /* =========================================================
-     BATCH VARIANT
-     ========================================================= */
+       BATCH VARIANT
+       ========================================================= */
 
 export interface ProductBatchVariant {
   id: number;
@@ -340,26 +340,26 @@ export interface ProductBatchVariant {
 }
 
 /* =========================================================
-     PRODUCT VARIANT STOCK SUMMARY
-     =========================================================
-   *
-   * This matches the backend `variant_stock`
-   * response used by the Product Details page.
-   *
-   * Example:
-   *
-   * Tomato Seeds
-   *
-   * 100g Packet
-   *   Available: 25 Packet
-   *   Saleable: 25 Packet
-   *   Selling price: Rs. 200
-   *
-   * 250g Packet
-   *   Available: 12 Packet
-   *   Saleable: 12 Packet
-   *   Selling price: Rs. 400
-   */
+       PRODUCT VARIANT STOCK SUMMARY
+       =========================================================
+     *
+     * This matches the backend `variant_stock`
+     * response used by the Product Details page.
+     *
+     * Example:
+     *
+     * Tomato Seeds
+     *
+     * 100g Packet
+     *   Available: 25 Packet
+     *   Saleable: 25 Packet
+     *   Selling price: Rs. 200
+     *
+     * 250g Packet
+     *   Available: 12 Packet
+     *   Saleable: 12 Packet
+     *   Selling price: Rs. 400
+     */
 
 export interface ProductVariantStockSummary {
   variant_id: number;
@@ -430,8 +430,8 @@ export interface ProductVariantStockSummary {
 }
 
 /* =========================================================
-     PRODUCT STOCK BATCH DETAILS
-     ========================================================= */
+       PRODUCT STOCK BATCH DETAILS
+       ========================================================= */
 
 export interface ProductBatchDetails {
   id: number;
@@ -579,8 +579,8 @@ export interface ProductBatchDetails {
 }
 
 /* =========================================================
-     PRICE OPTION
-     ========================================================= */
+       PRICE OPTION
+       ========================================================= */
 
 export interface ProductPriceOption {
   /*
@@ -626,8 +626,8 @@ export interface ProductPriceOption {
 }
 
 /* =========================================================
-     STOCK SUMMARY BY PHYSICAL UNIT
-     ========================================================= */
+       STOCK SUMMARY BY PHYSICAL UNIT
+       ========================================================= */
 
 export interface ProductStockUnitSummary {
   unit: string;
@@ -654,8 +654,8 @@ export interface ProductStockUnitSummary {
 }
 
 /* =========================================================
-     PRODUCT DETAILS SUMMARY
-     ========================================================= */
+       PRODUCT DETAILS SUMMARY
+       ========================================================= */
 
 export interface ProductDetailsSummary {
   /*
@@ -701,8 +701,8 @@ export interface ProductDetailsSummary {
 }
 
 /* =========================================================
-     PRODUCT DETAILS
-     ========================================================= */
+       PRODUCT DETAILS
+       ========================================================= */
 
 export interface ProductDetails {
   id: number;
@@ -768,9 +768,59 @@ export interface ProductDetails {
 }
 
 /* =========================================================
-     PRODUCT DETAILS RESPONSE
-     ========================================================= */
+       PRODUCT DETAILS RESPONSE
+       ========================================================= */
 
 export interface ProductDetailsResponse {
   data: ProductDetails;
+}
+
+/* =========================================================
+     STOCK BATCH ADMIN UPDATE
+     ========================================================= */
+
+export interface UpdateStockBatchValues {
+  selling_price: number;
+
+  secondary_selling_price: number | null;
+
+  available_quantity: number;
+
+  reason: string;
+}
+
+export interface UpdatedStockBatchData {
+  id: number;
+
+  product_id: number;
+
+  product_variant_id: number | null;
+
+  selling_price: number;
+
+  secondary_selling_price: number | null;
+
+  available_quantity: number;
+
+  stock_unit: string;
+
+  primary_unit: string;
+
+  secondary_unit: string | null;
+
+  conversion_factor: number;
+
+  price_changed: boolean;
+
+  stock_changed: boolean;
+
+  stock_movement_id: number | null;
+
+  updated_at: string | null;
+}
+
+export interface UpdateStockBatchResponse {
+  message: string;
+
+  data: UpdatedStockBatchData;
 }
