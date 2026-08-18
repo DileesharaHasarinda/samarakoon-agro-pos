@@ -1,13 +1,32 @@
 export type PosPaymentMethod = "cash" | "card" | "bank_transfer";
 
+/*
+ * A SalePayment row always contains
+ * one real payment method.
+ *
+ * A sale summary can additionally
+ * return "mixed" when several methods
+ * were used for the same sale.
+ */
+export type PosPaymentSummaryMethod = PosPaymentMethod | "mixed";
+
 export type SaleSettlementType = "full" | "partial" | "due";
 
 export type PosSaleOptionKey = "primary" | "secondary";
 
+/* =========================================================
+   CATEGORY
+   ========================================================= */
+
 export interface PosCategory {
   id: number;
+
   name: string;
 }
+
+/* =========================================================
+   SALE OPTION
+   ========================================================= */
 
 export interface PosSaleOption {
   key: PosSaleOptionKey;
@@ -34,6 +53,10 @@ export interface PosSaleOption {
 
   allow_decimal_quantity: boolean;
 }
+
+/* =========================================================
+   STOCK BATCH
+   ========================================================= */
 
 export interface PosStockBatch {
   id: number;
@@ -91,6 +114,10 @@ export interface PosStockBatch {
   sale_options: PosSaleOption[];
 }
 
+/* =========================================================
+   POS PRODUCT
+   ========================================================= */
+
 export interface PosProduct {
   id: number;
 
@@ -112,6 +139,7 @@ export interface PosProduct {
 
   category: {
     id: number;
+
     name: string;
   };
 
@@ -123,6 +151,10 @@ export interface PosProduct {
 
   batches: PosStockBatch[];
 }
+
+/* =========================================================
+   PAGINATION
+   ========================================================= */
 
 export interface PosPaginationMeta {
   current_page: number;
@@ -138,6 +170,10 @@ export interface PosPaginationMeta {
   to: number | null;
 }
 
+/* =========================================================
+   POS API RESPONSES
+   ========================================================= */
+
 export interface PosProductListResponse {
   data: PosProduct[];
 
@@ -151,6 +187,10 @@ export interface PosProductResponse {
 export interface PosCategoryResponse {
   data: PosCategory[];
 }
+
+/* =========================================================
+   CART
+   ========================================================= */
 
 export interface PosCartItem {
   stock_batch_id: number;
@@ -190,6 +230,10 @@ export interface PosCartItem {
   unit: string;
 }
 
+/* =========================================================
+   COMPLETE SALE ITEM
+   ========================================================= */
+
 export interface CompleteSaleItemInput {
   stock_batch_id: number;
 
@@ -200,6 +244,61 @@ export interface CompleteSaleItemInput {
   discount: number;
 }
 
+/* =========================================================
+   SPLIT PAYMENT INPUT
+   ========================================================= */
+
+/*
+ * Each item in this array becomes one
+ * SalePayment database record.
+ *
+ * Example:
+ *
+ * [
+ *   {
+ *     payment_method: "cash",
+ *     amount: 2500
+ *   },
+ *   {
+ *     payment_method: "card",
+ *     amount: 1500
+ *   },
+ *   {
+ *     payment_method: "bank_transfer",
+ *     amount: 1000
+ *   }
+ * ]
+ */
+export interface CompleteSalePaymentInput {
+  payment_method: PosPaymentMethod;
+
+  /*
+   * Amount assigned to this method.
+   *
+   * For normal split payments this is
+   * the actual amount applied to the bill.
+   *
+   * A single full Cash payment may contain
+   * the tendered amount, for example:
+   *
+   * Bill   = 1500
+   * Cash   = 2000
+   * Change = 500
+   *
+   * The backend safely records only
+   * Rs.1500 as revenue.
+   */
+  amount: number;
+
+  reference_number: string;
+
+  notes: string;
+}
+
+/* =========================================================
+   COMPLETE SALE VALUES
+   ========================================================= */
+
 export interface CompleteSaleValues {
   customer_id: number | null;
 
@@ -207,16 +306,69 @@ export interface CompleteSaleValues {
 
   discount: number;
 
+  /*
+   * =====================================================
+   * LEGACY / SUMMARY PAYMENT FIELDS
+   * =====================================================
+   *
+   * These remain during the transition so the
+   * frontend and backend remain backwards compatible.
+   *
+   * payments[] below is the authoritative source
+   * for new split-payment sales.
+   */
+
   payment_method: PosPaymentMethod | null;
 
   amount_received: number;
 
+  /*
+   * Due Date is optional.
+   *
+   * Empty string will be sent to the service
+   * and converted to null.
+   */
   due_date: string;
 
   reference_number: string;
 
   notes: string;
+
+  /*
+   * =====================================================
+   * AUTHORITATIVE SPLIT PAYMENT LIST
+   * =====================================================
+   *
+   * Full sale:
+   *
+   * Cash 2500
+   * Card 1500
+   * Bank 1000
+   *
+   * payments total = 5000
+   *
+   *
+   * Partial:
+   *
+   * Total = 5000
+   *
+   * Cash = 1000
+   * Card = 1000
+   *
+   * payments total = 2000
+   * due = 3000
+   *
+   *
+   * Due sale:
+   *
+   * payments = []
+   */
+  payments: CompleteSalePaymentInput[];
 }
+
+/* =========================================================
+   CUSTOMER
+   ========================================================= */
 
 export interface SaleCustomer {
   id: number;
@@ -228,6 +380,10 @@ export interface SaleCustomer {
   mobile: string | null;
 }
 
+/* =========================================================
+   CASHIER
+   ========================================================= */
+
 export interface SaleCashier {
   id: number;
 
@@ -235,6 +391,10 @@ export interface SaleCashier {
 
   username?: string;
 }
+
+/* =========================================================
+   RECEIPT BATCH
+   ========================================================= */
 
 export interface SaleReceiptBatch {
   id: number;
@@ -259,6 +419,10 @@ export interface SaleReceiptBatch {
 
   expiry_date: string | null;
 }
+
+/* =========================================================
+   RECEIPT ITEM
+   ========================================================= */
 
 export interface SaleReceiptItem {
   id: number;
@@ -308,6 +472,20 @@ export interface SaleReceiptItem {
   batch: SaleReceiptBatch | null;
 }
 
+/* =========================================================
+   RECEIPT PAYMENT
+   ========================================================= */
+
+/*
+ * Every payment record has ONE real method.
+ *
+ * "mixed" is never stored here.
+ *
+ * Example:
+ *
+ * Payment #1 = cash
+ * Payment #2 = card
+ */
 export interface SaleReceiptPayment {
   id: number;
 
@@ -323,11 +501,16 @@ export interface SaleReceiptPayment {
 
   created_by: {
     id: number;
+
     name: string;
   } | null;
 
   created_at: string;
 }
+
+/* =========================================================
+   SALE RECEIPT
+   ========================================================= */
 
 export interface SaleReceipt {
   id: number;
@@ -360,7 +543,22 @@ export interface SaleReceipt {
 
   settlement_type: SaleSettlementType;
 
-  payment_method: PosPaymentMethod | null;
+  /*
+   * For one payment:
+   *
+   * cash
+   * card
+   * bank_transfer
+   *
+   * For multiple:
+   *
+   * mixed
+   *
+   * For completely due:
+   *
+   * null
+   */
+  payment_method: PosPaymentSummaryMethod | null;
 
   customer: SaleCustomer | null;
 
@@ -378,14 +576,25 @@ export interface SaleReceipt {
 
   items: SaleReceiptItem[];
 
+  /*
+   * Actual individual payment records.
+   */
   payments: SaleReceiptPayment[];
 }
+
+/* =========================================================
+   COMPLETE SALE RESPONSE
+   ========================================================= */
 
 export interface CompleteSaleResponse {
   message: string;
 
   data: SaleReceipt;
 }
+
+/* =========================================================
+   POS PRODUCT PARAMETERS
+   ========================================================= */
 
 export interface PosProductListParameters {
   search?: string;
@@ -396,6 +605,10 @@ export interface PosProductListParameters {
 
   perPage?: number;
 }
+
+/* =========================================================
+   SALE HISTORY
+   ========================================================= */
 
 export interface SaleHistoryItem {
   id: number;
@@ -428,7 +641,16 @@ export interface SaleHistoryItem {
 
   settlement_type: SaleSettlementType;
 
-  payment_method: PosPaymentMethod | null;
+  /*
+   * May be:
+   *
+   * cash
+   * card
+   * bank_transfer
+   * mixed
+   * null
+   */
+  payment_method: PosPaymentSummaryMethod | null;
 
   customer: SaleCustomer | null;
 
@@ -444,6 +666,10 @@ export interface SaleHistoryItem {
 
   updated_at: string | null;
 }
+
+/* =========================================================
+   SALE HISTORY SUMMARY
+   ========================================================= */
 
 export interface SaleHistorySummary {
   total_sales: number;
@@ -461,6 +687,10 @@ export interface SaleHistorySummary {
   net_profit: number | null;
 }
 
+/* =========================================================
+   SALE HISTORY RESPONSE
+   ========================================================= */
+
 export interface SaleHistoryResponse {
   data: SaleHistoryItem[];
 
@@ -469,9 +699,17 @@ export interface SaleHistoryResponse {
   meta: PosPaginationMeta;
 }
 
+/* =========================================================
+   SALE DETAILS
+   ========================================================= */
+
 export interface SaleDetailsResponse {
   data: SaleReceipt;
 }
+
+/* =========================================================
+   SALE HISTORY PARAMETERS
+   ========================================================= */
 
 export interface SaleHistoryParameters {
   search?: string;

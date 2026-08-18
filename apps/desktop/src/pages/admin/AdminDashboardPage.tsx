@@ -30,6 +30,10 @@ import type {
     Cheque,
 } from '../../types/cheque';
 
+/* =========================================================
+   FORMATTERS
+   ========================================================= */
+
 const BUSINESS_TIME_ZONE =
     'Asia/Colombo';
 
@@ -239,6 +243,9 @@ function paymentMethodName(
 
         case 'cash':
             return 'Cash';
+
+        case 'mixed':
+            return 'Mixed Payment';
 
         case 'cheque':
             return 'Cheque';

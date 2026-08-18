@@ -81,6 +81,9 @@ function paymentMethodName(
         case 'cash':
             return 'Cash';
 
+        case 'mixed':
+            return 'Mixed Payment';
+
         case 'cheque':
             return 'Cheque';
 

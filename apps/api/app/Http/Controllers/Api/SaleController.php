@@ -939,18 +939,79 @@ class SaleController extends Controller
                 $settlementType =
                     $validated['settlement_type'];
 
-                $paymentMethod =
-                    $validated['payment_method']
-                    ?? null;
+                /*
+                 * payments[] is the authoritative checkout payment list.
+                 * StoreSaleRequest also converts the old single-payment
+                 * payload into one row, so this remains backwards compatible.
+                 */
+                $paymentRows = collect(
+                    $validated['payments']
+                        ?? [],
+                )
+                    ->map(
+                        function (
+                            array $payment,
+                        ): array {
+                            return [
+                                'payment_method' =>
+                                $payment['payment_method'],
 
-                $amountReceived =
+                                /*
+                                 * For a single full cash payment this is the
+                                 * tendered cash before change. It is converted
+                                 * to the applied invoice amount before saving
+                                 * the SalePayment row below.
+                                 */
+                                'amount' =>
+                                round(
+                                    (float) $payment['amount'],
+                                    2,
+                                ),
+
+                                'reference_number' =>
+                                $payment['reference_number']
+                                    ?? null,
+
+                                'notes' =>
+                                $payment['notes']
+                                    ?? null,
+                            ];
+                        },
+                    )
+                    ->values();
+
+                $paymentTotal =
                     round(
-                        (float) (
-                            $validated['amount_received']
-                            ?? 0
-                        ),
+                        (float) $paymentRows
+                            ->sum('amount'),
                         2,
                     );
+
+                $singlePayment =
+                    $paymentRows->count()
+                    === 1;
+
+                $singleCashPayment =
+                    $singlePayment
+                    && $paymentRows
+                        ->first()['payment_method']
+                    === SalePayment::METHOD_CASH;
+
+                /*
+                 * These rows are actually persisted. For normal split
+                 * payments they are identical to paymentRows. For a single
+                 * full cash payment with over-tender, the cash row is reduced
+                 * to the invoice amount so the customer's change is never
+                 * recorded as revenue or drawer collection.
+                 */
+                $paymentsForStorage =
+                    $paymentRows
+                    ->map(
+                        fn(
+                            array $payment,
+                        ): array => $payment,
+                    )
+                    ->values();
 
                 $paidAmount = 0.0;
 
@@ -965,24 +1026,23 @@ class SaleController extends Controller
                     $settlementType
                     === Sale::SETTLEMENT_FULL
                 ) {
-                    if (!$paymentMethod) {
+                    if (
+                        $paymentRows->isEmpty()
+                    ) {
                         throw ValidationException::withMessages([
-                            'payment_method' => [
-                                'Please select a payment method.',
+                            'payments' => [
+                                'Add at least one payment method.',
                             ],
                         ]);
                     }
 
-                    if (
-                        $paymentMethod
-                        === SalePayment::METHOD_CASH
-                    ) {
+                    if ($singleCashPayment) {
                         if (
-                            $amountReceived
+                            $paymentTotal
                             < $grandTotal
                         ) {
                             throw ValidationException::withMessages([
-                                'amount_received' => [
+                                'payments.0.amount' => [
                                     'The received cash amount is less than the sale total.',
                                 ],
                             ]);
@@ -990,19 +1050,31 @@ class SaleController extends Controller
 
                         $changeAmount =
                             round(
-                                $amountReceived
+                                $paymentTotal
                                     - $grandTotal,
                                 2,
                             );
+
+                        /*
+                         * Save only the amount applied to the sale. The
+                         * over-tender portion is change returned to customer.
+                         */
+                        $paymentsForStorage = collect([
+                            [
+                                ...$paymentRows->first(),
+                                'amount' =>
+                                $grandTotal,
+                            ],
+                        ]);
                     } elseif (
                         abs(
-                            $amountReceived
+                            $paymentTotal
                                 - $grandTotal,
                         ) > 0.01
                     ) {
                         throw ValidationException::withMessages([
-                            'amount_received' => [
-                                'Card and bank-transfer payments must equal the sale total.',
+                            'payments' => [
+                                'The combined split-payment amount must equal the sale total.',
                             ],
                         ]);
                     }
@@ -1022,20 +1094,20 @@ class SaleController extends Controller
                     }
 
                     if (
-                        !$paymentMethod
-                        || $amountReceived <= 0
-                        || $amountReceived
+                        $paymentRows->isEmpty()
+                        || $paymentTotal <= 0
+                        || $paymentTotal
                         >= $grandTotal
                     ) {
                         throw ValidationException::withMessages([
-                            'amount_received' => [
-                                'The partial payment must be greater than zero and less than the sale total.',
+                            'payments' => [
+                                'The combined partial payment must be greater than zero and less than the sale total.',
                             ],
                         ]);
                     }
 
                     $paidAmount =
-                        $amountReceived;
+                        $paymentTotal;
 
                     $dueAmount =
                         round(
@@ -1056,10 +1128,11 @@ class SaleController extends Controller
                     }
 
                     if (
-                        $amountReceived > 0
+                        !$paymentRows->isEmpty()
+                        || $paymentTotal > 0
                     ) {
                         throw ValidationException::withMessages([
-                            'amount_received' => [
+                            'payments' => [
                                 'Use partial payment when an initial amount is received.',
                             ],
                         ]);
@@ -1355,29 +1428,51 @@ class SaleController extends Controller
                         ]);
                 }
 
-                if (
-                    $paidAmount > 0
+                /*
+                 * One SalePayment row is created for every payment method.
+                 * Examples:
+                 *
+                 * Cash          2,500
+                 * Card          1,500
+                 * Bank Transfer 1,000
+                 *
+                 * This makes reports, cashier shift totals and payment-method
+                 * breakdowns accurate without a new database table.
+                 */
+                foreach (
+                    $paymentsForStorage
+                    as $payment
                 ) {
+                    $appliedAmount =
+                        round(
+                            (float) $payment['amount'],
+                            2,
+                        );
+
+                    if ($appliedAmount <= 0) {
+                        continue;
+                    }
+
                     SalePayment::query()
                         ->create([
                             'sale_id' =>
                             $sale->id,
 
                             'payment_method' =>
-                            $paymentMethod,
+                            $payment['payment_method'],
 
                             'payment_type' =>
                             SalePayment::TYPE_INITIAL,
 
                             'amount' =>
-                            $paidAmount,
+                            $appliedAmount,
 
                             'reference_number' =>
-                            $validated['reference_number']
+                            $payment['reference_number']
                                 ?? null,
 
                             'notes' =>
-                            $validated['notes']
+                            $payment['notes']
                                 ?? null,
 
                             'created_by' =>
@@ -1570,8 +1665,20 @@ class SaleController extends Controller
         Sale $sale,
         bool $includeProfit,
     ): array {
-        $firstPayment =
-            $sale->payments->first();
+        $paymentMethods =
+            $sale->payments
+            ->pluck(
+                'payment_method',
+            )
+            ->filter()
+            ->unique()
+            ->values();
+
+        $summaryPaymentMethod =
+            $paymentMethods->count() > 1
+            ? 'mixed'
+            : $paymentMethods
+            ->first();
 
         return [
             'id' =>
@@ -1642,10 +1749,7 @@ class SaleController extends Controller
                 ->settlement_type,
 
             'payment_method' =>
-            $firstPayment
-                ? $firstPayment
-                ->payment_method
-                : null,
+            $summaryPaymentMethod,
 
             'customer' =>
             $sale->customer

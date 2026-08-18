@@ -299,6 +299,10 @@ function paymentMethodName(
         return 'Bank Transfer';
     }
 
+    if (method === 'mixed') {
+        return 'Mixed Payment';
+    }
+
     if (method === 'cheque') {
         return 'Cheque';
     }
@@ -513,6 +517,41 @@ function createDocumentView(
     const firstPayment =
         payments[0];
 
+    const distinctPaymentMethods =
+        Array.from(
+            new Set(
+                payments
+                    .map(
+                        (payment) =>
+                            payment.payment_method,
+                    )
+                    .filter(
+                        (method): method is string =>
+                            Boolean(method),
+                    ),
+            ),
+        );
+
+    const paymentMethod =
+        distinctPaymentMethods.length > 1
+            ? 'Mixed Payment'
+            : paymentMethodName(
+                distinctPaymentMethods[0]
+                ?? sale.payment_method
+                ?? firstPayment
+                    ?.payment_method,
+            );
+
+    const paymentReference =
+        payments.length === 1
+            ? (
+                sale.reference_number
+                ?? firstPayment
+                    ?.reference_number
+                ?? null
+            )
+            : null;
+
     /*
      * IMPORTANT PAYMENT VALUES
      * ------------------------
@@ -687,12 +726,7 @@ function createDocumentView(
         dueAmount,
         changeAmount,
 
-        paymentMethod:
-            paymentMethodName(
-                sale.payment_method
-                ?? firstPayment
-                    ?.payment_method,
-            ),
+        paymentMethod,
 
         paymentStatus:
             paymentStatusName(
@@ -700,11 +734,7 @@ function createDocumentView(
                 ?? sale.settlement_type,
             ),
 
-        paymentReference:
-            sale.reference_number
-            ?? firstPayment
-                ?.reference_number
-            ?? null,
+        paymentReference,
 
         dueDate:
             sale.due_date
@@ -778,6 +808,17 @@ function receiptNeedsUnicodeRendering(
             : null,
         document.notes,
     ];
+
+    document.payments.forEach((payment) => {
+        visibleText.push(
+            paymentMethodName(
+                payment.payment_method,
+            ),
+            settings.show_payment_reference
+                ? payment.reference_number
+                : null,
+        );
+    });
 
     document.items.forEach((item) => {
         visibleText.push(
@@ -1893,6 +1934,37 @@ function ThermalReceipt({
                     </strong>
                 </div>
 
+                {document.payments.length > 1
+                    && document.payments.map(
+                        (payment, index) => (
+                            <div
+                                key={
+                                    payment.id
+                                    ?? `payment-${index}`
+                                }
+                            >
+                                <span>
+                                    {paymentMethodName(
+                                        payment.payment_method,
+                                    )}:
+                                </span>
+
+                                <strong>
+                                    {money(
+                                        numberValue(
+                                            payment.amount,
+                                        ),
+                                    )}
+
+                                    {settings.show_payment_reference
+                                        && payment.reference_number
+                                        ? ` · ${payment.reference_number}`
+                                        : ''}
+                                </strong>
+                            </div>
+                        ),
+                    )}
+
                 {settings
                     .show_payment_reference
                     && document.paymentReference && (
@@ -2085,6 +2157,28 @@ function A4Invoice({
                     <p>
                         {document.paymentMethod}
                     </p>
+
+                    {document.payments.length > 1
+                        && document.payments.map(
+                            (payment, index) => (
+                                <p
+                                    key={
+                                        payment.id
+                                        ?? `invoice-payment-${index}`
+                                    }
+                                >
+                                    {paymentMethodName(
+                                        payment.payment_method,
+                                    )}
+                                    {': '}
+                                    {money(
+                                        numberValue(
+                                            payment.amount,
+                                        ),
+                                    )}
+                                </p>
+                            ),
+                        )}
                 </div>
 
                 {settings.show_cashier_name && (
@@ -2226,6 +2320,35 @@ function A4Invoice({
                             {document.paymentMethod}
                         </strong>
                     </p>
+
+                    {document.payments.length > 1
+                        && document.payments.map(
+                            (payment, index) => (
+                                <p
+                                    key={
+                                        payment.id
+                                        ?? `payment-summary-${index}`
+                                    }
+                                >
+                                    {paymentMethodName(
+                                        payment.payment_method,
+                                    )}
+                                    {': '}
+                                    <strong>
+                                        {money(
+                                            numberValue(
+                                                payment.amount,
+                                            ),
+                                        )}
+                                    </strong>
+
+                                    {settings.show_payment_reference
+                                        && payment.reference_number
+                                        ? ` · ${payment.reference_number}`
+                                        : ''}
+                                </p>
+                            ),
+                        )}
 
                     <p>
                         Paid:
@@ -4213,6 +4336,29 @@ export default function SaleReceiptModal({
                         right: saleDocument.paymentMethod,
                     },
                 ];
+
+                if (saleDocument.payments.length > 1) {
+                    saleDocument.payments.forEach(
+                        (payment) => {
+                            const reference =
+                                settings.show_payment_reference
+                                    && payment.reference_number
+                                    ? ` / ${payment.reference_number}`
+                                    : '';
+
+                            statusLines.push({
+                                left: paymentMethodName(
+                                    payment.payment_method,
+                                ),
+                                right: `${money(
+                                    numberValue(
+                                        payment.amount,
+                                    ),
+                                )}${reference}`,
+                            });
+                        },
+                    );
+                }
 
                 if (
                     settings.show_payment_reference

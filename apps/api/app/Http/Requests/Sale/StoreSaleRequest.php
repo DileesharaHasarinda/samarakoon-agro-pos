@@ -27,13 +27,6 @@ class StoreSaleRequest extends FormRequest
                 'notes',
             );
 
-        /*
-         * Due Date is optional.
-         *
-         * Convert an empty string coming from the
-         * React payment form into null before
-         * Laravel validation.
-         */
         $dueDate =
             $this->input(
                 'due_date',
@@ -50,9 +43,7 @@ class StoreSaleRequest extends FormRequest
                     mixed $item,
                 ): array {
                     $item =
-                        is_array(
-                            $item,
-                        )
+                        is_array($item)
                         ? $item
                         : [];
 
@@ -90,6 +81,109 @@ class StoreSaleRequest extends FormRequest
             )
             ->all();
 
+        /*
+         * New POS clients send payments[] so one sale can be paid
+         * using more than one method, for example:
+         *
+         * Cash          2,500
+         * Card          1,500
+         * Bank Transfer 1,000
+         *
+         * During rollout, older clients may still send only the
+         * legacy top-level payment_method + amount_received fields.
+         * If payments[] is completely absent, convert that legacy
+         * payload into one payment row automatically.
+         */
+        $rawPayments =
+            $this->input(
+                'payments',
+            );
+
+        if (! is_array($rawPayments)) {
+            $legacyMethod =
+                $this->input(
+                    'payment_method',
+                );
+
+            $legacyAmount =
+                (float) $this->input(
+                    'amount_received',
+                    0,
+                );
+
+            $rawPayments =
+                is_string($legacyMethod)
+                && trim($legacyMethod) !== ''
+                && $legacyAmount > 0
+                ? [
+                    [
+                        'payment_method' =>
+                        trim($legacyMethod),
+
+                        'amount' =>
+                        $legacyAmount,
+
+                        'reference_number' =>
+                        $reference,
+
+                        'notes' =>
+                        null,
+                    ],
+                ]
+                : [];
+        }
+
+        $payments = collect(
+            $rawPayments,
+        )
+            ->map(
+                function (
+                    mixed $payment,
+                ): array {
+                    $payment =
+                        is_array($payment)
+                        ? $payment
+                        : [];
+
+                    $method =
+                        $payment['payment_method']
+                        ?? null;
+
+                    $paymentReference =
+                        $payment['reference_number']
+                        ?? null;
+
+                    $paymentNotes =
+                        $payment['notes']
+                        ?? null;
+
+                    return [
+                        'payment_method' =>
+                        is_string($method)
+                            && trim($method) !== ''
+                            ? trim($method)
+                            : null,
+
+                        'amount' =>
+                        $payment['amount']
+                            ?? 0,
+
+                        'reference_number' =>
+                        is_string($paymentReference)
+                            && trim($paymentReference) !== ''
+                            ? trim($paymentReference)
+                            : null,
+
+                        'notes' =>
+                        is_string($paymentNotes)
+                            && trim($paymentNotes) !== ''
+                            ? trim($paymentNotes)
+                            : null,
+                    ];
+                },
+            )
+            ->all();
+
         $this->merge([
             'customer_id' =>
             $this->filled(
@@ -100,15 +194,31 @@ class StoreSaleRequest extends FormRequest
                 )
                 : null,
 
+            /*
+             * Keep the legacy fields available for backwards
+             * compatibility. SaleController uses payments[] as the
+             * authoritative source for new clients.
+             */
+            'payment_method' =>
+            $this->filled(
+                'payment_method',
+            )
+                ? trim(
+                    (string) $this->input(
+                        'payment_method',
+                    ),
+                )
+                : null,
+
             'amount_received' =>
             $this->input(
                 'amount_received',
                 0,
             ),
 
-            /*
-             * Empty due date becomes null.
-             */
+            'payments' =>
+            $payments,
+
             'due_date' =>
             is_string(
                 $dueDate,
@@ -183,17 +293,45 @@ class StoreSaleRequest extends FormRequest
             ],
 
             'amount_received' => [
-                'required',
+                'nullable',
                 'numeric',
                 'min:0',
             ],
 
-            /*
-             * OPTIONAL:
-             *
-             * Partial and Due sales may now be
-             * completed without a due date.
-             */
+            'payments' => [
+                'present',
+                'array',
+                'max:3',
+            ],
+
+            'payments.*.payment_method' => [
+                'required',
+
+                Rule::in([
+                    SalePayment::METHOD_CASH,
+                    SalePayment::METHOD_CARD,
+                    SalePayment::METHOD_BANK_TRANSFER,
+                ]),
+            ],
+
+            'payments.*.amount' => [
+                'required',
+                'numeric',
+                'min:0.01',
+            ],
+
+            'payments.*.reference_number' => [
+                'nullable',
+                'string',
+                'max:160',
+            ],
+
+            'payments.*.notes' => [
+                'nullable',
+                'string',
+                'max:500',
+            ],
+
             'due_date' => [
                 'nullable',
                 'date_format:Y-m-d',
@@ -294,14 +432,19 @@ class StoreSaleRequest extends FormRequest
                         'customer_id',
                     );
 
-                $paymentMethod =
+                $payments =
                     $this->input(
-                        'payment_method',
+                        'payments',
+                        [],
                     );
 
+                $payments =
+                    is_array($payments)
+                    ? $payments
+                    : [];
+
                 /*
-                 * Partial and due sales still require
-                 * a registered customer.
+                 * Partial and due sales require a registered customer.
                  */
                 if (
                     in_array(
@@ -323,20 +466,8 @@ class StoreSaleRequest extends FormRequest
                 }
 
                 /*
-                 * IMPORTANT:
-                 *
-                 * Due Date is intentionally NOT checked
-                 * here anymore.
-                 *
-                 * It is optional for:
-                 *
-                 * - Partial Payment
-                 * - Entire Sale on Due
-                 */
-
-                /*
-                 * Full and partial payments require
-                 * a payment method.
+                 * Full and partial settlements must contain at least one
+                 * payment row. Due settlement intentionally contains none.
                  */
                 if (
                     in_array(
@@ -347,13 +478,53 @@ class StoreSaleRequest extends FormRequest
                         ],
                         true,
                     )
-                    && ! $paymentMethod
+                    && count($payments) === 0
                 ) {
                     $validator
                         ->errors()
                         ->add(
-                            'payment_method',
-                            'Please select the payment method.',
+                            'payments',
+                            'Add at least one payment method.',
+                        );
+                }
+
+                if (
+                    $type === Sale::SETTLEMENT_DUE
+                    && count($payments) > 0
+                ) {
+                    $validator
+                        ->errors()
+                        ->add(
+                            'payments',
+                            'Entire Sale on Due cannot contain an initial payment. Use Partial Payment instead.',
+                        );
+                }
+
+                /*
+                 * Keep each method unique in the same checkout operation.
+                 * If the cashier needs two cash amounts, they should be
+                 * combined into one Cash line.
+                 */
+                $paymentMethods = collect(
+                    $payments,
+                )
+                    ->pluck(
+                        'payment_method',
+                    )
+                    ->filter()
+                    ->values();
+
+                if (
+                    $paymentMethods->count()
+                    !== $paymentMethods
+                    ->unique()
+                    ->count()
+                ) {
+                    $validator
+                        ->errors()
+                        ->add(
+                            'payments',
+                            'Use each payment method only once per sale.',
                         );
                 }
 
@@ -366,22 +537,14 @@ class StoreSaleRequest extends FormRequest
                         [],
                     );
 
-                if (
-                    ! is_array(
-                        $items,
-                    )
-                ) {
+                if (! is_array($items)) {
                     return;
                 }
 
                 foreach (
                     $items as $index => $item
                 ) {
-                    if (
-                        ! is_array(
-                            $item,
-                        )
-                    ) {
+                    if (! is_array($item)) {
                         continue;
                     }
 
@@ -393,10 +556,7 @@ class StoreSaleRequest extends FormRequest
                             ),
                         );
 
-                    if (
-                        $saleUnit
-                        === ''
-                    ) {
+                    if ($saleUnit === '') {
                         $validator
                             ->errors()
                             ->add(
@@ -411,10 +571,7 @@ class StoreSaleRequest extends FormRequest
                             ?? 0
                         );
 
-                    if (
-                        $quantity
-                        <= 0
-                    ) {
+                    if ($quantity <= 0) {
                         $validator
                             ->errors()
                             ->add(
@@ -429,10 +586,7 @@ class StoreSaleRequest extends FormRequest
                             ?? 0
                         );
 
-                    if (
-                        $discount
-                        < 0
-                    ) {
+                    if ($discount < 0) {
                         $validator
                             ->errors()
                             ->add(
@@ -498,6 +652,36 @@ class StoreSaleRequest extends FormRequest
 
             'amount_received.min' =>
             'The received amount cannot be negative.',
+
+            'payments.present' =>
+            'Payment information is missing.',
+
+            'payments.array' =>
+            'Payment information is invalid.',
+
+            'payments.max' =>
+            'A sale can use a maximum of three payment methods.',
+
+            'payments.*.payment_method.required' =>
+            'Please select the payment method.',
+
+            'payments.*.payment_method.in' =>
+            'The selected payment method is invalid.',
+
+            'payments.*.amount.required' =>
+            'Please enter the payment amount.',
+
+            'payments.*.amount.numeric' =>
+            'The payment amount must be a valid number.',
+
+            'payments.*.amount.min' =>
+            'Each payment amount must be greater than zero.',
+
+            'payments.*.reference_number.max' =>
+            'The payment reference cannot be longer than 160 characters.',
+
+            'payments.*.notes.max' =>
+            'The payment note cannot be longer than 500 characters.',
 
             'due_date.date_format' =>
             'Please enter a valid due date.',
