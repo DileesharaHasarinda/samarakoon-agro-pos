@@ -308,6 +308,7 @@ const paymentModalStyles = `
         display: flex !important;
 
         width: min(820px, 100%) !important;
+
         max-height:
             calc(100dvh - 40px) !important;
 
@@ -457,7 +458,6 @@ const paymentModalStyles = `
 
     #pos-payment-modal .payment-close:disabled {
         opacity: 0.55 !important;
-
         cursor: not-allowed !important;
     }
 
@@ -797,7 +797,6 @@ const paymentModalStyles = `
     #pos-payment-modal .payment-choice:disabled,
     #pos-payment-modal .payment-small-button:disabled {
         opacity: 0.55 !important;
-
         cursor: not-allowed !important;
     }
 
@@ -805,7 +804,6 @@ const paymentModalStyles = `
         display: grid !important;
 
         gap: 5px !important;
-
         margin-top: 12px !important;
     }
 
@@ -818,6 +816,13 @@ const paymentModalStyles = `
 
     #pos-payment-modal .payment-required {
         color: var(--pay-red-700) !important;
+    }
+
+    #pos-payment-modal .payment-optional-label {
+        color: var(--pay-muted) !important;
+
+        font-size: 11px !important;
+        font-weight: 550 !important;
     }
 
     #pos-payment-modal .payment-input,
@@ -1350,17 +1355,23 @@ export default function PaymentModal({
     onSubmit,
 }: PaymentModalProps) {
     const amountInputRef =
-        useRef<HTMLInputElement | null>(null);
+        useRef<HTMLInputElement | null>(
+            null,
+        );
 
     const [
         selectedCustomer,
         setSelectedCustomer,
-    ] = useState<Customer | null>(null);
+    ] = useState<Customer | null>(
+        null,
+    );
 
     const [
         customerModalOpen,
         setCustomerModalOpen,
-    ] = useState(false);
+    ] = useState(
+        false,
+    );
 
     const [
         settlementType,
@@ -1379,255 +1390,404 @@ export default function PaymentModal({
     const [
         amountReceived,
         setAmountReceived,
-    ] = useState('0');
+    ] = useState(
+        '0',
+    );
 
     const [
         dueDate,
         setDueDate,
-    ] = useState('');
+    ] = useState(
+        '',
+    );
 
     const [
         referenceNumber,
         setReferenceNumber,
-    ] = useState('');
+    ] = useState(
+        '',
+    );
 
     const [
         notes,
         setNotes,
-    ] = useState('');
+    ] = useState(
+        '',
+    );
 
     const [
         localError,
         setLocalError,
-    ] = useState('');
-
-    const minimumDueDate = useMemo(
-        () => getTodayDateValue(),
-        [],
+    ] = useState(
+        '',
     );
 
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
-        setSelectedCustomer(null);
-        setCustomerModalOpen(false);
-        setSettlementType('full');
-        setPaymentMethod('cash');
-        setAmountReceived('0');
-        setDueDate('');
-        setReferenceNumber('');
-        setNotes('');
-        setLocalError('');
-    }, [isOpen]);
-
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
-        const previousBodyOverflow =
-            document.body.style.overflow;
-
-        document.body.style.overflow = 'hidden';
-
-        const focusTimeout = window.setTimeout(
-            () => {
-                if (!customerModalOpen) {
-                    amountInputRef.current?.focus();
-                    amountInputRef.current?.select();
-                }
-            },
-            90,
+    const minimumDueDate =
+        useMemo(
+            () =>
+                getTodayDateValue(),
+            [],
         );
 
-        const handleKeyDown = (
-            event: KeyboardEvent,
-        ): void => {
-            if (
-                event.key === 'Escape'
-                && !customerModalOpen
-                && !isSubmitting
-            ) {
-                onClose();
-            }
-        };
-
-        window.addEventListener(
-            'keydown',
-            handleKeyDown,
-        );
-
-        return () => {
-            window.clearTimeout(focusTimeout);
-
-            document.body.style.overflow =
-                previousBodyOverflow;
-
-            window.removeEventListener(
-                'keydown',
-                handleKeyDown,
-            );
-        };
-    }, [
-        isOpen,
-        customerModalOpen,
-        isSubmitting,
-        onClose,
-    ]);
-
-    const numericAmount = Number(
-        amountReceived || 0,
-    );
-
-    const validReceivedAmount =
-        Number.isFinite(numericAmount)
-            ? Math.max(0, numericAmount)
-            : 0;
-
-    const displayedReceivedAmount =
-        settlementType === 'due'
-            ? 0
-            : validReceivedAmount;
-
-    const balanceToReceive = useMemo(
-        () => (
-            Math.max(
-                0,
-                grandTotal
-                - displayedReceivedAmount,
-            )
-        ),
-        [
-            displayedReceivedAmount,
-            grandTotal,
-        ],
-    );
-
-    const dueAmount = useMemo(
-        () => (
-            settlementType === 'full'
-                ? 0
-                : balanceToReceive
-        ),
-        [
-            balanceToReceive,
-            settlementType,
-        ],
-    );
-
-    const changeAmount = useMemo(
+    useEffect(
         () => {
-            if (
-                settlementType !== 'full'
-                || paymentMethod !== 'cash'
-            ) {
-                return 0;
+            if (!isOpen) {
+                return;
             }
 
-            return Math.max(
-                0,
-                displayedReceivedAmount
-                - grandTotal,
+            setSelectedCustomer(
+                null,
+            );
+
+            setCustomerModalOpen(
+                false,
+            );
+
+            setSettlementType(
+                'full',
+            );
+
+            setPaymentMethod(
+                'cash',
+            );
+
+            setAmountReceived(
+                '0',
+            );
+
+            setDueDate(
+                '',
+            );
+
+            setReferenceNumber(
+                '',
+            );
+
+            setNotes(
+                '',
+            );
+
+            setLocalError(
+                '',
             );
         },
         [
-            displayedReceivedAmount,
-            grandTotal,
-            paymentMethod,
-            settlementType,
+            isOpen,
         ],
     );
 
+    useEffect(
+        () => {
+            if (!isOpen) {
+                return;
+            }
+
+            const previousBodyOverflow =
+                document.body
+                    .style
+                    .overflow;
+
+            document.body
+                .style
+                .overflow =
+                'hidden';
+
+            const focusTimeout =
+                window.setTimeout(
+                    () => {
+                        if (
+                            !customerModalOpen
+                        ) {
+                            amountInputRef
+                                .current
+                                ?.focus();
+
+                            amountInputRef
+                                .current
+                                ?.select();
+                        }
+                    },
+                    90,
+                );
+
+            const handleKeyDown = (
+                event: KeyboardEvent,
+            ): void => {
+                if (
+                    event.key
+                    === 'Escape'
+                    && !customerModalOpen
+                    && !isSubmitting
+                ) {
+                    onClose();
+                }
+            };
+
+            window.addEventListener(
+                'keydown',
+                handleKeyDown,
+            );
+
+            return () => {
+                window.clearTimeout(
+                    focusTimeout,
+                );
+
+                document.body
+                    .style
+                    .overflow =
+                    previousBodyOverflow;
+
+                window.removeEventListener(
+                    'keydown',
+                    handleKeyDown,
+                );
+            };
+        },
+        [
+            isOpen,
+            customerModalOpen,
+            isSubmitting,
+            onClose,
+        ],
+    );
+
+    const numericAmount =
+        Number(
+            amountReceived
+            || 0,
+        );
+
+    const validReceivedAmount =
+        Number.isFinite(
+            numericAmount,
+        )
+            ? Math.max(
+                0,
+                numericAmount,
+            )
+            : 0;
+
+    const displayedReceivedAmount =
+        settlementType
+            === 'due'
+            ? 0
+            : validReceivedAmount;
+
+    const balanceToReceive =
+        useMemo(
+            () => (
+                Math.max(
+                    0,
+                    grandTotal
+                    - displayedReceivedAmount,
+                )
+            ),
+            [
+                displayedReceivedAmount,
+                grandTotal,
+            ],
+        );
+
+    const dueAmount =
+        useMemo(
+            () => (
+                settlementType
+                    === 'full'
+                    ? 0
+                    : balanceToReceive
+            ),
+            [
+                balanceToReceive,
+                settlementType,
+            ],
+        );
+
+    const changeAmount =
+        useMemo(
+            () => {
+                if (
+                    settlementType
+                    !== 'full'
+                    || paymentMethod
+                    !== 'cash'
+                ) {
+                    return 0;
+                }
+
+                return Math.max(
+                    0,
+                    displayedReceivedAmount
+                    - grandTotal,
+                );
+            },
+            [
+                displayedReceivedAmount,
+                grandTotal,
+                paymentMethod,
+                settlementType,
+            ],
+        );
+
     if (
         !isOpen
-        || typeof document === 'undefined'
+        || typeof document
+        === 'undefined'
     ) {
         return null;
     }
 
     const changeSettlementType = (
-        nextType: SaleSettlementType,
+        nextType:
+            SaleSettlementType,
     ): void => {
-        setSettlementType(nextType);
-        setLocalError('');
+        setSettlementType(
+            nextType,
+        );
 
-        if (nextType === 'full') {
-            setDueDate('');
+        setLocalError(
+            '',
+        );
+
+        if (
+            nextType
+            === 'full'
+        ) {
+            setDueDate(
+                '',
+            );
 
             setAmountReceived(
-                paymentMethod === 'cash'
+                paymentMethod
+                    === 'cash'
                     ? '0'
-                    : grandTotal.toFixed(2),
+                    : grandTotal
+                        .toFixed(
+                            2,
+                        ),
             );
         }
 
-        if (nextType === 'partial') {
-            setAmountReceived('0');
+        if (
+            nextType
+            === 'partial'
+        ) {
+            setAmountReceived(
+                '0',
+            );
         }
 
-        if (nextType === 'due') {
-            setAmountReceived('0');
+        if (
+            nextType
+            === 'due'
+        ) {
+            setAmountReceived(
+                '0',
+            );
         }
     };
 
     const changePaymentMethod = (
-        nextMethod: PosPaymentMethod,
+        nextMethod:
+            PosPaymentMethod,
     ): void => {
-        setPaymentMethod(nextMethod);
-        setLocalError('');
+        setPaymentMethod(
+            nextMethod,
+        );
 
-        if (settlementType === 'full') {
+        setLocalError(
+            '',
+        );
+
+        if (
+            settlementType
+            === 'full'
+        ) {
             setAmountReceived(
-                nextMethod === 'cash'
+                nextMethod
+                    === 'cash'
                     ? '0'
-                    : grandTotal.toFixed(2),
+                    : grandTotal
+                        .toFixed(
+                            2,
+                        ),
             );
         }
     };
 
-    const handleClose = (): void => {
-        if (isSubmitting) {
-            return;
-        }
+    const handleClose =
+        (): void => {
+            if (
+                isSubmitting
+            ) {
+                return;
+            }
 
-        setCustomerModalOpen(false);
-        onClose();
-    };
+            setCustomerModalOpen(
+                false,
+            );
 
-    const useAmountDue = (): void => {
-        setAmountReceived(
-            settlementType === 'partial'
-                ? Math.max(
-                    0,
-                    grandTotal - 0.01,
-                ).toFixed(2)
-                : grandTotal.toFixed(2),
-        );
+            onClose();
+        };
 
-        setLocalError('');
+    const useAmountDue =
+        (): void => {
+            setAmountReceived(
+                settlementType
+                    === 'partial'
+                    ? Math.max(
+                        0,
+                        grandTotal
+                        - 0.01,
+                    ).toFixed(
+                        2,
+                    )
+                    : grandTotal
+                        .toFixed(
+                            2,
+                        ),
+            );
 
-        window.setTimeout(
-            () => {
-                amountInputRef.current?.focus();
-                amountInputRef.current?.select();
-            },
-            50,
-        );
-    };
+            setLocalError(
+                '',
+            );
+
+            window.setTimeout(
+                () => {
+                    amountInputRef
+                        .current
+                        ?.focus();
+
+                    amountInputRef
+                        .current
+                        ?.select();
+                },
+                50,
+            );
+        };
 
     const handleSubmit = (
-        event: FormEvent<HTMLFormElement>,
+        event:
+            FormEvent<HTMLFormElement>,
     ): void => {
         event.preventDefault();
 
-        setLocalError('');
+        setLocalError(
+            '',
+        );
 
+        /*
+         * Partial and due sales still need
+         * a registered customer.
+         *
+         * Only Due Date is optional.
+         */
         if (
             (
-                settlementType === 'partial'
-                || settlementType === 'due'
+                settlementType
+                === 'partial'
+                || settlementType
+                === 'due'
             )
             && !selectedCustomer
         ) {
@@ -1638,63 +1798,80 @@ export default function PaymentModal({
             return;
         }
 
-        if (
-            settlementType !== 'full'
-            && !dueDate
-        ) {
-            setLocalError(
-                'Select the due date.',
-            );
+        /*
+         * IMPORTANT:
+         *
+         * There is intentionally NO validation
+         * requiring dueDate here.
+         *
+         * Due Date is optional for:
+         * - Partial Payment
+         * - Entire Sale on Due
+         */
 
-            return;
-        }
-
         if (
-            settlementType !== 'due'
+            settlementType
+            !== 'due'
             && (
-                !Number.isFinite(numericAmount)
-                || numericAmount < 0
+                !Number.isFinite(
+                    numericAmount,
+                )
+                || numericAmount
+                < 0
             )
         ) {
             setLocalError(
                 'Enter a valid received amount.',
             );
 
-            amountInputRef.current?.focus();
+            amountInputRef
+                .current
+                ?.focus();
 
             return;
         }
 
         if (
-            settlementType === 'partial'
-            && numericAmount <= 0
+            settlementType
+            === 'partial'
+            && numericAmount
+            <= 0
         ) {
             setLocalError(
                 'The received amount must be greater than zero for a partial payment.',
             );
 
-            amountInputRef.current?.focus();
+            amountInputRef
+                .current
+                ?.focus();
 
             return;
         }
 
         if (
-            settlementType === 'partial'
-            && numericAmount >= grandTotal
+            settlementType
+            === 'partial'
+            && numericAmount
+            >= grandTotal
         ) {
             setLocalError(
                 'For a partial payment, the received amount must be less than the grand total.',
             );
 
-            amountInputRef.current?.focus();
+            amountInputRef
+                .current
+                ?.focus();
 
             return;
         }
 
         if (
-            settlementType === 'full'
-            && paymentMethod === 'cash'
-            && numericAmount < grandTotal
+            settlementType
+            === 'full'
+            && paymentMethod
+            === 'cash'
+            && numericAmount
+            < grandTotal
         ) {
             setLocalError(
                 `Receive another ${currencyFormatter.format(
@@ -1702,30 +1879,38 @@ export default function PaymentModal({
                 )} before completing the sale.`,
             );
 
-            amountInputRef.current?.focus();
+            amountInputRef
+                .current
+                ?.focus();
 
             return;
         }
 
         if (
-            settlementType === 'full'
-            && paymentMethod !== 'cash'
+            settlementType
+            === 'full'
+            && paymentMethod
+            !== 'cash'
             && Math.abs(
-                numericAmount - grandTotal,
+                numericAmount
+                - grandTotal,
             ) > 0.01
         ) {
             setLocalError(
                 'For card or bank-transfer payments, the received amount must equal the grand total.',
             );
 
-            amountInputRef.current?.focus();
+            amountInputRef
+                .current
+                ?.focus();
 
             return;
         }
 
         onSubmit({
             customer_id:
-                selectedCustomer?.id
+                selectedCustomer
+                    ?.id
                 ?? null,
 
             settlement_type:
@@ -1734,333 +1919,222 @@ export default function PaymentModal({
             discount,
 
             payment_method:
-                settlementType === 'due'
+                settlementType
+                    === 'due'
                     ? null
                     : paymentMethod,
 
             amount_received:
-                settlementType === 'due'
+                settlementType
+                    === 'due'
                     ? 0
                     : numericAmount,
 
+            /*
+             * Empty string is allowed here.
+             * StoreSaleRequest converts it to null.
+             */
             due_date:
-                settlementType === 'full'
+                settlementType
+                    === 'full'
                     ? ''
-                    : dueDate,
+                    : dueDate.trim(),
 
             reference_number:
-                referenceNumber.trim(),
+                referenceNumber
+                    .trim(),
 
             notes:
-                notes.trim(),
+                notes
+                    .trim(),
         });
     };
 
-    const paymentModal = customerModalOpen
-        ? null
-        : createPortal(
-            <div id="pos-payment-modal">
-                <style>
-                    {paymentModalStyles}
-                </style>
+    const paymentModal =
+        customerModalOpen
+            ? null
+            : createPortal(
+                <div id="pos-payment-modal">
+                    <style>
+                        {paymentModalStyles}
+                    </style>
 
-                <div
-                    className="payment-backdrop"
-                    role="presentation"
-                    onMouseDown={(event) => {
-                        if (
-                            event.target
-                            === event.currentTarget
-                            && !isSubmitting
-                        ) {
-                            handleClose();
-                        }
-                    }}
-                >
-                    <section
-                        className="payment-dialog"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="payment-dialog-title"
+                    <div
+                        className="payment-backdrop"
+                        role="presentation"
+                        onMouseDown={(event) => {
+                            if (
+                                event.target
+                                === event.currentTarget
+                                && !isSubmitting
+                            ) {
+                                handleClose();
+                            }
+                        }}
                     >
-                        <header className="payment-header">
-                            <div>
-                                <span className="payment-eyebrow">
-                                    Checkout
-                                </span>
-
-                                <h2
-                                    id="payment-dialog-title"
-                                    className="payment-title"
-                                >
-                                    Complete Sale
-                                </h2>
-                            </div>
-
-                            <div className="payment-total-card">
-                                <span>
-                                    Amount due
-                                </span>
-
-                                <strong>
-                                    {currencyFormatter.format(
-                                        grandTotal,
-                                    )}
-                                </strong>
-                            </div>
-
-                            <button
-                                type="button"
-                                className="payment-close"
-                                aria-label="Close payment window"
-                                disabled={isSubmitting}
-                                onClick={handleClose}
-                            >
-                                <Icon name="close" />
-                            </button>
-                        </header>
-
-                        <form
-                            className="payment-form"
-                            onSubmit={handleSubmit}
+                        <section
+                            className="payment-dialog"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="payment-dialog-title"
                         >
-                            <div className="payment-body">
-                                {(localError
-                                    || errorMessage) && (
-                                        <div
-                                            className="payment-error"
-                                            role="alert"
-                                        >
-                                            <Icon name="alert" />
+                            <header className="payment-header">
+                                <div>
+                                    <span className="payment-eyebrow">
+                                        Checkout
+                                    </span>
 
-                                            <span>
-                                                {localError
-                                                    || errorMessage}
-                                            </span>
-                                        </div>
-                                    )}
+                                    <h2
+                                        id="payment-dialog-title"
+                                        className="payment-title"
+                                    >
+                                        Complete Sale
+                                    </h2>
+                                </div>
 
-                                <section className="payment-section">
-                                    <div className="payment-section-heading">
-                                        <span className="payment-step-number">
-                                            1
-                                        </span>
+                                <div className="payment-total-card">
+                                    <span>
+                                        Amount due
+                                    </span>
 
-                                        <div>
-                                            <h3 className="payment-section-title">
-                                                Customer
-                                            </h3>
+                                    <strong>
+                                        {currencyFormatter.format(
+                                            grandTotal,
+                                        )}
+                                    </strong>
+                                </div>
 
-                                            <p className="payment-section-help">
-                                                A registered customer
-                                                is required only for
-                                                partial payments and
-                                                due sales.
-                                            </p>
-                                        </div>
-                                    </div>
+                                <button
+                                    type="button"
+                                    className="payment-close"
+                                    aria-label="Close payment window"
+                                    disabled={
+                                        isSubmitting
+                                    }
+                                    onClick={
+                                        handleClose
+                                    }
+                                >
+                                    <Icon name="close" />
+                                </button>
+                            </header>
 
-                                    <div className="payment-customer-card">
-                                        <div className="payment-customer-main">
-                                            <span className="payment-customer-icon">
-                                                <Icon name="user" />
-                                            </span>
+                            <form
+                                className="payment-form"
+                                onSubmit={
+                                    handleSubmit
+                                }
+                            >
+                                <div className="payment-body">
+                                    {(localError
+                                        || errorMessage) && (
+                                            <div
+                                                className="payment-error"
+                                                role="alert"
+                                            >
+                                                <Icon name="alert" />
 
-                                            <div className="payment-customer-copy">
-                                                <span className="payment-customer-label">
-                                                    Current customer
-                                                </span>
-
-                                                <strong className="payment-customer-name">
-                                                    {selectedCustomer
-                                                        ?.name
-                                                        ?? 'Walk-in Customer'}
-                                                </strong>
-
-                                                <span className="payment-customer-mobile">
-                                                    {selectedCustomer
-                                                        ?.mobile
-                                                        ?? 'No registered customer selected'}
+                                                <span>
+                                                    {localError
+                                                        || errorMessage}
                                                 </span>
                                             </div>
-                                        </div>
+                                        )}
 
-                                        <div className="payment-customer-actions">
-                                            <button
-                                                type="button"
-                                                className="payment-small-button payment-select-customer"
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                onClick={() => {
-                                                    setCustomerModalOpen(
-                                                        true,
-                                                    );
-                                                }}
-                                            >
-                                                {selectedCustomer
-                                                    ? 'Change'
-                                                    : 'Select Customer'}
-                                            </button>
+                                    {/* CUSTOMER */}
 
-                                            {selectedCustomer && (
-                                                <button
-                                                    type="button"
-                                                    className="payment-small-button payment-remove-customer"
-                                                    disabled={
-                                                        isSubmitting
-                                                    }
-                                                    onClick={() => {
-                                                        setSelectedCustomer(
-                                                            null,
-                                                        );
-
-                                                        setLocalError(
-                                                            '',
-                                                        );
-                                                    }}
-                                                >
-                                                    Use Walk-in
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <section className="payment-section">
-                                    <div className="payment-section-heading">
-                                        <span className="payment-step-number">
-                                            2
-                                        </span>
-
-                                        <div>
-                                            <h3 className="payment-section-title">
-                                                Sale settlement
-                                            </h3>
-
-                                            <p className="payment-section-help">
-                                                Choose whether the
-                                                customer pays now,
-                                                pays partly, or places
-                                                the entire sale on due.
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="payment-choice-grid">
-                                        <button
-                                            type="button"
-                                            className={
-                                                settlementType
-                                                    === 'full'
-                                                    ? 'payment-choice active'
-                                                    : 'payment-choice'
-                                            }
-                                            disabled={
-                                                isSubmitting
-                                            }
-                                            onClick={() => {
-                                                changeSettlementType(
-                                                    'full',
-                                                );
-                                            }}
-                                        >
-                                            Full Payment
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            className={
-                                                settlementType
-                                                    === 'partial'
-                                                    ? 'payment-choice active'
-                                                    : 'payment-choice'
-                                            }
-                                            disabled={
-                                                isSubmitting
-                                            }
-                                            onClick={() => {
-                                                changeSettlementType(
-                                                    'partial',
-                                                );
-                                            }}
-                                        >
-                                            Partial Payment
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            className={
-                                                settlementType
-                                                    === 'due'
-                                                    ? 'payment-choice active'
-                                                    : 'payment-choice'
-                                            }
-                                            disabled={
-                                                isSubmitting
-                                            }
-                                            onClick={() => {
-                                                changeSettlementType(
-                                                    'due',
-                                                );
-                                            }}
-                                        >
-                                            Entire Sale on Due
-                                        </button>
-                                    </div>
-
-                                    {settlementType !== 'full' && (
-                                        <label className="payment-field">
-                                            <span className="payment-field-label">
-                                                Due Date
-                                                {' '}
-
-                                                <strong className="payment-required">
-                                                    *
-                                                </strong>
-                                            </span>
-
-                                            <input
-                                                type="date"
-                                                className="payment-input"
-                                                value={dueDate}
-                                                min={minimumDueDate}
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                onChange={(event) => {
-                                                    setDueDate(
-                                                        event
-                                                            .target
-                                                            .value,
-                                                    );
-
-                                                    setLocalError(
-                                                        '',
-                                                    );
-                                                }}
-                                            />
-                                        </label>
-                                    )}
-                                </section>
-
-                                {settlementType !== 'due' && (
                                     <section className="payment-section">
                                         <div className="payment-section-heading">
                                             <span className="payment-step-number">
-                                                3
+                                                1
                                             </span>
 
                                             <div>
                                                 <h3 className="payment-section-title">
-                                                    Payment method
+                                                    Customer
                                                 </h3>
+                                            </div>
+                                        </div>
 
-                                                <p className="payment-section-help">
-                                                    Select how the
-                                                    current payment is
-                                                    being received.
-                                                </p>
+                                        <div className="payment-customer-card">
+                                            <div className="payment-customer-main">
+                                                <span className="payment-customer-icon">
+                                                    <Icon name="user" />
+                                                </span>
+
+                                                <div className="payment-customer-copy">
+                                                    <span className="payment-customer-label">
+                                                        Current customer
+                                                    </span>
+
+                                                    <strong className="payment-customer-name">
+                                                        {selectedCustomer
+                                                            ?.name
+                                                            ?? 'Walk-in Customer'}
+                                                    </strong>
+
+                                                    <span className="payment-customer-mobile">
+                                                        {selectedCustomer
+                                                            ?.mobile
+                                                            ?? 'No registered customer selected'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="payment-customer-actions">
+                                                <button
+                                                    type="button"
+                                                    className="payment-small-button payment-select-customer"
+                                                    disabled={
+                                                        isSubmitting
+                                                    }
+                                                    onClick={() => {
+                                                        setCustomerModalOpen(
+                                                            true,
+                                                        );
+                                                    }}
+                                                >
+                                                    {selectedCustomer
+                                                        ? 'Change'
+                                                        : 'Select Customer'}
+                                                </button>
+
+                                                {selectedCustomer && (
+                                                    <button
+                                                        type="button"
+                                                        className="payment-small-button payment-remove-customer"
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        onClick={() => {
+                                                            setSelectedCustomer(
+                                                                null,
+                                                            );
+
+                                                            setLocalError(
+                                                                '',
+                                                            );
+                                                        }}
+                                                    >
+                                                        Use Walk-in
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    {/* SETTLEMENT */}
+
+                                    <section className="payment-section">
+                                        <div className="payment-section-heading">
+                                            <span className="payment-step-number">
+                                                2
+                                            </span>
+
+                                            <div>
+                                                <h3 className="payment-section-title">
+                                                    Sale settlement
+                                                </h3>
                                             </div>
                                         </div>
 
@@ -2068,8 +2142,8 @@ export default function PaymentModal({
                                             <button
                                                 type="button"
                                                 className={
-                                                    paymentMethod
-                                                        === 'cash'
+                                                    settlementType
+                                                        === 'full'
                                                         ? 'payment-choice active'
                                                         : 'payment-choice'
                                                 }
@@ -2077,21 +2151,19 @@ export default function PaymentModal({
                                                     isSubmitting
                                                 }
                                                 onClick={() => {
-                                                    changePaymentMethod(
-                                                        'cash',
+                                                    changeSettlementType(
+                                                        'full',
                                                     );
                                                 }}
                                             >
-                                                <Icon name="cash" />
-
-                                                Cash
+                                                Full Payment
                                             </button>
 
                                             <button
                                                 type="button"
                                                 className={
-                                                    paymentMethod
-                                                        === 'card'
+                                                    settlementType
+                                                        === 'partial'
                                                         ? 'payment-choice active'
                                                         : 'payment-choice'
                                                 }
@@ -2099,21 +2171,19 @@ export default function PaymentModal({
                                                     isSubmitting
                                                 }
                                                 onClick={() => {
-                                                    changePaymentMethod(
-                                                        'card',
+                                                    changeSettlementType(
+                                                        'partial',
                                                     );
                                                 }}
                                             >
-                                                <Icon name="card" />
-
-                                                Card
+                                                Partial Payment
                                             </button>
 
                                             <button
                                                 type="button"
                                                 className={
-                                                    paymentMethod
-                                                        === 'bank_transfer'
+                                                    settlementType
+                                                        === 'due'
                                                         ? 'payment-choice active'
                                                         : 'payment-choice'
                                                 }
@@ -2121,284 +2191,443 @@ export default function PaymentModal({
                                                     isSubmitting
                                                 }
                                                 onClick={() => {
-                                                    changePaymentMethod(
-                                                        'bank_transfer',
+                                                    changeSettlementType(
+                                                        'due',
                                                     );
                                                 }}
                                             >
-                                                <Icon name="bank" />
-
-                                                Bank Transfer
+                                                Entire Sale on Due
                                             </button>
                                         </div>
+
+                                        {settlementType
+                                            !== 'full' && (
+                                                <label className="payment-field">
+                                                    <span className="payment-field-label">
+                                                        Due Date
+                                                        {' '}
+
+                                                        <span className="payment-optional-label">
+                                                            (Optional)
+                                                        </span>
+                                                    </span>
+
+                                                    <input
+                                                        type="date"
+                                                        className="payment-input"
+                                                        value={
+                                                            dueDate
+                                                        }
+                                                        min={
+                                                            minimumDueDate
+                                                        }
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        onChange={(event) => {
+                                                            setDueDate(
+                                                                event
+                                                                    .target
+                                                                    .value,
+                                                            );
+
+                                                            setLocalError(
+                                                                '',
+                                                            );
+                                                        }}
+                                                    />
+                                                </label>
+                                            )}
                                     </section>
-                                )}
 
-                                <section className="payment-section">
-                                    <div className="payment-section-heading">
-                                        <span className="payment-step-number">
-                                            {settlementType
-                                                === 'due'
-                                                ? '3'
-                                                : '4'}
-                                        </span>
+                                    {/* PAYMENT METHOD */}
 
-                                        <div>
-                                            <h3 className="payment-section-title">
-                                                Received amount
-                                            </h3>
+                                    {settlementType
+                                        !== 'due' && (
+                                            <section className="payment-section">
+                                                <div className="payment-section-heading">
+                                                    <span className="payment-step-number">
+                                                        3
+                                                    </span>
 
-                                            <p className="payment-section-help">
-                                                Enter the amount
-                                                actually received from
-                                                the customer for this
-                                                sale.
-                                            </p>
-                                        </div>
-                                    </div>
+                                                    <div>
+                                                        <h3 className="payment-section-title">
+                                                            Payment method
+                                                        </h3>
+                                                    </div>
+                                                </div>
 
-                                    <div className="payment-amount-layout">
-                                        <label className="payment-field">
-                                            <span className="payment-field-label">
-                                                Amount Received (LKR)
+                                                <div className="payment-choice-grid">
+                                                    <button
+                                                        type="button"
+                                                        className={
+                                                            paymentMethod
+                                                                === 'cash'
+                                                                ? 'payment-choice active'
+                                                                : 'payment-choice'
+                                                        }
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        onClick={() => {
+                                                            changePaymentMethod(
+                                                                'cash',
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="cash" />
+
+                                                        Cash
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        className={
+                                                            paymentMethod
+                                                                === 'card'
+                                                                ? 'payment-choice active'
+                                                                : 'payment-choice'
+                                                        }
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        onClick={() => {
+                                                            changePaymentMethod(
+                                                                'card',
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="card" />
+
+                                                        Card
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        className={
+                                                            paymentMethod
+                                                                === 'bank_transfer'
+                                                                ? 'payment-choice active'
+                                                                : 'payment-choice'
+                                                        }
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        onClick={() => {
+                                                            changePaymentMethod(
+                                                                'bank_transfer',
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="bank" />
+
+                                                        Bank Transfer
+                                                    </button>
+                                                </div>
+                                            </section>
+                                        )}
+
+                                    {/* RECEIVED AMOUNT */}
+
+                                    <section className="payment-section">
+                                        <div className="payment-section-heading">
+                                            <span className="payment-step-number">
+                                                {settlementType
+                                                    === 'due'
+                                                    ? '3'
+                                                    : '4'}
                                             </span>
 
-                                            <span className="payment-amount-wrap">
-                                                <span className="payment-currency">
-                                                    LKR
+                                            <div>
+                                                <h3 className="payment-section-title">
+                                                    Received amount
+                                                </h3>
+                                            </div>
+                                        </div>
+
+                                        <div className="payment-amount-layout">
+                                            <label className="payment-field">
+                                                <span className="payment-field-label">
+                                                    Amount Received (LKR)
+                                                </span>
+
+                                                <span className="payment-amount-wrap">
+                                                    <span className="payment-currency">
+                                                        LKR
+                                                    </span>
+
+                                                    <input
+                                                        ref={
+                                                            amountInputRef
+                                                        }
+                                                        type="number"
+                                                        className="payment-input payment-amount-input"
+                                                        min="0"
+                                                        step="0.01"
+                                                        inputMode="decimal"
+                                                        value={
+                                                            amountReceived
+                                                        }
+                                                        disabled={
+                                                            isSubmitting
+                                                            || settlementType
+                                                            === 'due'
+                                                        }
+                                                        onFocus={(event) => {
+                                                            event
+                                                                .currentTarget
+                                                                .select();
+                                                        }}
+                                                        onChange={(event) => {
+                                                            setAmountReceived(
+                                                                event
+                                                                    .target
+                                                                    .value,
+                                                            );
+
+                                                            setLocalError(
+                                                                '',
+                                                            );
+                                                        }}
+                                                    />
+                                                </span>
+                                            </label>
+
+                                            {settlementType
+                                                !== 'due' && (
+                                                    <button
+                                                        type="button"
+                                                        className="payment-use-total"
+                                                        disabled={
+                                                            isSubmitting
+                                                        }
+                                                        onClick={
+                                                            useAmountDue
+                                                        }
+                                                    >
+                                                        <Icon name="check" />
+
+                                                        {settlementType
+                                                            === 'partial'
+                                                            ? 'Set Maximum Partial'
+                                                            : 'Use Exact Total'}
+                                                    </button>
+                                                )}
+                                        </div>
+
+                                        {settlementType
+                                            === 'due' && (
+                                                <span className="payment-due-message">
+                                                    No payment is collected
+                                                    now. The full amount will
+                                                    be recorded as customer
+                                                    due.
+                                                </span>
+                                            )}
+
+                                        <div className="payment-status-grid">
+                                            {settlementType
+                                                === 'full'
+                                                && balanceToReceive
+                                                > 0 && (
+                                                    <div className="payment-status danger">
+                                                        <span>
+                                                            Still to receive
+                                                        </span>
+
+                                                        <strong>
+                                                            {currencyFormatter.format(
+                                                                balanceToReceive,
+                                                            )}
+                                                        </strong>
+                                                    </div>
+                                                )}
+
+                                            {settlementType
+                                                === 'full'
+                                                && balanceToReceive
+                                                === 0
+                                                && changeAmount
+                                                === 0 && (
+                                                    <div className="payment-status success">
+                                                        <span>
+                                                            Payment status
+                                                        </span>
+
+                                                        <strong>
+                                                            Amount is correct
+                                                        </strong>
+                                                    </div>
+                                                )}
+
+                                            {settlementType
+                                                === 'full'
+                                                && paymentMethod
+                                                === 'cash'
+                                                && changeAmount
+                                                > 0 && (
+                                                    <div className="payment-status change">
+                                                        <span>
+                                                            Customer change
+                                                        </span>
+
+                                                        <strong>
+                                                            {currencyFormatter.format(
+                                                                changeAmount,
+                                                            )}
+                                                        </strong>
+                                                    </div>
+                                                )}
+
+                                            {settlementType
+                                                !== 'full' && (
+                                                    <div className="payment-status warning">
+                                                        <span>
+                                                            Due amount
+                                                        </span>
+
+                                                        <strong>
+                                                            {currencyFormatter.format(
+                                                                dueAmount,
+                                                            )}
+                                                        </strong>
+                                                    </div>
+                                                )}
+                                        </div>
+                                    </section>
+
+                                    {/* OPTIONAL DETAILS */}
+
+                                    <details className="payment-optional">
+                                        <summary className="payment-optional-summary">
+                                            Optional reference and notes
+                                        </summary>
+
+                                        <div className="payment-optional-content">
+                                            <label className="payment-field">
+                                                <span className="payment-field-label">
+                                                    Reference Number
                                                 </span>
 
                                                 <input
-                                                    ref={
-                                                        amountInputRef
-                                                    }
-                                                    type="number"
-                                                    className="payment-input payment-amount-input"
-                                                    min="0"
-                                                    step="0.01"
-                                                    inputMode="decimal"
+                                                    type="text"
+                                                    className="payment-input"
                                                     value={
-                                                        amountReceived
+                                                        referenceNumber
                                                     }
                                                     disabled={
                                                         isSubmitting
-                                                        || settlementType
-                                                        === 'due'
                                                     }
-                                                    onFocus={(event) => {
-                                                        event
-                                                            .currentTarget
-                                                            .select();
-                                                    }}
+                                                    maxLength={
+                                                        100
+                                                    }
+                                                    placeholder="Card slip or bank reference"
                                                     onChange={(event) => {
-                                                        setAmountReceived(
+                                                        setReferenceNumber(
                                                             event
                                                                 .target
                                                                 .value,
                                                         );
+                                                    }}
+                                                />
+                                            </label>
 
-                                                        setLocalError(
-                                                            '',
+                                            <label className="payment-field">
+                                                <span className="payment-field-label">
+                                                    Notes
+                                                </span>
+
+                                                <textarea
+                                                    className="payment-textarea"
+                                                    rows={
+                                                        3
+                                                    }
+                                                    value={
+                                                        notes
+                                                    }
+                                                    disabled={
+                                                        isSubmitting
+                                                    }
+                                                    maxLength={
+                                                        500
+                                                    }
+                                                    placeholder="Optional sale notes"
+                                                    onChange={(event) => {
+                                                        setNotes(
+                                                            event
+                                                                .target
+                                                                .value,
                                                         );
                                                     }}
                                                 />
-                                            </span>
-                                        </label>
+                                            </label>
+                                        </div>
+                                    </details>
+                                </div>
 
-                                        {settlementType !== 'due' && (
-                                            <button
-                                                type="button"
-                                                className="payment-use-total"
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                onClick={
-                                                    useAmountDue
-                                                }
-                                            >
-                                                <Icon name="check" />
+                                <footer className="payment-actions">
+                                    <button
+                                        type="button"
+                                        className="payment-button payment-cancel"
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                        onClick={
+                                            handleClose
+                                        }
+                                    >
+                                        Cancel
+                                    </button>
 
-                                                {settlementType
-                                                    === 'partial'
-                                                    ? 'Set Maximum Partial'
-                                                    : 'Use Exact Total'}
-                                            </button>
-                                        )}
-                                    </div>
+                                    <button
+                                        type="submit"
+                                        className="payment-button payment-complete"
+                                        disabled={
+                                            isSubmitting
+                                        }
+                                    >
+                                        <Icon name="receipt" />
 
-                                    {settlementType === 'due' && (
-                                        <span className="payment-due-message">
-                                            No payment is collected
-                                            now. The full amount will
-                                            be recorded as customer
-                                            due.
-                                        </span>
-                                    )}
-
-                                    <div className="payment-status-grid">
-                                        {settlementType === 'full'
-                                            && balanceToReceive > 0 && (
-                                                <div className="payment-status danger">
-                                                    <span>
-                                                        Still to receive
-                                                    </span>
-
-                                                    <strong>
-                                                        {currencyFormatter.format(
-                                                            balanceToReceive,
-                                                        )}
-                                                    </strong>
-                                                </div>
-                                            )}
-
-                                        {settlementType === 'full'
-                                            && balanceToReceive === 0
-                                            && changeAmount === 0 && (
-                                                <div className="payment-status success">
-                                                    <span>
-                                                        Payment status
-                                                    </span>
-
-                                                    <strong>
-                                                        Amount is correct
-                                                    </strong>
-                                                </div>
-                                            )}
-
-                                        {settlementType === 'full'
-                                            && paymentMethod === 'cash'
-                                            && changeAmount > 0 && (
-                                                <div className="payment-status change">
-                                                    <span>
-                                                        Customer change
-                                                    </span>
-
-                                                    <strong>
-                                                        {currencyFormatter.format(
-                                                            changeAmount,
-                                                        )}
-                                                    </strong>
-                                                </div>
-                                            )}
-
-                                        {settlementType !== 'full' && (
-                                            <div className="payment-status warning">
-                                                <span>
-                                                    Due amount
-                                                </span>
-
-                                                <strong>
-                                                    {currencyFormatter.format(
-                                                        dueAmount,
-                                                    )}
-                                                </strong>
-                                            </div>
-                                        )}
-                                    </div>
-                                </section>
-
-                                <details className="payment-optional">
-                                    <summary className="payment-optional-summary">
-                                        Optional reference and notes
-                                    </summary>
-
-                                    <div className="payment-optional-content">
-                                        <label className="payment-field">
-                                            <span className="payment-field-label">
-                                                Reference Number
-                                            </span>
-
-                                            <input
-                                                type="text"
-                                                className="payment-input"
-                                                value={
-                                                    referenceNumber
-                                                }
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                maxLength={100}
-                                                placeholder="Card slip or bank reference"
-                                                onChange={(event) => {
-                                                    setReferenceNumber(
-                                                        event
-                                                            .target
-                                                            .value,
-                                                    );
-                                                }}
-                                            />
-                                        </label>
-
-                                        <label className="payment-field">
-                                            <span className="payment-field-label">
-                                                Notes
-                                            </span>
-
-                                            <textarea
-                                                className="payment-textarea"
-                                                rows={3}
-                                                value={notes}
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                maxLength={500}
-                                                placeholder="Optional sale notes"
-                                                onChange={(event) => {
-                                                    setNotes(
-                                                        event
-                                                            .target
-                                                            .value,
-                                                    );
-                                                }}
-                                            />
-                                        </label>
-                                    </div>
-                                </details>
-                            </div>
-
-                            <footer className="payment-actions">
-                                <button
-                                    type="button"
-                                    className="payment-button payment-cancel"
-                                    disabled={isSubmitting}
-                                    onClick={handleClose}
-                                >
-                                    Cancel
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    className="payment-button payment-complete"
-                                    disabled={isSubmitting}
-                                >
-                                    <Icon name="receipt" />
-
-                                    {isSubmitting
-                                        ? 'Completing Sale...'
-                                        : 'Complete Sale'}
-                                </button>
-                            </footer>
-                        </form>
-                    </section>
-                </div>
-            </div>,
-            document.body,
-        );
+                                        {isSubmitting
+                                            ? 'Completing Sale...'
+                                            : 'Complete Sale'}
+                                    </button>
+                                </footer>
+                            </form>
+                        </section>
+                    </div>
+                </div>,
+                document.body,
+            );
 
     return (
         <>
             {paymentModal}
 
             <CustomerSelectModal
-                isOpen={customerModalOpen}
-                selectedCustomer={selectedCustomer}
+                isOpen={
+                    customerModalOpen
+                }
+                selectedCustomer={
+                    selectedCustomer
+                }
                 onClose={() => {
-                    setCustomerModalOpen(false);
+                    setCustomerModalOpen(
+                        false,
+                    );
                 }}
                 onSelect={(customer) => {
-                    setSelectedCustomer(customer);
-                    setCustomerModalOpen(false);
-                    setLocalError('');
+                    setSelectedCustomer(
+                        customer,
+                    );
+
+                    setCustomerModalOpen(
+                        false,
+                    );
+
+                    setLocalError(
+                        '',
+                    );
                 }}
             />
         </>

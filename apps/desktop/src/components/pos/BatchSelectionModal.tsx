@@ -4282,9 +4282,7 @@ export default function BatchSelectionModal({
                                                     Select Stock Batch
                                                 </h3>
 
-                                                <p className="bsm-section-help">
-                                                    Select the batch. The batch-specific selling price, purchase cost and expiry are used.
-                                                </p>
+                                             
                                             </div>
                                         </div>
 
@@ -4530,10 +4528,6 @@ export default function BatchSelectionModal({
                                                 <h3 className="bsm-section-title">
                                                     Select Selling Unit
                                                 </h3>
-
-                                                <p className="bsm-section-help">
-                                                    Continue exactly as before using the selected batch price.
-                                                </p>
                                             </div>
                                         </div>
 
@@ -4786,9 +4780,6 @@ export default function BatchSelectionModal({
                                                     Enter Quantity
                                                 </h3>
 
-                                                <p className="bsm-section-help">
-                                                    Enter the quantity for the selected price and unit.
-                                                </p>
                                             </div>
                                         </div>
 

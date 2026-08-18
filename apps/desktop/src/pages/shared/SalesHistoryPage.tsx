@@ -2002,6 +2002,230 @@ button:disabled {
         font-size: 8px !important;
     }
 }
+
+/* =========================================================
+   SALES HISTORY — ONLY SALES ROWS SCROLL
+   ========================================================= */
+
+#sapo-app-shell
+.sapo-shell-content.sales-history-scroll-lock {
+    display: flex !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+    overscroll-behavior: none !important;
+    scrollbar-width: none !important;
+    scrollbar-gutter: auto !important;
+}
+
+#sapo-app-shell
+.sapo-shell-content.sales-history-scroll-lock::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+}
+
+#sapo-app-shell
+.sapo-shell-content.sales-history-scroll-lock
+> #sapo-sales-history-page {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+#sapo-sales-history-page
+.shp-scroll-region {
+    position: relative !important;
+    inset: auto !important;
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 14px 14px 18px !important;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+    touch-action: auto !important;
+}
+
+#sapo-sales-history-page
+.shp-header,
+#sapo-sales-history-page
+.shp-summary-strip,
+#sapo-sales-history-page
+.shp-message {
+    flex: 0 0 auto !important;
+}
+
+#sapo-sales-history-page
+.shp-panel {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+#sapo-sales-history-page
+.shp-toolbar {
+    flex: 0 0 auto !important;
+}
+
+#sapo-sales-history-page
+.shp-table-head-wrapper {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    padding-right: 10px !important;
+    overflow: hidden !important;
+    background: #f1f5f9 !important;
+    border-bottom: 1px solid var(--shp-border-strong) !important;
+}
+
+#sapo-sales-history-page
+.shp-table-head-wrapper
+.shp-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+
+#sapo-sales-history-page
+.shp-table-head-wrapper
+.shp-table th {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+    height: 40px !important;
+    border-bottom: 0 !important;
+}
+
+#sapo-sales-history-page
+.shp-table-body-wrapper {
+    position: relative !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain !important;
+    scrollbar-gutter: stable !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: var(--shp-border-strong) transparent !important;
+    clip-path: inset(0) !important;
+    contain: paint !important;
+    background: var(--shp-white) !important;
+}
+
+#sapo-sales-history-page
+.shp-table-body-wrapper::-webkit-scrollbar {
+    width: 10px !important;
+}
+
+#sapo-sales-history-page
+.shp-table-body-wrapper::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+#sapo-sales-history-page
+.shp-table-body-wrapper::-webkit-scrollbar-thumb {
+    background: var(--shp-border-strong) !important;
+    border: 2px solid transparent !important;
+    border-radius: 999px !important;
+    background-clip: content-box !important;
+}
+
+#sapo-sales-history-page
+.shp-table-body-wrapper
+.shp-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+
+#sapo-sales-history-page
+.shp-table-wrapper {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+#sapo-sales-history-page col.shp-col-sale { width: 21% !important; }
+#sapo-sales-history-page col.shp-col-date { width: 15% !important; }
+#sapo-sales-history-page col.shp-col-cashier { width: 10% !important; }
+#sapo-sales-history-page col.shp-col-status { width: 13% !important; }
+#sapo-sales-history-page col.shp-col-money { width: 12% !important; }
+#sapo-sales-history-page col.shp-col-actions { width: 17% !important; }
+
+#sapo-sales-history-page
+.shp-pagination {
+    flex: 0 0 auto !important;
+}
+
+#sapo-sales-history-page
+.shp-table-body-wrapper
+.shp-table-state {
+    height: 180px !important;
+}
+
+@media (
+    max-width: 760px
+) {
+    #sapo-app-shell
+    .sapo-shell-content.sales-history-scroll-lock
+    > #sapo-sales-history-page {
+        height: auto !important;
+        max-height: none !important;
+        overflow: hidden !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-scroll-region {
+        height: auto !important;
+        min-height: 0 !important;
+        flex: 1 1 auto !important;
+        padding: 10px 8px 14px !important;
+        overflow: hidden !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-panel {
+        min-height: 0 !important;
+        flex: 1 1 auto !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-table-body-wrapper {
+        min-height: 0 !important;
+        flex: 1 1 auto !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+
+    #sapo-sales-history-page
+    .shp-table-head-wrapper {
+        padding-right: 10px !important;
+    }
+}
 `;
 
 export default function SalesHistoryPage() {
@@ -2009,6 +2233,38 @@ export default function SalesHistoryPage() {
         token,
         user,
     } = useAuth();
+
+    useEffect(
+        () => {
+            const shellContent =
+                document.querySelector<HTMLElement>(
+                    '#sapo-app-shell .sapo-shell-content',
+                );
+
+            if (!shellContent) {
+                return;
+            }
+
+            const previousScrollTop =
+                shellContent.scrollTop;
+
+            shellContent.classList.add(
+                'sales-history-scroll-lock',
+            );
+
+            shellContent.scrollTop = 0;
+
+            return () => {
+                shellContent.classList.remove(
+                    'sales-history-scroll-lock',
+                );
+
+                shellContent.scrollTop =
+                    previousScrollTop;
+            };
+        },
+        [],
+    );
 
     const [
         sales,
@@ -3100,41 +3356,50 @@ export default function SalesHistoryPage() {
                         </div>
                     </div>
 
-                    {/* TABLE */}
+                    {/* FIXED TABLE HEADINGS */}
 
-                    <div className="shp-table-wrapper">
+                    <div
+                        className="shp-table-head-wrapper"
+                        aria-hidden="true"
+                    >
                         <table className="shp-table">
+                            <colgroup>
+                                <col className="shp-col-sale" />
+                                <col className="shp-col-date" />
+                                <col className="shp-col-cashier" />
+                                <col className="shp-col-status" />
+                                <col className="shp-col-money" />
+                                <col className="shp-col-money" />
+                                <col className="shp-col-actions" />
+                            </colgroup>
+
                             <thead>
                                 <tr>
-                                    <th className="shp-col-sale">
-                                        Sale / Customer
-                                    </th>
-
-                                    <th className="shp-col-date">
-                                        Date & Time
-                                    </th>
-
-                                    <th className="shp-col-cashier">
-                                        Cashier
-                                    </th>
-
-                                    <th className="shp-col-status">
-                                        Status
-                                    </th>
-
-                                    <th className="shp-col-money">
-                                        Total
-                                    </th>
-
-                                    <th className="shp-col-money">
-                                        Due
-                                    </th>
-
-                                    <th className="shp-col-actions">
-                                        Actions
-                                    </th>
+                                    <th>Sale / Customer</th>
+                                    <th>Date & Time</th>
+                                    <th>Cashier</th>
+                                    <th>Status</th>
+                                    <th>Total</th>
+                                    <th>Due</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
+                        </table>
+                    </div>
+
+                    {/* ONLY SALES ROWS SCROLL */}
+
+                    <div className="shp-table-body-wrapper">
+                        <table className="shp-table">
+                            <colgroup>
+                                <col className="shp-col-sale" />
+                                <col className="shp-col-date" />
+                                <col className="shp-col-cashier" />
+                                <col className="shp-col-status" />
+                                <col className="shp-col-money" />
+                                <col className="shp-col-money" />
+                                <col className="shp-col-actions" />
+                            </colgroup>
 
                             <tbody>
                                 {isLoading ? (

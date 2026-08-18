@@ -331,7 +331,17 @@ function createEmptyItem():
 }
 
 function today(): string {
-    return new Date()
+    const currentDate =
+        new Date();
+
+    const timezoneOffset =
+        currentDate.getTimezoneOffset()
+        * 60_000;
+
+    return new Date(
+        currentDate.getTime()
+        - timezoneOffset,
+    )
         .toISOString()
         .slice(0, 10);
 }
@@ -436,15 +446,31 @@ function formatDateTime(
 }
 
 function formatQuantity(
-    value: number,
+    value: unknown,
 ): string {
+    const numericValue =
+        Number(value);
+
     return quantityFormatter.format(
         Number.isFinite(
-            Number(value),
+            numericValue,
         )
-            ? Number(value)
+            ? numericValue
             : 0,
     );
+}
+
+function moneyValue(
+    value: unknown,
+): number {
+    const numericValue =
+        Number(value);
+
+    return Number.isFinite(
+        numericValue,
+    )
+        ? numericValue
+        : 0;
 }
 
 function getStatusLabel(
@@ -564,29 +590,9 @@ const purchasesPageStyles = `
     display: flex !important;
 
     width: 100% !important;
-
-    height:
-        calc(
-            100vh - 96px
-        ) !important;
-
-    height:
-        calc(
-            100dvh - 96px
-        ) !important;
-
     min-width: 0 !important;
+    max-width: 100% !important;
     min-height: 0 !important;
-
-    max-height:
-        calc(
-            100vh - 96px
-        ) !important;
-
-    max-height:
-        calc(
-            100dvh - 96px
-        ) !important;
 
     flex: 1 1 auto !important;
 
@@ -596,24 +602,13 @@ const purchasesPageStyles = `
     gap: 14px !important;
 
     margin: 0 !important;
-
-    padding:
-        0
-        8px
-        34px
-        0 !important;
+    padding: 0 !important;
 
     overflow-x:
         hidden !important;
 
     overflow-y:
-        auto !important;
-
-    overscroll-behavior-y:
-        contain !important;
-
-    scrollbar-gutter:
-        stable !important;
+        visible !important;
 
     color:
         var(--pur-text) !important;
@@ -640,41 +635,6 @@ const purchasesPageStyles = `
     -webkit-font-smoothing:
         antialiased !important;
 
-    scrollbar-width:
-        thin !important;
-
-    scrollbar-color:
-        #89a091
-        #e8eeea !important;
-}
-
-#purchases-page::-webkit-scrollbar {
-    width: 10px !important;
-}
-
-#purchases-page::-webkit-scrollbar-track {
-    background:
-        #e8eeea !important;
-
-    border-radius:
-        999px !important;
-}
-
-#purchases-page::-webkit-scrollbar-thumb {
-    background:
-        #89a091 !important;
-
-    border:
-        2px solid
-        #e8eeea !important;
-
-    border-radius:
-        999px !important;
-}
-
-#purchases-page::-webkit-scrollbar-thumb:hover {
-    background:
-        var(--pur-green-700) !important;
 }
 
 #purchases-page button,
@@ -1195,8 +1155,9 @@ const purchasesPageStyles = `
     display:
         flex !important;
 
-    min-width:
-        0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
 
     flex-direction:
         column !important;
@@ -1468,8 +1429,10 @@ const purchasesPageStyles = `
 #purchases-page .pur-list {
     display: flex !important;
 
-    min-width:
-        0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
 
     flex-direction:
         column !important;
@@ -1489,32 +1452,33 @@ const purchasesPageStyles = `
     display:
         grid !important;
 
+    /*
+     * IMPORTANT:
+     * Keep every column inside the available content width.
+     * The application sidebar reduces the actual page width, so
+     * large fixed minimums here caused the Actions column to be
+     * clipped on the right side.
+     */
     grid-template-columns:
-        minmax(
-            180px,
-            1.15fr
-        )
-        minmax(
-            150px,
-            1fr
-        )
-        112px
-        minmax(
-            120px,
-            0.75fr
-        )
-        minmax(
-            135px,
-            0.8fr
-        )
-        100px
-        minmax(
-            320px,
-            auto
-        ) !important;
+        minmax(0, 1.25fr)
+        minmax(0, 1fr)
+        96px
+        110px
+        125px
+        92px
+        minmax(180px, 0.95fr) !important;
+
+    width:
+        100% !important;
+
+    min-width:
+        0 !important;
+
+    max-width:
+        100% !important;
 
     gap:
-        11px !important;
+        9px !important;
 
     align-items:
         center !important;
@@ -1542,8 +1506,17 @@ const purchasesPageStyles = `
 }
 
 #purchases-page .pur-row {
+    width:
+        100% !important;
+
     min-width:
         0 !important;
+
+    max-width:
+        100% !important;
+
+    overflow:
+        hidden !important;
 
     padding:
         11px 12px !important;
@@ -1823,33 +1796,60 @@ const purchasesPageStyles = `
 
 #purchases-page .pur-actions {
     display:
-        flex !important;
+        grid !important;
+
+    width:
+        100% !important;
+
+    min-width:
+        0 !important;
+
+    grid-template-columns:
+        repeat(
+            2,
+            minmax(0, 1fr)
+        ) !important;
 
     align-items:
         center !important;
 
     justify-content:
-        flex-end !important;
+        stretch !important;
 
     gap:
-        6px !important;
+        5px !important;
 }
 
 #purchases-page .pur-action-button {
+    width:
+        100% !important;
+
+    min-width:
+        0 !important;
+
     min-height:
         34px !important;
 
     padding:
-        5px 8px !important;
+        5px 6px !important;
 
     font-size:
-        11px !important;
+        10.5px !important;
+
+    white-space:
+        nowrap !important;
 }
 
 #purchases-page .pur-completed {
     display:
         inline-flex !important;
 
+    width:
+        100% !important;
+
+    min-width:
+        0 !important;
+
     min-height:
         34px !important;
 
@@ -1860,19 +1860,22 @@ const purchasesPageStyles = `
         center !important;
 
     gap:
-        5px !important;
+        4px !important;
 
     padding:
-        5px 8px !important;
+        5px 6px !important;
 
     color:
         var(--pur-green-900) !important;
 
     font-size:
-        11px !important;
+        10.5px !important;
 
     font-weight:
         700 !important;
+
+    white-space:
+        nowrap !important;
 
     background:
         var(--pur-green-50) !important;
@@ -2170,8 +2173,11 @@ const purchasesPageStyles = `
     }
 
     #purchases-page .pur-actions {
+        width:
+            100% !important;
+
         justify-content:
-            flex-start !important;
+            stretch !important;
     }
 }
 
@@ -2227,29 +2233,10 @@ const purchasesPageStyles = `
     max-width: 700px
 ) {
     #purchases-page {
-        height:
-            calc(
-                100vh - 72px
-            ) !important;
-
-        height:
-            calc(
-                100dvh - 72px
-            ) !important;
-
-        max-height:
-            calc(
-                100vh - 72px
-            ) !important;
-
-        max-height:
-            calc(
-                100dvh - 72px
-            ) !important;
-
-        padding:
-            0 4px
-            28px 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        overflow-x: hidden !important;
     }
 
     #purchases-page .pur-header {
@@ -2333,7 +2320,7 @@ const purchasesPageStyles = `
 
         grid-template-columns:
             repeat(
-                3,
+                2,
                 minmax(
                     0,
                     1fr
@@ -2436,6 +2423,1034 @@ const purchasesPageStyles = `
 
 }
 
+
+/* =========================================================
+   PURCHASE PAGE — SUPPLIER DUES STYLE LAYOUT
+   ========================================================= */
+
+/*
+ * Match SupplierDuesPage behaviour:
+ * - page itself does not scroll
+ * - header and messages remain fixed
+ * - toolbar remains fixed
+ * - only the purchase list scrolls
+ * - pagination remains fixed at the bottom
+ */
+#purchases-page {
+    height:
+        calc(100dvh - 96px) !important;
+
+    max-height:
+        calc(100dvh - 96px) !important;
+
+    min-height: 0 !important;
+
+    padding:
+        0
+        8px
+        12px
+        0 !important;
+
+    overflow:
+        hidden !important;
+}
+
+#purchases-page .pur-header,
+#purchases-page .pur-readiness,
+#purchases-page .pur-message {
+    flex-shrink:
+        0 !important;
+}
+
+#purchases-page .pur-header {
+    min-height:
+        98px !important;
+
+    padding:
+        17px
+        19px !important;
+}
+
+#purchases-page .pur-title {
+    font-size:
+        24px !important;
+
+    font-weight:
+        740 !important;
+}
+
+#purchases-page .pur-kicker {
+    font-weight:
+        750 !important;
+}
+
+#purchases-page .pur-button {
+    min-height:
+        40px !important;
+
+    padding:
+        7px
+        11px !important;
+
+    font-weight:
+        700 !important;
+}
+
+#purchases-page .pur-total-badge {
+    min-height:
+        40px !important;
+
+    font-weight:
+        700 !important;
+}
+
+/*
+ * The panel fills the remaining viewport.
+ */
+#purchases-page .pur-panel {
+    display:
+        flex !important;
+
+    width:
+        100% !important;
+
+    min-width:
+        0 !important;
+
+    min-height:
+        0 !important;
+
+    flex:
+        1 1 auto !important;
+
+    flex-direction:
+        column !important;
+
+    overflow:
+        hidden !important;
+}
+
+/*
+ * Toolbar stays fixed above the scrolling purchase list.
+ */
+#purchases-page .pur-toolbar {
+    flex-shrink:
+        0 !important;
+
+    grid-template-columns:
+        minmax(
+            260px,
+            1fr
+        )
+        minmax(
+            170px,
+            220px
+        )
+        minmax(
+            150px,
+            190px
+        )
+        96px
+        auto !important;
+
+    padding:
+        13px !important;
+}
+
+#purchases-page .pur-input,
+#purchases-page .pur-select {
+    height:
+        42px !important;
+
+    min-height:
+        42px !important;
+
+    font-weight:
+        500 !important;
+}
+
+#purchases-page .pur-clear-filters {
+    min-height:
+        42px !important;
+}
+
+/*
+ * Only this area scrolls, matching SupplierDuesPage.
+ */
+#purchases-page .pur-list {
+    display:
+        flex !important;
+
+    width:
+        100% !important;
+
+    min-width:
+        0 !important;
+
+    min-height:
+        0 !important;
+
+    flex:
+        1 1 auto !important;
+
+    flex-direction:
+        column !important;
+
+    gap:
+        8px !important;
+
+    padding:
+        10px !important;
+
+    overflow-x:
+        hidden !important;
+
+    overflow-y:
+        auto !important;
+
+    background:
+        var(--pur-page) !important;
+
+    scrollbar-width:
+        thin !important;
+
+    scrollbar-color:
+        #89a091
+        #e8eeea !important;
+}
+
+#purchases-page .pur-list::-webkit-scrollbar {
+    width:
+        10px !important;
+}
+
+#purchases-page .pur-list::-webkit-scrollbar-track {
+    background:
+        #e8eeea !important;
+
+    border-radius:
+        999px !important;
+}
+
+#purchases-page .pur-list::-webkit-scrollbar-thumb {
+    background:
+        #89a091 !important;
+
+    border:
+        2px solid
+        #e8eeea !important;
+
+    border-radius:
+        999px !important;
+}
+
+#purchases-page .pur-list::-webkit-scrollbar-thumb:hover {
+    background:
+        var(--pur-green-700) !important;
+}
+
+/*
+ * Five-column layout like SupplierDuesPage.
+ * This gives enough room for the Action buttons and
+ * avoids the clipping shown on the previous Purchase page.
+ */
+#purchases-page .pur-list-head,
+#purchases-page .pur-row {
+    display:
+        grid !important;
+
+    grid-template-columns:
+        minmax(
+            190px,
+            1.05fr
+        )
+        minmax(
+            150px,
+            0.85fr
+        )
+        minmax(
+            240px,
+            1.25fr
+        )
+        minmax(
+            170px,
+            0.85fr
+        )
+        minmax(
+            210px,
+            auto
+        ) !important;
+
+    width:
+        100% !important;
+
+    min-width:
+        0 !important;
+
+    max-width:
+        100% !important;
+
+    gap:
+        12px !important;
+
+    align-items:
+        center !important;
+}
+
+#purchases-page .pur-list-head {
+    padding:
+        0
+        12px
+        2px !important;
+
+    color:
+        var(--pur-muted) !important;
+
+    font-size:
+        9px !important;
+
+    font-weight:
+        700 !important;
+}
+
+#purchases-page .pur-row {
+    overflow:
+        visible !important;
+
+    padding:
+        11px
+        12px !important;
+}
+
+#purchases-page .pur-number {
+    font-weight:
+        700 !important;
+}
+
+#purchases-page .pur-value {
+    font-weight:
+        550 !important;
+}
+
+#purchases-page .pur-value.strong {
+    font-weight:
+        700 !important;
+}
+
+/* Combined date + items cell */
+#purchases-page .pur-purchase-detail-cell {
+    display:
+        grid !important;
+
+    min-width:
+        0 !important;
+
+    grid-template-columns:
+        repeat(
+            2,
+            minmax(
+                0,
+                1fr
+            )
+        ) !important;
+
+    gap:
+        6px !important;
+}
+
+#purchases-page .pur-detail-box {
+    min-width:
+        0 !important;
+
+    padding:
+        7px
+        8px !important;
+
+    background:
+        #f8faf9 !important;
+
+    border:
+        1px solid
+        #e4e9e5 !important;
+
+    border-radius:
+        8px !important;
+}
+
+#purchases-page .pur-detail-box span {
+    display:
+        block !important;
+
+    color:
+        var(--pur-muted) !important;
+
+    font-size:
+        9px !important;
+
+    font-weight:
+        650 !important;
+}
+
+#purchases-page .pur-detail-box strong {
+    display:
+        flex !important;
+
+    min-width:
+        0 !important;
+
+    align-items:
+        center !important;
+
+    gap:
+        4px !important;
+
+    margin-top:
+        1px !important;
+
+    overflow:
+        hidden !important;
+
+    color:
+        var(--pur-text-2) !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        700 !important;
+
+    text-overflow:
+        ellipsis !important;
+
+    white-space:
+        nowrap !important;
+}
+
+#purchases-page .pur-detail-box strong svg {
+    width:
+        12px !important;
+
+    height:
+        12px !important;
+
+    min-width:
+        12px !important;
+
+    color:
+        var(--pur-muted) !important;
+}
+
+/* Combined total + status cell */
+#purchases-page .pur-total-status-cell {
+    display:
+        flex !important;
+
+    min-width:
+        0 !important;
+
+    flex-direction:
+        column !important;
+
+    align-items:
+        flex-start !important;
+
+    gap:
+        5px !important;
+}
+
+#purchases-page .pur-total-status-cell .pur-status {
+    margin-top:
+        0 !important;
+}
+
+/* Actions now match SupplierDuesPage: compact horizontal buttons. */
+#purchases-page .pur-actions {
+    display:
+        flex !important;
+
+    width:
+        100% !important;
+
+    min-width:
+        0 !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        flex-end !important;
+
+    flex-wrap:
+        wrap !important;
+
+    gap:
+        6px !important;
+}
+
+#purchases-page .pur-action-button {
+    width:
+        auto !important;
+
+    min-width:
+        0 !important;
+
+    min-height:
+        34px !important;
+
+    padding:
+        5px
+        8px !important;
+
+    font-size:
+        11px !important;
+}
+
+#purchases-page .pur-completed {
+    width:
+        auto !important;
+
+    min-width:
+        0 !important;
+
+    min-height:
+        34px !important;
+
+    padding:
+        5px
+        8px !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        650 !important;
+}
+
+/* Pagination is fixed below the scrolling list. */
+#purchases-page .pur-pagination {
+    flex-shrink:
+        0 !important;
+
+    min-height:
+        62px !important;
+
+    padding:
+        10px
+        14px !important;
+}
+
+/*
+ * When the page cannot comfortably support five columns,
+ * switch to the same responsive card behaviour as SupplierDuesPage
+ * before anything can overflow horizontally.
+ */
+@media (
+    max-width: 1240px
+) {
+    #purchases-page .pur-list-head {
+        display:
+            none !important;
+    }
+
+    #purchases-page .pur-row {
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+
+        align-items:
+            start !important;
+    }
+
+    #purchases-page .pur-identity,
+    #purchases-page .pur-purchase-detail-cell,
+    #purchases-page .pur-actions {
+        grid-column:
+            1 / -1 !important;
+    }
+
+    #purchases-page .pur-mobile-label {
+        display:
+            block !important;
+
+        margin-bottom:
+            3px !important;
+
+        color:
+            var(--pur-muted) !important;
+
+        font-size:
+            9px !important;
+
+        font-weight:
+            700 !important;
+
+        letter-spacing:
+            0.04em !important;
+
+        text-transform:
+            uppercase !important;
+    }
+
+    #purchases-page .pur-actions {
+        justify-content:
+            flex-start !important;
+    }
+}
+
+@media (
+    max-width: 980px
+) {
+    #purchases-page .pur-toolbar {
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+
+    #purchases-page .pur-toolbar .pur-field:first-child {
+        grid-column:
+            1 / -1 !important;
+    }
+
+    #purchases-page .pur-clear-filters {
+        width:
+            100% !important;
+    }
+}
+
+@media (
+    max-width: 700px
+) {
+    #purchases-page {
+        height:
+            calc(100dvh - 72px) !important;
+
+        max-height:
+            calc(100dvh - 72px) !important;
+
+        padding-right:
+            4px !important;
+    }
+
+    #purchases-page .pur-header {
+        align-items:
+            stretch !important;
+
+        flex-direction:
+            column !important;
+
+        padding:
+            15px !important;
+    }
+
+    #purchases-page .pur-title {
+        font-size:
+            21px !important;
+    }
+
+    #purchases-page .pur-header-actions {
+        display:
+            grid !important;
+
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+
+    #purchases-page .pur-total-badge,
+    #purchases-page .pur-header-actions .pur-button {
+        width:
+            100% !important;
+    }
+
+    #purchases-page .pur-toolbar,
+    #purchases-page .pur-row,
+    #purchases-page .pur-purchase-detail-cell {
+        grid-template-columns:
+            1fr !important;
+    }
+
+    #purchases-page .pur-identity,
+    #purchases-page .pur-purchase-detail-cell,
+    #purchases-page .pur-actions {
+        grid-column:
+            auto !important;
+    }
+
+    #purchases-page .pur-actions {
+        display:
+            grid !important;
+
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+
+    #purchases-page .pur-action-button,
+    #purchases-page .pur-completed {
+        width:
+            100% !important;
+    }
+
+    #purchases-page .pur-completed {
+        grid-column:
+            1 / -1 !important;
+    }
+
+    #purchases-page .pur-pagination {
+        align-items:
+            stretch !important;
+
+        flex-direction:
+            column !important;
+    }
+
+    #purchases-page .pur-pagination-actions {
+        display:
+            grid !important;
+
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(
+                    0,
+                    1fr
+                )
+            ) !important;
+    }
+
+    #purchases-page .pur-page-number {
+        grid-column:
+            1 / -1 !important;
+
+        grid-row:
+            1 !important;
+
+        justify-content:
+            center !important;
+    }
+
+    #purchases-page .pur-page-button {
+        width:
+            100% !important;
+    }
+}
+
+@media (
+    max-width: 420px
+) {
+    #purchases-page .pur-header-actions,
+    #purchases-page .pur-actions {
+        grid-template-columns:
+            1fr !important;
+    }
+}
+
+
+/* =========================================================
+   PURCHASE PAGE — ONLY PURCHASE ITEMS SCROLL
+   ========================================================= */
+
+/*
+ * AppLayout normally makes .sapo-shell-content scroll.
+ * While PurchasesPage is active we lock that outer scrollbar
+ * and turn the content area into a flex container.
+ *
+ * This leaves ONLY .pur-list vertically scrollable.
+ */
+#sapo-app-shell
+.sapo-shell-content.purchases-page-scroll-lock {
+    display: flex !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+
+    overscroll-behavior:
+        none !important;
+
+    scrollbar-gutter:
+        auto !important;
+
+    scrollbar-width:
+        none !important;
+}
+
+#sapo-app-shell
+.sapo-shell-content.purchases-page-scroll-lock::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+}
+
+/*
+ * The Purchase page fills exactly the remaining AppLayout
+ * content area. Do NOT calculate its height from 100dvh,
+ * because AppLayout has its own top bar and content padding.
+ */
+#sapo-app-shell
+.sapo-shell-content.purchases-page-scroll-lock
+> #purchases-page {
+    width: 100% !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    height: auto !important;
+    max-height: none !important;
+
+    flex: 1 1 auto !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    overflow: hidden !important;
+}
+
+/*
+ * Header/messages never scroll.
+ */
+#purchases-page .pur-header,
+#purchases-page .pur-readiness,
+#purchases-page .pur-message {
+    flex: 0 0 auto !important;
+}
+
+/*
+ * The white Purchase panel fills all remaining vertical room.
+ */
+#purchases-page .pur-panel {
+    display: flex !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+
+    overflow: hidden !important;
+}
+
+/*
+ * Search / Supplier / Status / Rows toolbar stays fixed.
+ */
+#purchases-page .pur-toolbar {
+    flex: 0 0 auto !important;
+}
+
+/*
+ * ONLY the actual purchase records area scrolls.
+ */
+#purchases-page .pur-list {
+    position: relative !important;
+
+    display: flex !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+
+    overscroll-behavior-y:
+        contain !important;
+
+    scrollbar-gutter:
+        stable !important;
+
+    scrollbar-width:
+        thin !important;
+
+    scrollbar-color:
+        #89a091
+        #e8eeea !important;
+}
+
+#purchases-page .pur-list::-webkit-scrollbar {
+    width: 10px !important;
+}
+
+#purchases-page .pur-list::-webkit-scrollbar-track {
+    background:
+        #e8eeea !important;
+
+    border-radius:
+        999px !important;
+}
+
+#purchases-page .pur-list::-webkit-scrollbar-thumb {
+    background:
+        #89a091 !important;
+
+    border:
+        2px solid
+        #e8eeea !important;
+
+    border-radius:
+        999px !important;
+}
+
+#purchases-page .pur-list::-webkit-scrollbar-thumb:hover {
+    background:
+        var(--pur-green-700) !important;
+}
+
+/*
+ * Keep the table/list column headings visible while purchase
+ * rows scroll underneath them.
+ */
+#purchases-page .pur-list-head {
+    /*
+     * IMPORTANT:
+     * The column heading row is OUTSIDE .pur-list.
+     * It is therefore never part of the scrolling content.
+     */
+    position: relative !important;
+
+    top: auto !important;
+
+    z-index: 20 !important;
+
+    flex: 0 0 auto !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    margin: 0 !important;
+
+    min-height: 42px !important;
+
+    padding:
+        9px
+        22px !important;
+
+    background:
+        #f5f8f6 !important;
+
+    border-bottom:
+        1px solid
+        #d9e2dc !important;
+
+    box-shadow:
+        0 2px 4px
+        rgba(
+            16,
+            24,
+            40,
+            0.035
+        ) !important;
+}
+
+
+#purchases-page .pur-list {
+    /*
+     * Rows are clipped to this scroll viewport.
+     * Nothing can render between the toolbar and fixed headings.
+     */
+    clip-path: inset(0) !important;
+    contain: paint !important;
+
+    padding-top: 10px !important;
+}
+
+/*
+ * Rows themselves must never create another scrollbar.
+ */
+#purchases-page .pur-row {
+    flex: 0 0 auto !important;
+
+    overflow:
+        hidden !important;
+}
+
+/*
+ * Pagination stays fixed at the bottom of the panel.
+ */
+#purchases-page .pur-pagination {
+    flex: 0 0 auto !important;
+}
+
+/*
+ * Loading / empty states occupy the same records area,
+ * without creating an outer page scrollbar.
+ */
+#purchases-page .pur-state {
+    min-height: 0 !important;
+
+    flex: 1 1 auto !important;
+
+    overflow:
+        hidden !important;
+}
+
+/*
+ * Override the previous viewport-height mobile rules too.
+ * The AppLayout itself already knows the correct remaining
+ * height below its mobile top bar.
+ */
+@media (max-width: 700px) {
+    #sapo-app-shell
+    .sapo-shell-content.purchases-page-scroll-lock
+    > #purchases-page {
+        height: auto !important;
+        max-height: none !important;
+
+        padding: 0 !important;
+
+        overflow: hidden !important;
+    }
+
+    #purchases-page .pur-panel {
+        min-height: 0 !important;
+
+        flex: 1 1 auto !important;
+    }
+
+    #purchases-page .pur-list {
+        min-height: 0 !important;
+
+        flex: 1 1 auto !important;
+
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+
+    #purchases-page .pur-list-head {
+        /*
+         * Mobile cards do not use the desktop heading row.
+         */
+        position: static !important;
+    }
+}
+
 /* =========================================================
    PURCHASE DETAILS MODAL
    ========================================================= */
@@ -2475,11 +3490,12 @@ const purchasesPageStyles = `
 
     inset: 0 !important;
 
-    z-index: 2147483000 !important;
+    z-index: 2147483647 !important;
 
     display: flex !important;
 
     width: 100vw !important;
+    height: 100vh !important;
     height: 100dvh !important;
 
     align-items: center !important;
@@ -2508,6 +3524,9 @@ const purchasesPageStyles = `
 
     backdrop-filter:
         blur(5px) !important;
+
+    overflow: hidden !important;
+    overscroll-behavior: contain !important;
 }
 
 #purchase-details-modal button {
@@ -2529,9 +3548,12 @@ const purchasesPageStyles = `
             100%
         ) !important;
 
+    min-width: 0 !important;
+    max-width: 1180px !important;
+
     max-height:
         calc(
-            100dvh - 48px
+            100dvh - 32px
         ) !important;
 
     flex-direction: column !important;
@@ -2637,7 +3659,7 @@ const purchasesPageStyles = `
 
     color: #ffffff !important;
 
-    font-size: 21px !important;
+    font-size: 24px !important;
     font-weight: 850 !important;
 
     text-overflow: ellipsis !important;
@@ -2660,8 +3682,8 @@ const purchasesPageStyles = `
             0.8
         ) !important;
 
-    font-size: 11px !important;
-    font-weight: 600 !important;
+    font-size: 13px !important;
+    font-weight: 650 !important;
 
     text-overflow: ellipsis !important;
 
@@ -2710,15 +3732,36 @@ const purchasesPageStyles = `
 }
 
 #purchase-details-modal .pvd-body {
+    width: 100% !important;
+    min-width: 0 !important;
     min-height: 0 !important;
 
-    flex: 1 !important;
+    flex: 1 1 auto !important;
 
     padding: 16px !important;
 
+    overflow-x: hidden !important;
     overflow-y: auto !important;
 
+    overscroll-behavior: contain !important;
+
     background: #f4f7f5 !important;
+
+    scrollbar-width: thin !important;
+    scrollbar-color: #9cad9f #eaf0eb !important;
+}
+
+#purchase-details-modal .pvd-body::-webkit-scrollbar {
+    width: 9px !important;
+}
+
+#purchase-details-modal .pvd-body::-webkit-scrollbar-track {
+    background: #eaf0eb !important;
+}
+
+#purchase-details-modal .pvd-body::-webkit-scrollbar-thumb {
+    background: #9cad9f !important;
+    border-radius: 999px !important;
 }
 
 #purchase-details-modal .pvd-summary-grid {
@@ -2781,7 +3824,7 @@ const purchasesPageStyles = `
 #purchase-details-modal .pvd-summary-label {
     color: var(--pvd-muted) !important;
 
-    font-size: 8px !important;
+    font-size: 10px !important;
     font-weight: 800 !important;
 
     text-transform: uppercase !important;
@@ -2792,7 +3835,7 @@ const purchasesPageStyles = `
 
     color: var(--pvd-text) !important;
 
-    font-size: 15px !important;
+    font-size: 17px !important;
     font-weight: 850 !important;
 }
 
@@ -2857,7 +3900,7 @@ const purchasesPageStyles = `
 #purchase-details-modal .pvd-section-title {
     color: var(--pvd-text) !important;
 
-    font-size: 13px !important;
+    font-size: 15px !important;
     font-weight: 850 !important;
 }
 
@@ -2926,7 +3969,7 @@ const purchasesPageStyles = `
 #purchase-details-modal .pvd-detail-label {
     color: var(--pvd-muted) !important;
 
-    font-size: 8px !important;
+    font-size: 10px !important;
     font-weight: 800 !important;
 
     text-transform: uppercase !important;
@@ -2937,10 +3980,10 @@ const purchasesPageStyles = `
 
     color: var(--pvd-text-2) !important;
 
-    font-size: 11px !important;
+    font-size: 13px !important;
     font-weight: 750 !important;
 
-    line-height: 1.4 !important;
+    line-height: 1.45 !important;
 }
 
 #purchase-details-modal .pvd-items {
@@ -2996,7 +4039,7 @@ const purchasesPageStyles = `
 
     color: var(--pvd-green-700) !important;
 
-    font-size: 8px !important;
+    font-size: 10px !important;
     font-weight: 800 !important;
 
     text-transform: uppercase !important;
@@ -3011,7 +4054,7 @@ const purchasesPageStyles = `
 
     color: var(--pvd-text) !important;
 
-    font-size: 14px !important;
+    font-size: 16px !important;
     font-weight: 850 !important;
 
     text-overflow: ellipsis !important;
@@ -3026,7 +4069,7 @@ const purchasesPageStyles = `
 
     color: var(--pvd-muted) !important;
 
-    font-size: 10px !important;
+    font-size: 12px !important;
     font-weight: 650 !important;
 }
 
@@ -3035,7 +4078,7 @@ const purchasesPageStyles = `
 
     color: var(--pvd-green-900) !important;
 
-    font-size: 13px !important;
+    font-size: 15px !important;
     font-weight: 850 !important;
 }
 
@@ -3044,7 +4087,7 @@ const purchasesPageStyles = `
 
     grid-template-columns:
         repeat(
-            5,
+            4,
             minmax(
                 0,
                 1fr
@@ -3075,7 +4118,7 @@ const purchasesPageStyles = `
 #purchase-details-modal .pvd-item-field span {
     color: var(--pvd-muted) !important;
 
-    font-size: 8px !important;
+    font-size: 10px !important;
     font-weight: 800 !important;
 
     text-transform: uppercase !important;
@@ -3086,21 +4129,21 @@ const purchasesPageStyles = `
 
     color: var(--pvd-text-2) !important;
 
-    font-size: 10px !important;
+    font-size: 12.5px !important;
     font-weight: 750 !important;
 }
 
 #purchase-details-modal .pvd-item-field strong.money {
     color: var(--pvd-blue) !important;
 
-    font-size: 11px !important;
+    font-size: 13px !important;
     font-weight: 850 !important;
 }
 
 #purchase-details-modal .pvd-item-field strong.sale {
     color: var(--pvd-green-900) !important;
 
-    font-size: 11px !important;
+    font-size: 13px !important;
     font-weight: 850 !important;
 }
 
@@ -3116,10 +4159,10 @@ const purchasesPageStyles = `
 
     color: var(--pvd-text-2) !important;
 
-    font-size: 11px !important;
+    font-size: 13px !important;
     font-weight: 650 !important;
 
-    line-height: 1.55 !important;
+    line-height: 1.6 !important;
 
     background: #ffffff !important;
 }
@@ -3544,7 +4587,8 @@ function PurchaseDetailsModal({
                                 {
                                     headerPurchase
                                         .supplier
-                                        .name
+                                        ?.name
+                                    ?? 'Supplier not available'
                                 }
 
                                 {' • '}
@@ -3824,7 +4868,8 @@ function PurchaseDetailsModal({
                                             {
                                                 purchase
                                                     .supplier
-                                                    .name
+                                                    ?.name
+                                                ?? 'Supplier not available'
                                             }
                                         </strong>
                                     </div>
@@ -3837,7 +4882,7 @@ function PurchaseDetailsModal({
                                         <strong className="pvd-detail-value">
                                             {purchase
                                                 .supplier
-                                                .phone
+                                                ?.phone
                                                 || 'Not provided'}
                                         </strong>
                                     </div>
@@ -3851,7 +4896,8 @@ function PurchaseDetailsModal({
                                             {
                                                 purchase
                                                     .created_by
-                                                    .name
+                                                    ?.name
+                                                ?? 'Not available'
                                             }
                                         </strong>
                                     </div>
@@ -4429,12 +5475,59 @@ export default function PurchasesPage() {
         token,
     } = useAuth();
 
+    /*
+     * AppLayout normally owns the main vertical scrollbar.
+     *
+     * This page intentionally uses a different layout:
+     * - App top bar stays fixed
+     * - Purchase Management header stays fixed
+     * - Filters stay fixed
+     * - Pagination stays fixed
+     * - ONLY the purchase records list scrolls
+     *
+     * The class is removed automatically when leaving this page.
+     */
+    useEffect(
+        () => {
+            const shellContent =
+                document.querySelector<HTMLElement>(
+                    '#sapo-app-shell .sapo-shell-content',
+                );
+
+            if (!shellContent) {
+                return;
+            }
+
+            const previousScrollTop =
+                shellContent.scrollTop;
+
+            shellContent.classList.add(
+                'purchases-page-scroll-lock',
+            );
+
+            shellContent.scrollTop = 0;
+
+            return () => {
+                shellContent.classList.remove(
+                    'purchases-page-scroll-lock',
+                );
+
+                shellContent.scrollTop =
+                    previousScrollTop;
+            };
+        },
+        [],
+    );
+
     const searchInputRef =
         useRef<HTMLInputElement | null>(
             null,
         );
 
     const purchaseRequestIdRef =
+        useRef(0);
+
+    const viewRequestIdRef =
         useRef(0);
 
     const [
@@ -4845,6 +5938,15 @@ export default function PurchasesPage() {
                 return;
             }
 
+            const requestId =
+                viewRequestIdRef
+                    .current
+                + 1;
+
+            viewRequestIdRef
+                .current =
+                requestId;
+
             setIsViewingPurchase(
                 true,
             );
@@ -4860,10 +5962,26 @@ export default function PurchasesPage() {
                         purchase.id,
                     );
 
+                if (
+                    viewRequestIdRef
+                        .current
+                    !== requestId
+                ) {
+                    return;
+                }
+
                 setViewingPurchase(
                     response.data,
                 );
             } catch (error) {
+                if (
+                    viewRequestIdRef
+                        .current
+                    !== requestId
+                ) {
+                    return;
+                }
+
                 setViewingPurchase(
                     null,
                 );
@@ -4875,9 +5993,15 @@ export default function PurchasesPage() {
                         : 'Unable to load the complete purchase details.',
                 );
             } finally {
-                setIsViewingPurchase(
-                    false,
-                );
+                if (
+                    viewRequestIdRef
+                        .current
+                    === requestId
+                ) {
+                    setIsViewingPurchase(
+                        false,
+                    );
+                }
             }
         };
 
@@ -4904,6 +6028,13 @@ export default function PurchasesPage() {
 
     const closeViewPurchase =
         (): void => {
+            /*
+             * Invalidate any in-flight View request so an older
+             * response cannot overwrite a newer modal state.
+             */
+            viewRequestIdRef
+                .current += 1;
+
             setViewTarget(
                 null,
             );
@@ -6278,7 +7409,7 @@ export default function PurchasesPage() {
                             )}
                     </div>
                 ) : (
-                    <div className="pur-list">
+                    <>
                         <div
                             className="pur-list-head"
                             aria-hidden="true"
@@ -6292,19 +7423,11 @@ export default function PurchasesPage() {
                             </span>
 
                             <span>
-                                Date
+                                Purchase Details
                             </span>
 
                             <span>
-                                Items
-                            </span>
-
-                            <span>
-                                Total
-                            </span>
-
-                            <span>
-                                Status
+                                Total and Status
                             </span>
 
                             <span>
@@ -6312,243 +7435,243 @@ export default function PurchasesPage() {
                             </span>
                         </div>
 
-                        {purchases.map(
-                            (
-                                purchase,
-                            ) => (
-                                <article
-                                    key={
-                                        purchase.id
-                                    }
-                                    className="pur-row"
-                                >
-                                    <div className="pur-identity">
-                                        <span className="pur-record-icon">
-                                            <Icon name="receipt" />
-                                        </span>
+                        <div className="pur-list">
+                            {purchases.map(
+                                (
+                                    purchase,
+                                ) => (
+                                    <article
+                                        key={
+                                            purchase.id
+                                        }
+                                        className="pur-row"
+                                    >
+                                        <div className="pur-identity">
+                                            <span className="pur-record-icon">
+                                                <Icon name="receipt" />
+                                            </span>
 
-                                        <span className="pur-copy">
-                                            <strong
-                                                className="pur-number"
+                                            <span className="pur-copy">
+                                                <strong
+                                                    className="pur-number"
+                                                    title={
+                                                        purchase
+                                                            .purchase_number
+                                                    }
+                                                >
+                                                    {
+                                                        purchase
+                                                            .purchase_number
+                                                    }
+                                                </strong>
+
+                                                <span
+                                                    className="pur-invoice"
+                                                    title={
+                                                        purchase
+                                                            .supplier_invoice_number
+                                                        ?? 'No supplier invoice'
+                                                    }
+                                                >
+                                                    Invoice:
+                                                    {' '}
+
+                                                    {purchase
+                                                        .supplier_invoice_number
+                                                        ?? 'Not provided'}
+                                                </span>
+                                            </span>
+                                        </div>
+
+                                        <div className="pur-cell">
+                                            <span className="pur-mobile-label">
+                                                Supplier
+                                            </span>
+
+                                            <span
+                                                className="pur-value strong"
                                                 title={
                                                     purchase
-                                                        .purchase_number
+                                                        .supplier
+                                                        .name
                                                 }
                                             >
                                                 {
                                                     purchase
-                                                        .purchase_number
+                                                        .supplier
+                                                        .name
                                                 }
+                                            </span>
+                                        </div>
+
+                                        <div className="pur-cell pur-purchase-detail-cell">
+                                            <span className="pur-mobile-label">
+                                                Purchase Details
+                                            </span>
+
+                                            <div className="pur-detail-box">
+                                                <span>
+                                                    Date
+                                                </span>
+
+                                                <strong>
+                                                    <Icon name="calendar" />
+
+                                                    {formatDate(
+                                                        purchase
+                                                            .purchase_date,
+                                                    )}
+                                                </strong>
+                                            </div>
+
+                                            <div className="pur-detail-box">
+                                                <span>
+                                                    Items / Quantity
+                                                </span>
+
+                                                <strong>
+                                                    <Icon name="package" />
+
+                                                    {
+                                                        purchase
+                                                            .items_count
+                                                    }
+                                                    {' '}
+
+                                                    {purchase
+                                                        .items_count
+                                                        === 1
+                                                        ? 'item'
+                                                        : 'items'}
+
+                                                    {' • '}
+
+                                                    {formatQuantity(
+                                                        purchase
+                                                            .total_quantity,
+                                                    )}
+                                                </strong>
+                                            </div>
+                                        </div>
+
+                                        <div className="pur-cell pur-total-status-cell">
+                                            <span className="pur-mobile-label">
+                                                Total and Status
+                                            </span>
+
+                                            <strong className="pur-value strong">
+                                                {currencyFormatter.format(
+                                                    Number(
+                                                        purchase
+                                                            .grand_total,
+                                                    ),
+                                                )}
                                             </strong>
 
                                             <span
-                                                className="pur-invoice"
-                                                title={
-                                                    purchase
-                                                        .supplier_invoice_number
-                                                    ?? 'No supplier invoice'
-                                                }
-                                            >
-                                                Invoice:
-                                                {' '}
-
-                                                {purchase
-                                                    .supplier_invoice_number
-                                                    ?? 'Not provided'}
-                                            </span>
-                                        </span>
-                                    </div>
-
-                                    <div className="pur-cell">
-                                        <span className="pur-mobile-label">
-                                            Supplier
-                                        </span>
-
-                                        <span
-                                            className="pur-value strong"
-                                            title={
-                                                purchase
-                                                    .supplier
-                                                    .name
-                                            }
-                                        >
-                                            {
-                                                purchase
-                                                    .supplier
-                                                    .name
-                                            }
-                                        </span>
-                                    </div>
-
-                                    <div className="pur-cell">
-                                        <span className="pur-mobile-label">
-                                            Purchase Date
-                                        </span>
-
-                                        <span className="pur-meta">
-                                            <Icon name="calendar" />
-
-                                            {formatDate(
-                                                purchase
-                                                    .purchase_date,
-                                            )}
-                                        </span>
-                                    </div>
-
-                                    <div className="pur-cell">
-                                        <span className="pur-mobile-label">
-                                            Items and Quantity
-                                        </span>
-
-                                        <span className="pur-value">
-                                            {
-                                                purchase
-                                                    .items_count
-                                            }
-                                            {' '}
-
-                                            {purchase
-                                                .items_count
-                                                === 1
-                                                ? 'item'
-                                                : 'items'}
-                                        </span>
-
-                                        <span className="pur-meta">
-                                            <Icon name="package" />
-
-                                            {formatQuantity(
-                                                purchase
-                                                    .total_quantity,
-                                            )}
-                                            {' '}
-                                            purchased
-                                        </span>
-                                    </div>
-
-                                    <div className="pur-cell">
-                                        <span className="pur-mobile-label">
-                                            Grand Total
-                                        </span>
-
-                                        <strong className="pur-value strong">
-                                            {currencyFormatter.format(
-                                                Number(
-                                                    purchase
-                                                        .grand_total,
-                                                ),
-                                            )}
-                                        </strong>
-                                    </div>
-
-                                    <div className="pur-cell">
-                                        <span className="pur-mobile-label">
-                                            Status
-                                        </span>
-
-                                        <span
-                                            className={
-                                                purchase
-                                                    .status
-                                                    === 'received'
-                                                    ? 'pur-status received'
-                                                    : 'pur-status draft'
-                                            }
-                                        >
-                                            <Icon
-                                                name={
+                                                className={
                                                     purchase
                                                         .status
                                                         === 'received'
-                                                        ? 'check'
-                                                        : 'receipt'
+                                                        ? 'pur-status received'
+                                                        : 'pur-status draft'
                                                 }
-                                            />
+                                            >
+                                                <Icon
+                                                    name={
+                                                        purchase
+                                                            .status
+                                                            === 'received'
+                                                            ? 'check'
+                                                            : 'receipt'
+                                                    }
+                                                />
 
-                                            {getStatusLabel(
-                                                purchase
-                                                    .status,
-                                            )}
-                                        </span>
-                                    </div>
-
-                                    <div className="pur-actions">
-                                        <button
-                                            type="button"
-                                            className="pur-button pur-blue-button pur-action-button"
-                                            onClick={() => {
-                                                openViewPurchase(
-                                                    purchase,
-                                                );
-                                            }}
-                                        >
-                                            <Icon name="eye" />
-
-                                            View
-                                        </button>
-
-                                        {purchase
-                                            .status
-                                            === 'draft' ? (
-                                            <>
-                                                <button
-                                                    type="button"
-                                                    className="pur-button pur-secondary-button pur-action-button"
-                                                    onClick={() => {
-                                                        void openEditForm(
-                                                            purchase,
-                                                        );
-                                                    }}
-                                                >
-                                                    <Icon name="edit" />
-
-                                                    Edit
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    className="pur-button pur-blue-button pur-action-button"
-                                                    onClick={() => {
-                                                        void openReceiveModal(
-                                                            purchase,
-                                                        );
-                                                    }}
-                                                >
-                                                    <Icon name="truck" />
-
-                                                    Receive
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    className="pur-button pur-danger-button pur-action-button"
-                                                    onClick={() => {
-                                                        setDeleteTarget(
-                                                            purchase,
-                                                        );
-
-                                                        setDeleteError(
-                                                            '',
-                                                        );
-                                                    }}
-                                                >
-                                                    <Icon name="trash" />
-
-                                                    Delete
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <span className="pur-completed">
-                                                <Icon name="check" />
-
-                                                Stock Added
+                                                {getStatusLabel(
+                                                    purchase
+                                                        .status,
+                                                )}
                                             </span>
-                                        )}
-                                    </div>
-                                </article>
-                            ),
-                        )}
-                    </div>
+                                        </div>
+
+                                        <div className="pur-actions">
+                                            <button
+                                                type="button"
+                                                className="pur-button pur-blue-button pur-action-button"
+                                                onClick={() => {
+                                                    openViewPurchase(
+                                                        purchase,
+                                                    );
+                                                }}
+                                            >
+                                                <Icon name="eye" />
+
+                                                View
+                                            </button>
+
+                                            {purchase
+                                                .status
+                                                === 'draft' ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="pur-button pur-secondary-button pur-action-button"
+                                                        onClick={() => {
+                                                            void openEditForm(
+                                                                purchase,
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="edit" />
+
+                                                        Edit
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        className="pur-button pur-blue-button pur-action-button"
+                                                        onClick={() => {
+                                                            void openReceiveModal(
+                                                                purchase,
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="truck" />
+
+                                                        Receive
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        className="pur-button pur-danger-button pur-action-button"
+                                                        onClick={() => {
+                                                            setDeleteTarget(
+                                                                purchase,
+                                                            );
+
+                                                            setDeleteError(
+                                                                '',
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="trash" />
+
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <span className="pur-completed">
+                                                    <Icon name="check" />
+
+                                                    Stock Added
+                                                </span>
+                                            )}
+                                        </div>
+                                    </article>
+                                ),
+                            )}
+                        </div>
+                    </>
                 )}
 
                 {!isLoading

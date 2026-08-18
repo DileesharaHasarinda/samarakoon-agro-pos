@@ -1308,6 +1308,269 @@ const styles = `
     font-size: 12px !important;
 }
 
+
+/* =========================================================
+   SUPPLIER DUES — ONLY PAYABLE ITEMS SCROLL
+   ========================================================= */
+
+/*
+ * AppLayout already owns a vertical scrollbar on
+ * .sapo-shell-content. While SupplierDuesPage is mounted,
+ * that outer scrollbar is disabled so there is only one
+ * vertical scrollbar on this screen.
+ */
+#sapo-app-shell
+.sapo-shell-content.supplier-dues-scroll-lock {
+    display: flex !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+
+    overscroll-behavior: none !important;
+
+    scrollbar-width: none !important;
+    scrollbar-gutter: auto !important;
+}
+
+#sapo-app-shell
+.sapo-shell-content.supplier-dues-scroll-lock::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+}
+
+/*
+ * Fill the exact space provided by AppLayout instead of
+ * calculating another viewport height.
+ */
+#sapo-app-shell
+.sapo-shell-content.supplier-dues-scroll-lock
+> #supplier-dues-page {
+    width: 100% !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    height: auto !important;
+    max-height: none !important;
+
+    flex: 1 1 auto !important;
+
+    margin: 0 !important;
+    padding:
+        0
+        8px
+        12px
+        0 !important;
+
+    overflow: hidden !important;
+}
+
+/*
+ * These sections stay fixed and never become scrollable.
+ */
+#supplier-dues-page .sdp-header,
+#supplier-dues-page .sdp-summary,
+#supplier-dues-page .sdp-message {
+    flex: 0 0 auto !important;
+}
+
+/*
+ * The white data panel occupies all remaining space.
+ */
+#supplier-dues-page .sdp-panel {
+    width: 100% !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    flex: 1 1 auto !important;
+
+    overflow: hidden !important;
+}
+
+/*
+ * Filters remain fixed above the list.
+ */
+#supplier-dues-page .sdp-toolbar {
+    flex: 0 0 auto !important;
+}
+
+/*
+ * ONLY this list scrolls vertically.
+ */
+#supplier-dues-page .sdp-list {
+    position: relative !important;
+
+    width: 100% !important;
+
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    flex: 1 1 auto !important;
+
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+
+    overscroll-behavior-y: contain !important;
+
+    scrollbar-gutter: stable !important;
+
+    scrollbar-width: thin !important;
+
+    scrollbar-color:
+        #89a091
+        #e8eeea !important;
+}
+
+#supplier-dues-page .sdp-list::-webkit-scrollbar {
+    width: 10px !important;
+}
+
+#supplier-dues-page .sdp-list::-webkit-scrollbar-track {
+    background: #e8eeea !important;
+    border-radius: 999px !important;
+}
+
+#supplier-dues-page .sdp-list::-webkit-scrollbar-thumb {
+    background: #89a091 !important;
+
+    border:
+        2px solid
+        #e8eeea !important;
+
+    border-radius: 999px !important;
+}
+
+#supplier-dues-page .sdp-list::-webkit-scrollbar-thumb:hover {
+    background: var(--green700) !important;
+}
+
+/*
+ * Keep the list column headings visible while the payable
+ * records move underneath them.
+ */
+#supplier-dues-page .sdp-list-head {
+    /*
+     * IMPORTANT:
+     * The column heading row is OUTSIDE .sdp-list.
+     * It never moves with the supplier payable records.
+     */
+    position: relative !important;
+
+    top: auto !important;
+
+    z-index: 20 !important;
+
+    flex: 0 0 auto !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    margin: 0 !important;
+
+    min-height: 42px !important;
+
+    padding:
+        9px
+        22px !important;
+
+    background: #f5f8f6 !important;
+
+    border-bottom:
+        1px solid
+        #d9e2dc !important;
+
+    box-shadow:
+        0 2px 4px
+        rgba(
+            16,
+            24,
+            40,
+            0.035
+        ) !important;
+}
+
+
+#supplier-dues-page .sdp-list {
+    /*
+     * Hard clip the scrolling records to their own viewport.
+     * This prevents record content appearing above the list.
+     */
+    clip-path: inset(0) !important;
+    contain: paint !important;
+
+    padding-top: 10px !important;
+}
+
+/*
+ * Individual records never create another scroll region.
+ */
+#supplier-dues-page .sdp-row {
+    flex: 0 0 auto !important;
+
+    overflow: hidden !important;
+}
+
+/*
+ * Pagination remains fixed below the scrolling records.
+ */
+#supplier-dues-page .sdp-pagination {
+    flex: 0 0 auto !important;
+}
+
+/*
+ * Loading / empty states fill the record area without
+ * creating an outer page scrollbar.
+ */
+#supplier-dues-page .sdp-state {
+    min-height: 0 !important;
+
+    flex: 1 1 auto !important;
+
+    overflow: hidden !important;
+}
+
+@media (max-width: 700px) {
+    #sapo-app-shell
+    .sapo-shell-content.supplier-dues-scroll-lock
+    > #supplier-dues-page {
+        height: auto !important;
+        max-height: none !important;
+
+        padding-right: 4px !important;
+
+        overflow: hidden !important;
+    }
+
+    #supplier-dues-page .sdp-panel {
+        min-height: 0 !important;
+        flex: 1 1 auto !important;
+    }
+
+    #supplier-dues-page .sdp-list {
+        min-height: 0 !important;
+
+        flex: 1 1 auto !important;
+
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+
+    /*
+     * Desktop list headings are already hidden by the
+     * responsive card layout at this size.
+     */
+    #supplier-dues-page .sdp-list-head {
+        position: static !important;
+    }
+}
+
 /* Shared portal modal styles */
 #supplier-settlement-modal,
 #supplier-payment-modal {
@@ -2276,6 +2539,46 @@ export default function SupplierDuesPage() {
         token,
     } = useAuth();
 
+    /*
+     * Keep the application shell, Supplier Dues header,
+     * summary cards, filters and pagination fixed.
+     *
+     * Only .sdp-list is allowed to scroll vertically.
+     * The class is removed automatically when navigating
+     * away from this page.
+     */
+    useEffect(
+        () => {
+            const shellContent =
+                document.querySelector<HTMLElement>(
+                    '#sapo-app-shell .sapo-shell-content',
+                );
+
+            if (!shellContent) {
+                return;
+            }
+
+            const previousScrollTop =
+                shellContent.scrollTop;
+
+            shellContent.classList.add(
+                'supplier-dues-scroll-lock',
+            );
+
+            shellContent.scrollTop = 0;
+
+            return () => {
+                shellContent.classList.remove(
+                    'supplier-dues-scroll-lock',
+                );
+
+                shellContent.scrollTop =
+                    previousScrollTop;
+            };
+        },
+        [],
+    );
+
     const searchRef =
         useRef<HTMLInputElement | null>(
             null,
@@ -2893,7 +3196,7 @@ export default function SupplierDuesPage() {
                         </span>
                     </div>
                 ) : (
-                    <div className="sdp-list">
+                    <>
                         <div
                             className="sdp-list-head"
                             aria-hidden="true"
@@ -2919,238 +3222,240 @@ export default function SupplierDuesPage() {
                             </span>
                         </div>
 
-                        {purchases.map(
-                            (purchase) => {
-                                const currentStatus =
-                                    statusDetails(
-                                        purchase,
-                                    );
+                        <div className="sdp-list">
+                            {purchases.map(
+                                (purchase) => {
+                                    const currentStatus =
+                                        statusDetails(
+                                            purchase,
+                                        );
 
-                                return (
-                                    <article
-                                        key={purchase.id}
-                                        className="sdp-row"
-                                    >
-                                        <div className="sdp-identity">
-                                            <span className="sdp-record-icon">
-                                                <Icon name="money" />
-                                            </span>
+                                    return (
+                                        <article
+                                            key={purchase.id}
+                                            className="sdp-row"
+                                        >
+                                            <div className="sdp-identity">
+                                                <span className="sdp-record-icon">
+                                                    <Icon name="money" />
+                                                </span>
 
-                                            <span className="sdp-copy">
+                                                <span className="sdp-copy">
+                                                    <strong
+                                                        className="sdp-number"
+                                                        title={
+                                                            purchase
+                                                                .purchase_number
+                                                        }
+                                                    >
+                                                        {
+                                                            purchase
+                                                                .purchase_number
+                                                        }
+                                                    </strong>
+
+                                                    <span className="sdp-small">
+                                                        {
+                                                            purchase
+                                                                .payments_count
+                                                        }
+                                                        {' '}
+
+                                                        {purchase.payments_count
+                                                            === 1
+                                                            ? 'payment record'
+                                                            : 'payment records'}
+                                                    </span>
+                                                </span>
+                                            </div>
+
+                                            <div className="sdp-cell">
+                                                <span className="sdp-mobile-label">
+                                                    Supplier
+                                                </span>
+
                                                 <strong
-                                                    className="sdp-number"
+                                                    className="sdp-value strong"
                                                     title={
                                                         purchase
-                                                            .purchase_number
+                                                            .supplier
+                                                            .name
                                                     }
                                                 >
                                                     {
                                                         purchase
-                                                            .purchase_number
+                                                            .supplier
+                                                            .name
                                                     }
                                                 </strong>
 
-                                                <span className="sdp-small">
-                                                    {
-                                                        purchase
-                                                            .payments_count
-                                                    }
+                                                <span className="sdp-meta">
+                                                    <Icon name="calendar" />
+
+                                                    Purchased
                                                     {' '}
 
-                                                    {purchase.payments_count
-                                                        === 1
-                                                        ? 'payment record'
-                                                        : 'payment records'}
+                                                    {formatDate(
+                                                        purchase
+                                                            .purchase_date,
+                                                    )}
                                                 </span>
-                                            </span>
-                                        </div>
+                                            </div>
 
-                                        <div className="sdp-cell">
-                                            <span className="sdp-mobile-label">
-                                                Supplier
-                                            </span>
+                                            <div className="sdp-cell sdp-money-cell">
+                                                <span className="sdp-mobile-label">
+                                                    Financial Position
+                                                </span>
 
-                                            <strong
-                                                className="sdp-value strong"
-                                                title={
-                                                    purchase
-                                                        .supplier
-                                                        .name
-                                                }
-                                            >
-                                                {
-                                                    purchase
-                                                        .supplier
-                                                        .name
-                                                }
-                                            </strong>
+                                                <div className="sdp-money-grid">
+                                                    <div className="sdp-money-box">
+                                                        <span>
+                                                            Total
+                                                        </span>
 
-                                            <span className="sdp-meta">
-                                                <Icon name="calendar" />
+                                                        <strong>
+                                                            {money.format(
+                                                                Number(
+                                                                    purchase
+                                                                        .grand_total,
+                                                                ),
+                                                            )}
+                                                        </strong>
+                                                    </div>
 
-                                                Purchased
-                                                {' '}
+                                                    <div className="sdp-money-box">
+                                                        <span>
+                                                            Paid
+                                                        </span>
 
-                                                {formatDate(
-                                                    purchase
-                                                        .purchase_date,
-                                                )}
-                                            </span>
-                                        </div>
+                                                        <strong>
+                                                            {money.format(
+                                                                Number(
+                                                                    purchase
+                                                                        .paid_amount,
+                                                                ),
+                                                            )}
+                                                        </strong>
+                                                    </div>
 
-                                        <div className="sdp-cell sdp-money-cell">
-                                            <span className="sdp-mobile-label">
-                                                Financial Position
-                                            </span>
+                                                    <div className="sdp-money-box due">
+                                                        <span>
+                                                            Outstanding
+                                                        </span>
 
-                                            <div className="sdp-money-grid">
-                                                <div className="sdp-money-box">
-                                                    <span>
-                                                        Total
-                                                    </span>
-
-                                                    <strong>
-                                                        {money.format(
-                                                            Number(
-                                                                purchase
-                                                                    .grand_total,
-                                                            ),
-                                                        )}
-                                                    </strong>
-                                                </div>
-
-                                                <div className="sdp-money-box">
-                                                    <span>
-                                                        Paid
-                                                    </span>
-
-                                                    <strong>
-                                                        {money.format(
-                                                            Number(
-                                                                purchase
-                                                                    .paid_amount,
-                                                            ),
-                                                        )}
-                                                    </strong>
-                                                </div>
-
-                                                <div className="sdp-money-box due">
-                                                    <span>
-                                                        Outstanding
-                                                    </span>
-
-                                                    <strong>
-                                                        {money.format(
-                                                            Number(
-                                                                purchase
-                                                                    .due_amount,
-                                                            ),
-                                                        )}
-                                                    </strong>
+                                                        <strong>
+                                                            {money.format(
+                                                                Number(
+                                                                    purchase
+                                                                        .due_amount,
+                                                                ),
+                                                            )}
+                                                        </strong>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <div className="sdp-cell">
-                                            <span className="sdp-mobile-label">
-                                                Due Date and Status
-                                            </span>
+                                            <div className="sdp-cell">
+                                                <span className="sdp-mobile-label">
+                                                    Due Date and Status
+                                                </span>
 
-                                            <span className="sdp-meta">
-                                                <Icon name="calendar" />
+                                                <span className="sdp-meta">
+                                                    <Icon name="calendar" />
 
-                                                Due:
-                                                {' '}
+                                                    Due:
+                                                    {' '}
 
-                                                {formatDate(
-                                                    purchase
-                                                        .due_date,
-                                                )}
-                                            </span>
+                                                    {formatDate(
+                                                        purchase
+                                                            .due_date,
+                                                    )}
+                                                </span>
 
-                                            <span
-                                                className={
-                                                    `sdp-status ${currentStatus.className}`
-                                                }
-                                            >
-                                                <Icon
-                                                    name={
-                                                        currentStatus
-                                                            .className
-                                                            === 'paid'
-                                                            ? 'check'
-                                                            : currentStatus
-                                                                .className
-                                                                === 'setup'
-                                                                ? 'settings'
-                                                                : 'alert'
+                                                <span
+                                                    className={
+                                                        `sdp-status ${currentStatus.className}`
                                                     }
-                                                />
+                                                >
+                                                    <Icon
+                                                        name={
+                                                            currentStatus
+                                                                .className
+                                                                === 'paid'
+                                                                ? 'check'
+                                                                : currentStatus
+                                                                    .className
+                                                                    === 'setup'
+                                                                    ? 'settings'
+                                                                    : 'alert'
+                                                        }
+                                                    />
 
-                                                {
-                                                    currentStatus
-                                                        .label
-                                                }
-                                            </span>
-                                        </div>
+                                                    {
+                                                        currentStatus
+                                                            .label
+                                                    }
+                                                </span>
+                                            </div>
 
-                                        <div className="sdp-actions">
-                                            {purchase.payment_status
-                                                === 'unconfigured' && (
-                                                    <button
-                                                        type="button"
-                                                        className="sdp-btn sdp-primary sdp-action"
-                                                        onClick={() => {
-                                                            setModalError(
-                                                                '',
-                                                            );
+                                            <div className="sdp-actions">
+                                                {purchase.payment_status
+                                                    === 'unconfigured' && (
+                                                        <button
+                                                            type="button"
+                                                            className="sdp-btn sdp-primary sdp-action"
+                                                            onClick={() => {
+                                                                setModalError(
+                                                                    '',
+                                                                );
 
-                                                            setSettlementPurchase(
-                                                                purchase,
-                                                            );
-                                                        }}
-                                                    >
-                                                        <Icon name="settings" />
+                                                                setSettlementPurchase(
+                                                                    purchase,
+                                                                );
+                                                            }}
+                                                        >
+                                                            <Icon name="settings" />
 
-                                                        Configure
-                                                    </button>
-                                                )}
+                                                            Configure
+                                                        </button>
+                                                    )}
 
-                                            {purchase.due_amount
-                                                > 0 && (
-                                                    <button
-                                                        type="button"
-                                                        className="sdp-btn sdp-blue sdp-action"
-                                                        onClick={() => {
-                                                            setModalError(
-                                                                '',
-                                                            );
+                                                {purchase.due_amount
+                                                    > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            className="sdp-btn sdp-blue sdp-action"
+                                                            onClick={() => {
+                                                                setModalError(
+                                                                    '',
+                                                                );
 
-                                                            setPaymentPurchase(
-                                                                purchase,
-                                                            );
-                                                        }}
-                                                    >
-                                                        <Icon name="money" />
+                                                                setPaymentPurchase(
+                                                                    purchase,
+                                                                );
+                                                            }}
+                                                        >
+                                                            <Icon name="money" />
 
-                                                        Record Payment
-                                                    </button>
-                                                )}
+                                                            Record Payment
+                                                        </button>
+                                                    )}
 
-                                            {purchase.due_amount
-                                                <= 0 && (
-                                                    <span className="sdp-paid">
-                                                        <Icon name="check" />
+                                                {purchase.due_amount
+                                                    <= 0 && (
+                                                        <span className="sdp-paid">
+                                                            <Icon name="check" />
 
-                                                        Fully Paid
-                                                    </span>
-                                                )}
-                                        </div>
-                                    </article>
-                                );
-                            },
-                        )}
-                    </div>
+                                                            Fully Paid
+                                                        </span>
+                                                    )}
+                                            </div>
+                                        </article>
+                                    );
+                                },
+                            )}
+                        </div>
+                    </>
                 )}
 
                 {!isLoading

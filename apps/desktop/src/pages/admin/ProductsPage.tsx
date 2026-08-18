@@ -9,6 +9,7 @@ import {
 import type {
     FormEvent,
     KeyboardEvent as ReactKeyboardEvent,
+    RefObject,
 } from 'react';
 
 import {
@@ -92,6 +93,63 @@ const EMPTY_PAGINATION:
     from: null,
     to: null,
 };
+
+
+interface SearchableSelectOption {
+    value: string;
+    label: string;
+    secondary?: string;
+    searchText?: string;
+}
+
+interface SearchableSelectProps {
+    value: string;
+    options: SearchableSelectOption[];
+    placeholder: string;
+    searchPlaceholder: string;
+    emptyMessage: string;
+    disabled?: boolean;
+    ariaLabel: string;
+    triggerRef?: RefObject<HTMLButtonElement | null>;
+    dataVariantIndex?: number;
+    dataVariantField?: string;
+    onChange: (value: string) => void;
+    onAdvance: () => void;
+}
+
+const COMMON_UNIT_OPTIONS:
+    SearchableSelectOption[] =
+    COMMON_UNITS.map(
+        (
+            unit,
+        ) => ({
+            value:
+                unit,
+
+            label:
+                unit,
+
+            searchText:
+                unit,
+        }),
+    );
+
+const VARIANT_SIZE_UNIT_OPTIONS:
+    SearchableSelectOption[] =
+    VARIANT_SIZE_UNITS.map(
+        (
+            unit,
+        ) => ({
+            value:
+                unit,
+
+            label:
+                unit,
+
+            searchText:
+                unit,
+        }),
+    );
 
 /* =========================================================
    FORM
@@ -334,6 +392,677 @@ function Icon({
     }
 }
 
+
+/* =========================================================
+   SEARCHABLE SELECT
+   ========================================================= */
+
+function SearchableSelect({
+    value,
+    options,
+    placeholder,
+    searchPlaceholder,
+    emptyMessage,
+    disabled = false,
+    ariaLabel,
+    triggerRef,
+    dataVariantIndex,
+    dataVariantField,
+    onChange,
+    onAdvance,
+}: SearchableSelectProps) {
+    const rootRef =
+        useRef<HTMLDivElement | null>(
+            null,
+        );
+
+    const searchInputRef =
+        useRef<HTMLInputElement | null>(
+            null,
+        );
+
+    const optionButtonRefs =
+        useRef<
+            Map<
+                string,
+                HTMLButtonElement
+            >
+        >(
+            new Map(),
+        );
+
+    const [
+        isOpen,
+        setIsOpen,
+    ] =
+        useState(
+            false,
+        );
+
+    const [
+        searchQuery,
+        setSearchQuery,
+    ] =
+        useState(
+            '',
+        );
+
+    const [
+        highlightedIndex,
+        setHighlightedIndex,
+    ] =
+        useState(
+            0,
+        );
+
+    const selectedOption =
+        useMemo(
+            () =>
+                options.find(
+                    (
+                        option,
+                    ) =>
+                        option.value
+                        === value,
+                )
+                ?? null,
+            [
+                options,
+                value,
+            ],
+        );
+
+    const filteredOptions =
+        useMemo(
+            () => {
+                const query =
+                    searchQuery
+                        .trim()
+                        .toLowerCase();
+
+                if (!query) {
+                    return options;
+                }
+
+                return options.filter(
+                    (
+                        option,
+                    ) => {
+                        const searchValue = [
+                            option.label,
+                            option.secondary,
+                            option.searchText,
+                        ]
+                            .filter(
+                                Boolean,
+                            )
+                            .join(
+                                ' ',
+                            )
+                            .toLowerCase();
+
+                        return searchValue
+                            .includes(
+                                query,
+                            );
+                    },
+                );
+            },
+            [
+                options,
+                searchQuery,
+            ],
+        );
+
+    useEffect(
+        () => {
+            if (!isOpen) {
+                return;
+            }
+
+            const selectedIndex =
+                options
+                    .findIndex(
+                        (
+                            option,
+                        ) =>
+                            option.value
+                            === value,
+                    );
+
+            setHighlightedIndex(
+                selectedIndex >= 0
+                    ? selectedIndex
+                    : 0,
+            );
+
+            const timer =
+                window.setTimeout(
+                    () => {
+                        searchInputRef
+                            .current
+                            ?.focus();
+
+                        searchInputRef
+                            .current
+                            ?.select();
+                    },
+                    25,
+                );
+
+            const handleOutsideClick =
+                (
+                    event:
+                        MouseEvent,
+                ): void => {
+                    if (
+                        event.target
+                        instanceof Node
+                        && !rootRef
+                            .current
+                            ?.contains(
+                                event.target,
+                            )
+                    ) {
+                        setIsOpen(
+                            false,
+                        );
+
+                        setSearchQuery(
+                            '',
+                        );
+                    }
+                };
+
+            document.addEventListener(
+                'mousedown',
+                handleOutsideClick,
+            );
+
+            return () => {
+                window.clearTimeout(
+                    timer,
+                );
+
+                document.removeEventListener(
+                    'mousedown',
+                    handleOutsideClick,
+                );
+            };
+        },
+        [
+            isOpen,
+            options,
+            value,
+        ],
+    );
+
+    useEffect(
+        () => {
+            if (
+                isOpen
+                && searchQuery
+            ) {
+                setHighlightedIndex(
+                    0,
+                );
+            }
+        },
+        [
+            isOpen,
+            searchQuery,
+        ],
+    );
+
+    const closeDropdown =
+        (
+            restoreFocus = false,
+        ): void => {
+            setIsOpen(
+                false,
+            );
+
+            setSearchQuery(
+                '',
+            );
+
+            if (restoreFocus) {
+                window.setTimeout(
+                    () => {
+                        (
+                            triggerRef
+                                ?.current
+                            ?? rootRef
+                                .current
+                                ?.querySelector<HTMLButtonElement>(
+                                    '.pm-searchable-trigger',
+                                )
+                        )
+                            ?.focus();
+                    },
+                    0,
+                );
+            }
+        };
+
+    const chooseOption =
+        (
+            option:
+                SearchableSelectOption,
+        ): void => {
+            onChange(
+                option.value,
+            );
+
+            closeDropdown();
+
+            window.setTimeout(
+                () => {
+                    onAdvance();
+                },
+                0,
+            );
+        };
+
+    const moveHighlight =
+        (
+            direction:
+                number,
+        ): void => {
+            if (
+                filteredOptions.length
+                === 0
+            ) {
+                return;
+            }
+
+            setHighlightedIndex(
+                (
+                    current,
+                ) => {
+                    const next =
+                        (
+                            current
+                            + direction
+                            + filteredOptions
+                                .length
+                        )
+                        % filteredOptions
+                            .length;
+
+                    const option =
+                        filteredOptions[
+                        next
+                        ];
+
+                    if (option) {
+                        window.setTimeout(
+                            () => {
+                                optionButtonRefs
+                                    .current
+                                    .get(
+                                        option.value,
+                                    )
+                                    ?.scrollIntoView({
+                                        block:
+                                            'nearest',
+                                    });
+                            },
+                            0,
+                        );
+                    }
+
+                    return next;
+                },
+            );
+        };
+
+    const handleSearchKeyDown =
+        (
+            event:
+                ReactKeyboardEvent<HTMLInputElement>,
+        ): void => {
+            if (
+                event.key
+                === 'ArrowDown'
+            ) {
+                event.preventDefault();
+
+                moveHighlight(
+                    1,
+                );
+
+                return;
+            }
+
+            if (
+                event.key
+                === 'ArrowUp'
+            ) {
+                event.preventDefault();
+
+                moveHighlight(
+                    -1,
+                );
+
+                return;
+            }
+
+            if (
+                event.key
+                === 'Enter'
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const option =
+                    filteredOptions[
+                    highlightedIndex
+                    ];
+
+                if (option) {
+                    chooseOption(
+                        option,
+                    );
+                }
+
+                return;
+            }
+
+            if (
+                event.key
+                === 'Escape'
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                closeDropdown(
+                    true,
+                );
+            }
+        };
+
+    return (
+        <div
+            ref={
+                rootRef
+            }
+            className={
+                isOpen
+                    ? 'pm-searchable-select is-open'
+                    : 'pm-searchable-select'
+            }
+        >
+            <button
+                ref={
+                    triggerRef
+                }
+                type="button"
+                className={[
+                    'pm-searchable-trigger',
+                    selectedOption
+                        ? ''
+                        : 'placeholder',
+                ]
+                    .filter(
+                        Boolean,
+                    )
+                    .join(
+                        ' ',
+                    )}
+                disabled={
+                    disabled
+                }
+                aria-label={
+                    ariaLabel
+                }
+                aria-haspopup="listbox"
+                aria-expanded={
+                    isOpen
+                }
+                data-variant-index={
+                    dataVariantIndex
+                }
+                data-variant-field={
+                    dataVariantField
+                }
+                onClick={() => {
+                    setIsOpen(
+                        (
+                            current,
+                        ) =>
+                            !current,
+                    );
+                }}
+                onKeyDown={(event) => {
+                    /*
+                     * ENTER always opens the dropdown.
+                     *
+                     * This intentionally differs from a native <select>:
+                     * the user can immediately type into the search box.
+                     */
+                    if (
+                        (
+                            event.key
+                            === 'Enter'
+                            || event.key
+                            === 'ArrowDown'
+                            || event.key
+                            === ' '
+                        )
+                        && !isOpen
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        setIsOpen(
+                            true,
+                        );
+
+                        return;
+                    }
+
+                    if (
+                        event.key
+                        === 'Escape'
+                        && isOpen
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        closeDropdown(
+                            true,
+                        );
+                    }
+                }}
+            >
+                <span className="pm-searchable-trigger-text">
+                    {selectedOption
+                        ?.label
+                        ?? placeholder}
+                </span>
+
+                <span
+                    className={
+                        isOpen
+                            ? 'pm-searchable-chevron open'
+                            : 'pm-searchable-chevron'
+                    }
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="m7 10 5 5 5-5" />
+                    </svg>
+                </span>
+            </button>
+
+            {isOpen && (
+                <div className="pm-searchable-menu">
+                    <div className="pm-searchable-search-wrap">
+                        <span className="pm-searchable-search-icon">
+                            <Icon name="search" />
+                        </span>
+
+                        <input
+                            ref={
+                                searchInputRef
+                            }
+                            type="search"
+                            className="pm-searchable-search-input"
+                            value={
+                                searchQuery
+                            }
+                            placeholder={
+                                searchPlaceholder
+                            }
+                            autoComplete="off"
+                            spellCheck={
+                                false
+                            }
+                            onChange={(event) => {
+                                setSearchQuery(
+                                    event
+                                        .target
+                                        .value,
+                                );
+                            }}
+                            onKeyDown={
+                                handleSearchKeyDown
+                            }
+                        />
+                    </div>
+
+                    <div
+                        className="pm-searchable-options"
+                        role="listbox"
+                        aria-label={
+                            ariaLabel
+                        }
+                    >
+                        {filteredOptions.length
+                            === 0 ? (
+                            <div className="pm-searchable-empty">
+                                <Icon name="search" />
+
+                                <strong>
+                                    No results found
+                                </strong>
+
+                                <span>
+                                    {emptyMessage}
+                                </span>
+                            </div>
+                        ) : (
+                            filteredOptions.map(
+                                (
+                                    option,
+                                    index,
+                                ) => {
+                                    const selected =
+                                        option.value
+                                        === value;
+
+                                    const highlighted =
+                                        index
+                                        === highlightedIndex;
+
+                                    return (
+                                        <button
+                                            ref={(node) => {
+                                                if (node) {
+                                                    optionButtonRefs
+                                                        .current
+                                                        .set(
+                                                            option.value,
+                                                            node,
+                                                        );
+                                                } else {
+                                                    optionButtonRefs
+                                                        .current
+                                                        .delete(
+                                                            option.value,
+                                                        );
+                                                }
+                                            }}
+                                            key={
+                                                option.value
+                                            }
+                                            type="button"
+                                            role="option"
+                                            aria-selected={
+                                                selected
+                                            }
+                                            className={[
+                                                'pm-searchable-option',
+                                                selected
+                                                    ? 'selected'
+                                                    : '',
+                                                highlighted
+                                                    ? 'highlighted'
+                                                    : '',
+                                            ]
+                                                .filter(
+                                                    Boolean,
+                                                )
+                                                .join(
+                                                    ' ',
+                                                )}
+                                            onMouseEnter={() => {
+                                                setHighlightedIndex(
+                                                    index,
+                                                );
+                                            }}
+                                            onMouseDown={(event) => {
+                                                event.preventDefault();
+                                            }}
+                                            onClick={() => {
+                                                chooseOption(
+                                                    option,
+                                                );
+                                            }}
+                                        >
+                                            <span className="pm-searchable-option-copy">
+                                                <strong>
+                                                    {option.label}
+                                                </strong>
+
+                                                {option.secondary && (
+                                                    <small>
+                                                        {
+                                                            option.secondary
+                                                        }
+                                                    </small>
+                                                )}
+                                            </span>
+
+                                            {selected && (
+                                                <span className="pm-searchable-option-check">
+                                                    <Icon name="check" />
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                },
+                            )
+                        )}
+                    </div>
+
+                    <div className="pm-searchable-keyboard-help">
+                        Type to search • ↑ ↓ move • Enter select • Esc close
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 /* =========================================================
    CSS
    ========================================================= */
@@ -366,10 +1095,17 @@ const productsPageStyles = `
 }
 
 #sapo-products {
+    display: flex !important;
     width: 100% !important;
-    padding: 20px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex-direction: column !important;
+    gap: 20px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: hidden !important;
     color: var(--text) !important;
-    background: #f5f7f6 !important;
+    background: transparent !important;
 }
 
 #sapo-products button,
@@ -388,31 +1124,50 @@ const productsPageStyles = `
 }
 
 #sapo-products .pp-container {
-    max-width: 1600px !important;
-    margin: 0 auto !important;
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex-direction: column !important;
+    gap: 20px !important;
+    margin: 0 !important;
 }
 
 #sapo-products .pp-header {
     display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
     align-items: center !important;
     justify-content: space-between !important;
     gap: 20px !important;
-    padding: 20px !important;
-    background: white !important;
-    border: 1px solid var(--border) !important;
-    border-left: 6px solid var(--green) !important;
-    border-radius: 14px !important;
+    padding: 20px 24px !important;
+    background: #ffffff !important;
+    border: 1px solid var(--border-soft) !important;
+    border-radius: 10px !important;
+}
+
+#sapo-products .pp-kicker {
+    display: block !important;
+    margin-bottom: 3px !important;
+    color: var(--green) !important;
+    font-size: 12px !important;
+    font-weight: 750 !important;
+    letter-spacing: .04em !important;
+    text-transform: uppercase !important;
 }
 
 #sapo-products h1 {
     margin: 0 !important;
-    font-size: 29px !important;
+    color: var(--text) !important;
+    font-size: 22px !important;
+    font-weight: 750 !important;
+    line-height: 1.3 !important;
 }
 
 #sapo-products .pp-subtitle {
-    margin: 5px 0 0 !important;
+    margin: 3px 0 0 !important;
     color: var(--muted) !important;
-    font-size: 14px !important;
+    font-size: 13.5px !important;
 }
 
 #sapo-products .pp-header-actions,
@@ -421,6 +1176,12 @@ const productsPageStyles = `
     display: flex !important;
     align-items: center !important;
     gap: 8px !important;
+}
+
+#sapo-products .pp-header-actions,
+#sapo-products .pp-actions {
+    min-width: 0 !important;
+    flex-wrap: wrap !important;
 }
 
 #sapo-products .pp-button,
@@ -490,11 +1251,14 @@ const productsPageStyles = `
 }
 
 #sapo-products .pp-panel {
-    margin-top: 14px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
     overflow: hidden !important;
-    background: white !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 14px !important;
+    background: #ffffff !important;
+    border: 1px solid var(--border-soft) !important;
+    border-radius: 10px !important;
 }
 
 #sapo-products .pp-toolbar {
@@ -542,21 +1306,63 @@ const productsPageStyles = `
 }
 
 #sapo-products .pp-table-scroll {
-    overflow-x: auto !important;
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    max-height: 560px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin !important;
 }
 
 #sapo-products table {
     width: 100% !important;
-    min-width: 1200px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
     border-collapse: collapse !important;
 }
 
 #sapo-products th,
 #sapo-products td {
+    min-width: 0 !important;
     padding: 12px !important;
     text-align: left !important;
     vertical-align: middle !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
     border-bottom: 1px solid var(--border-soft) !important;
+}
+
+#sapo-products th:nth-child(1),
+#sapo-products td:nth-child(1) {
+    width: 24% !important;
+}
+
+#sapo-products th:nth-child(2),
+#sapo-products td:nth-child(2) {
+    width: 18% !important;
+}
+
+#sapo-products th:nth-child(3),
+#sapo-products td:nth-child(3) {
+    width: 12% !important;
+}
+
+#sapo-products th:nth-child(4),
+#sapo-products td:nth-child(4) {
+    width: 20% !important;
+}
+
+#sapo-products th:nth-child(5),
+#sapo-products td:nth-child(5) {
+    width: 10% !important;
+}
+
+#sapo-products th:nth-child(6),
+#sapo-products td:nth-child(6) {
+    width: 16% !important;
 }
 
 #sapo-products th {
@@ -712,6 +1518,7 @@ const productsPageStyles = `
     gap: 14px !important;
     min-height: 0 !important;
     padding: 16px !important;
+    overflow-x: hidden !important;
     overflow-y: auto !important;
     background: #f5f8f6 !important;
 }
@@ -763,6 +1570,253 @@ const productsPageStyles = `
 
 #sapo-product-modal .pm-required {
     color: #d92d20 !important;
+}
+
+
+/* =========================================================
+   SEARCHABLE DROPDOWNS
+   ========================================================= */
+
+#sapo-product-modal .pm-searchable-select {
+    position: relative !important;
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+#sapo-product-modal .pm-searchable-select.is-open {
+    z-index: 700 !important;
+}
+
+#sapo-product-modal .pm-searchable-trigger {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 43px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    color: var(--text) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-align: left !important;
+    appearance: none !important;
+    background: #ffffff !important;
+    border: 1px solid #aeb8b1 !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+}
+
+#sapo-product-modal .pm-searchable-trigger.placeholder {
+    color: #667085 !important;
+    font-weight: 500 !important;
+}
+
+#sapo-product-modal .pm-searchable-trigger:hover:not(:disabled) {
+    border-color: var(--green) !important;
+}
+
+#sapo-product-modal .pm-searchable-trigger:focus,
+#sapo-product-modal .pm-searchable-trigger:focus-visible {
+    outline: none !important;
+    border-color: var(--green) !important;
+    box-shadow: 0 0 0 3px rgba(21,128,61,.14) !important;
+}
+
+#sapo-product-modal .pm-searchable-trigger:disabled {
+    color: #667085 !important;
+    background: #f2f4f7 !important;
+    cursor: not-allowed !important;
+}
+
+#sapo-product-modal .pm-searchable-trigger-text {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#sapo-product-modal .pm-searchable-chevron {
+    display: grid !important;
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    place-items: center !important;
+    color: #667085 !important;
+    transition: transform 0.15s ease !important;
+}
+
+#sapo-product-modal .pm-searchable-chevron.open {
+    transform: rotate(180deg) !important;
+}
+
+#sapo-product-modal .pm-searchable-chevron svg {
+    width: 17px !important;
+    height: 17px !important;
+}
+
+#sapo-product-modal .pm-searchable-menu {
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    left: 0 !important;
+    z-index: 9999 !important;
+    width: 100% !important;
+    min-width: min(340px, 82vw) !important;
+    padding: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #b7c4ba !important;
+    border-radius: 10px !important;
+    box-shadow: 0 18px 45px rgba(16, 24, 40, 0.22) !important;
+}
+
+#sapo-product-modal .pm-searchable-search-wrap {
+    position: relative !important;
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid #edf1ee !important;
+}
+
+#sapo-product-modal .pm-searchable-search-icon {
+    position: absolute !important;
+    top: 12px !important;
+    left: 10px !important;
+    display: grid !important;
+    width: 18px !important;
+    height: 18px !important;
+    place-items: center !important;
+    color: #667085 !important;
+    pointer-events: none !important;
+}
+
+#sapo-product-modal .pm-searchable-search-icon svg {
+    width: 16px !important;
+    height: 16px !important;
+}
+
+#sapo-product-modal .pm-searchable-search-input {
+    display: block !important;
+    width: 100% !important;
+    height: 41px !important;
+    padding: 0 11px 0 36px !important;
+    color: var(--text) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    outline: none !important;
+    background: #f9fbfa !important;
+    border: 1px solid #aeb8b1 !important;
+    border-radius: 8px !important;
+}
+
+#sapo-product-modal .pm-searchable-search-input:focus {
+    border-color: var(--green) !important;
+    box-shadow: 0 0 0 3px rgba(21,128,61,.14) !important;
+}
+
+#sapo-product-modal .pm-searchable-options {
+    max-height: 240px !important;
+    margin-top: 7px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin !important;
+}
+
+#sapo-product-modal .pm-searchable-option {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 45px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 9px !important;
+    padding: 8px 9px !important;
+    color: #344054 !important;
+    font-size: 13px !important;
+    text-align: left !important;
+    appearance: none !important;
+    background: #ffffff !important;
+    border: 1px solid transparent !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+}
+
+#sapo-product-modal .pm-searchable-option.highlighted,
+#sapo-product-modal .pm-searchable-option:hover {
+    background: var(--green-light) !important;
+    border-color: #b8dfc3 !important;
+}
+
+#sapo-product-modal .pm-searchable-option.selected {
+    color: var(--green-dark) !important;
+    background: #e9f8ee !important;
+    border-color: #8fc69e !important;
+}
+
+#sapo-product-modal .pm-searchable-option-copy {
+    display: flex !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+}
+
+#sapo-product-modal .pm-searchable-option-copy strong {
+    overflow: hidden !important;
+    color: inherit !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#sapo-product-modal .pm-searchable-option-copy small {
+    margin-top: 1px !important;
+    color: #667085 !important;
+    font-size: 10px !important;
+    line-height: 1.3 !important;
+}
+
+#sapo-product-modal .pm-searchable-option-check {
+    display: grid !important;
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    place-items: center !important;
+    color: #ffffff !important;
+    background: var(--green) !important;
+    border-radius: 50% !important;
+}
+
+#sapo-product-modal .pm-searchable-option-check svg {
+    width: 13px !important;
+    height: 13px !important;
+}
+
+#sapo-product-modal .pm-searchable-empty {
+    display: flex !important;
+    min-height: 92px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+    padding: 10px !important;
+    color: #667085 !important;
+    font-size: 11px !important;
+    text-align: center !important;
+}
+
+#sapo-product-modal .pm-searchable-empty svg {
+    width: 22px !important;
+    height: 22px !important;
+    color: var(--green) !important;
+}
+
+#sapo-product-modal .pm-searchable-keyboard-help {
+    margin-top: 7px !important;
+    padding-top: 7px !important;
+    color: #667085 !important;
+    font-size: 9px !important;
+    font-weight: 650 !important;
+    text-align: center !important;
+    border-top: 1px solid #edf1ee !important;
 }
 
 #sapo-product-modal .pm-info {
@@ -869,9 +1923,96 @@ const productsPageStyles = `
     border-top: 1px solid var(--border) !important;
 }
 
+
+@media (max-width: 900px) {
+    #sapo-products .pp-table-scroll {
+        max-height: none !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+        padding: 10px !important;
+        background: #f5f7f6 !important;
+    }
+
+    #sapo-products table,
+    #sapo-products tbody,
+    #sapo-products tr,
+    #sapo-products td {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+
+    #sapo-products thead {
+        display: none !important;
+    }
+
+    #sapo-products tbody {
+        display: grid !important;
+        gap: 10px !important;
+    }
+
+    #sapo-products tbody tr {
+        overflow: hidden !important;
+        background: #ffffff !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 10px !important;
+    }
+
+    #sapo-products tbody tr:hover td {
+        background: #ffffff !important;
+    }
+
+    #sapo-products tbody td {
+        display: grid !important;
+        grid-template-columns: minmax(105px, 34%) minmax(0, 1fr) !important;
+        gap: 10px !important;
+        align-items: center !important;
+        padding: 10px 12px !important;
+        border-bottom: 1px solid var(--border-soft) !important;
+    }
+
+    #sapo-products tbody td:last-child {
+        border-bottom: 0 !important;
+    }
+
+    #sapo-products tbody td::before {
+        content: attr(data-label) !important;
+        color: #475467 !important;
+        font-size: 10px !important;
+        font-weight: 800 !important;
+        letter-spacing: .025em !important;
+        text-transform: uppercase !important;
+    }
+
+    #sapo-products tbody td[colspan] {
+        display: block !important;
+        padding: 18px !important;
+        text-align: center !important;
+    }
+
+    #sapo-products tbody td[colspan]::before {
+        display: none !important;
+        content: none !important;
+    }
+
+    #sapo-products tbody td .pp-actions {
+        justify-content: flex-start !important;
+    }
+
+    #sapo-products .pp-pagination {
+        align-items: stretch !important;
+        flex-direction: column !important;
+    }
+
+    #sapo-products .pp-pagination > .pp-actions {
+        justify-content: space-between !important;
+    }
+}
+
 @media (max-width: 800px) {
     #sapo-products {
-        padding: 12px !important;
+        padding: 0 !important;
     }
 
     #sapo-products .pp-header {
@@ -902,6 +2043,696 @@ const productsPageStyles = `
     #sapo-product-modal .pm-full {
         grid-column: auto !important;
     }
+
+    #sapo-product-modal .pm-searchable-menu {
+        min-width: 100% !important;
+    }
+}
+
+
+/* =========================================================
+   PRODUCTS LIST PAGE — CUSTOMER PAGE VISUAL SYSTEM
+
+   The Add/Edit Product modal above is intentionally left
+   unchanged. These rules only restyle the Products LIST page
+   so it follows CustomersPage.tsx.
+   ========================================================= */
+
+#sapo-products {
+    --pp-green-800: #166534;
+    --pp-green-700: #15803d;
+    --pp-green-100: #dcfce7;
+    --pp-green-50: #f0fdf4;
+    --pp-red: #dc2626;
+    --pp-red-light: #fef2f2;
+    --pp-blue: #2563eb;
+    --pp-blue-light: #eff6ff;
+    --pp-slate: #475569;
+    --pp-slate-light: #f1f5f9;
+    --pp-text: #111827;
+    --pp-text-secondary: #1f2937;
+    --pp-muted: #6b7280;
+    --pp-border: #e5e7eb;
+    --pp-border-strong: #d1d5db;
+    --pp-bg: #f9fafb;
+    --pp-white: #ffffff;
+
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex-direction: column !important;
+    gap: 20px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: var(--pp-text-secondary) !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    background: transparent !important;
+    isolation: isolate !important;
+    overflow: visible !important;
+}
+
+#sapo-products .pp-container {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex-direction: column !important;
+    gap: 20px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* ---------- Header ---------- */
+
+#sapo-products .pp-header {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 16px !important;
+    padding: 20px 24px !important;
+    background: var(--pp-white) !important;
+    border: 1px solid var(--pp-border) !important;
+    border-radius: 10px !important;
+}
+
+#sapo-products .pp-header > div:first-child {
+    display: flex !important;
+    min-width: 0 !important;
+    flex: 1 1 420px !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+}
+
+#sapo-products .pp-kicker {
+    display: inline-block !important;
+    margin: 0 0 6px !important;
+    color: var(--pp-green-700) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+    background: transparent !important;
+}
+
+#sapo-products h1 {
+    margin: 0 0 4px !important;
+    padding: 0 !important;
+    color: var(--pp-text) !important;
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    line-height: 1.3 !important;
+}
+
+#sapo-products .pp-subtitle {
+    margin: 0 !important;
+    padding: 0 !important;
+    color: var(--pp-muted) !important;
+    font-size: 13.5px !important;
+    font-weight: 400 !important;
+    line-height: 1.5 !important;
+}
+
+#sapo-products .pp-header-actions {
+    display: flex !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    gap: 8px !important;
+}
+
+/* ---------- Alerts ---------- */
+
+#sapo-products .pp-alert {
+    display: flex !important;
+    width: 100% !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin: 0 !important;
+    padding: 12px 16px !important;
+    font-size: 13.5px !important;
+    font-weight: 500 !important;
+    border-radius: 8px !important;
+}
+
+#sapo-products .pp-alert-success {
+    color: var(--pp-green-700) !important;
+    background: var(--pp-green-50) !important;
+    border: 1px solid #bbf7d0 !important;
+}
+
+#sapo-products .pp-alert-error {
+    color: #b91c1c !important;
+    background: var(--pp-red-light) !important;
+    border: 1px solid #fecaca !important;
+}
+
+/* ---------- Buttons ---------- */
+
+#sapo-products .pp-button {
+    display: inline-flex !important;
+    min-height: 36px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 7px 13px !important;
+    color: var(--pp-text-secondary) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+    appearance: none !important;
+    background: var(--pp-white) !important;
+    border: 1px solid var(--pp-border-strong) !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease !important;
+}
+
+#sapo-products .pp-button svg {
+    width: 15px !important;
+    height: 15px !important;
+}
+
+#sapo-products .pp-button-primary {
+    color: #ffffff !important;
+    background: var(--pp-green-700) !important;
+    border-color: var(--pp-green-700) !important;
+}
+
+#sapo-products .pp-button-primary:hover:not(:disabled) {
+    background: var(--pp-green-800) !important;
+    border-color: var(--pp-green-800) !important;
+}
+
+#sapo-products .pp-secondary-button:hover:not(:disabled) {
+    background: var(--pp-bg) !important;
+    border-color: #9ca3af !important;
+}
+
+#sapo-products .pp-view-button {
+    color: var(--pp-blue) !important;
+    background: var(--pp-blue-light) !important;
+    border-color: #bfdbfe !important;
+}
+
+#sapo-products .pp-view-button:hover:not(:disabled) {
+    color: #ffffff !important;
+    background: var(--pp-blue) !important;
+    border-color: var(--pp-blue) !important;
+}
+
+#sapo-products .pp-button-danger {
+    color: var(--pp-red) !important;
+    background: var(--pp-red-light) !important;
+    border-color: #fecaca !important;
+}
+
+#sapo-products .pp-button-danger:hover:not(:disabled) {
+    color: #ffffff !important;
+    background: var(--pp-red) !important;
+    border-color: var(--pp-red) !important;
+}
+
+/* ---------- Content card ---------- */
+
+#sapo-products .pp-panel {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    overflow: visible !important;
+    background: var(--pp-white) !important;
+    border: 1px solid var(--pp-border) !important;
+    border-radius: 10px !important;
+}
+
+/* ---------- Toolbar ---------- */
+
+#sapo-products .pp-toolbar {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 12px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+}
+
+#sapo-products .pp-toolbar-search {
+    flex: 1 1 320px !important;
+    min-width: 220px !important;
+    height: 38px !important;
+    padding: 0 14px !important;
+    color: var(--pp-text-secondary) !important;
+    font-size: 13.5px !important;
+    font-weight: 400 !important;
+    background: var(--pp-bg) !important;
+    border: 1px solid var(--pp-border-strong) !important;
+    border-radius: 8px !important;
+    outline: none !important;
+}
+
+#sapo-products .pp-toolbar-search::placeholder {
+    color: #9ca3af !important;
+}
+
+#sapo-products .pp-toolbar-search:focus {
+    background: var(--pp-white) !important;
+    border-color: var(--pp-green-700) !important;
+    box-shadow: 0 0 0 3px rgba(22,163,74,.12) !important;
+}
+
+#sapo-products .pp-toolbar-select {
+    min-width: 130px !important;
+    height: 38px !important;
+    padding: 0 14px !important;
+    color: var(--pp-text-secondary) !important;
+    font-size: 13.5px !important;
+    background: var(--pp-bg) !important;
+    border: 1px solid var(--pp-border-strong) !important;
+    border-radius: 8px !important;
+    outline: none !important;
+    cursor: pointer !important;
+}
+
+#sapo-products .pp-toolbar-select:focus {
+    background: var(--pp-white) !important;
+    border-color: var(--pp-green-700) !important;
+    box-shadow: 0 0 0 3px rgba(22,163,74,.12) !important;
+}
+
+#sapo-products .pp-result-count {
+    display: inline-flex !important;
+    min-height: 32px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 5px 10px !important;
+    color: var(--pp-green-800) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    background: var(--pp-green-50) !important;
+    border-radius: 999px !important;
+}
+
+/* ---------- Table container: vertical only, never horizontal ---------- */
+
+#sapo-products .pp-table-scroll {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    max-height: 520px !important;
+    padding: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    background: var(--pp-white) !important;
+    border: 1px solid var(--pp-border) !important;
+    border-radius: 8px !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: var(--pp-border-strong) transparent !important;
+}
+
+#sapo-products .pp-table-scroll::-webkit-scrollbar {
+    width: 8px !important;
+}
+
+#sapo-products .pp-table-scroll::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+#sapo-products .pp-table-scroll::-webkit-scrollbar-thumb {
+    background: var(--pp-border-strong) !important;
+    border-radius: 8px !important;
+}
+
+#sapo-products .pp-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    color: var(--pp-text-secondary) !important;
+    font-size: 13px !important;
+    background: var(--pp-white) !important;
+}
+
+#sapo-products .pp-table thead {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 2 !important;
+}
+
+#sapo-products .pp-table thead th {
+    padding: 12px 10px !important;
+    color: var(--pp-muted) !important;
+    font-size: 11px !important;
+    font-weight: 650 !important;
+    line-height: 1.25 !important;
+    text-align: left !important;
+    text-transform: uppercase !important;
+    background: #f9fafb !important;
+    border-bottom: 1px solid var(--pp-border) !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+}
+
+#sapo-products .pp-table tbody td {
+    padding: 13px 10px !important;
+    color: var(--pp-text-secondary) !important;
+    font-size: 12.5px !important;
+    vertical-align: middle !important;
+    background: var(--pp-white) !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+}
+
+#sapo-products .pp-table tbody tr:last-child td {
+    border-bottom: 0 !important;
+}
+
+#sapo-products .pp-table tbody tr:hover td {
+    background: #f9fafb !important;
+}
+
+/* Product / Category / Unit / Barcode / Status / Actions */
+#sapo-products .pp-table th:nth-child(1),
+#sapo-products .pp-table td:nth-child(1) { width: 24% !important; }
+#sapo-products .pp-table th:nth-child(2),
+#sapo-products .pp-table td:nth-child(2) { width: 17% !important; }
+#sapo-products .pp-table th:nth-child(3),
+#sapo-products .pp-table td:nth-child(3) { width: 12% !important; }
+#sapo-products .pp-table th:nth-child(4),
+#sapo-products .pp-table td:nth-child(4) { width: 19% !important; }
+#sapo-products .pp-table th:nth-child(5),
+#sapo-products .pp-table td:nth-child(5) { width: 10% !important; }
+#sapo-products .pp-table th:nth-child(6),
+#sapo-products .pp-table td:nth-child(6) { width: 18% !important; }
+
+#sapo-products .pp-product-name {
+    display: block !important;
+    overflow: hidden !important;
+    color: var(--pp-text) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.3 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#sapo-products .pp-small {
+    display: block !important;
+    overflow: hidden !important;
+    margin-top: 2px !important;
+    color: #9ca3af !important;
+    font-size: 11.5px !important;
+    line-height: 1.3 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#sapo-products .pp-badge {
+    display: inline-flex !important;
+    min-height: 24px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 4px 9px !important;
+    color: var(--pp-slate) !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    background: var(--pp-slate-light) !important;
+    border-radius: 999px !important;
+}
+
+#sapo-products .pp-status-badge {
+    display: inline-flex !important;
+    min-height: 24px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 4px 9px !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    border-radius: 999px !important;
+}
+
+#sapo-products .pp-status-active {
+    color: var(--pp-green-800) !important;
+    background: var(--pp-green-100) !important;
+}
+
+#sapo-products .pp-status-inactive {
+    color: var(--pp-muted) !important;
+    background: #f1f5f9 !important;
+}
+
+#sapo-products .pp-table-actions {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 5px !important;
+}
+
+#sapo-products .pp-action-button {
+    min-width: 54px !important;
+    min-height: 30px !important;
+    padding: 5px 8px !important;
+    font-size: 11.5px !important;
+}
+
+#sapo-products .pp-action-button svg {
+    width: 13px !important;
+    height: 13px !important;
+}
+
+#sapo-products .pp-table-state {
+    padding: 40px 16px !important;
+    color: #9ca3af !important;
+    font-size: 13.5px !important;
+    text-align: center !important;
+    white-space: normal !important;
+    background: var(--pp-white) !important;
+}
+
+/* ---------- Pagination ---------- */
+
+#sapo-products .pp-pagination {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 16px !important;
+    margin: 0 !important;
+    padding: 4px 0 0 !important;
+}
+
+#sapo-products .pp-pagination span {
+    color: var(--pp-muted) !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+
+#sapo-products .pp-pagination-button {
+    min-width: 90px !important;
+    min-height: 36px !important;
+    padding: 7px 16px !important;
+    color: #374151 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    background: var(--pp-white) !important;
+    border: 1px solid var(--pp-border-strong) !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+}
+
+#sapo-products .pp-pagination-button:hover:not(:disabled) {
+    background: #f9fafb !important;
+    border-color: #9ca3af !important;
+}
+
+#sapo-products .pp-pagination-button:disabled {
+    opacity: .5 !important;
+    cursor: not-allowed !important;
+}
+
+/* ---------- Responsive: stacked cards, no horizontal scroll ---------- */
+
+@media (max-width: 1050px) {
+    #sapo-products .pp-table thead th {
+        padding: 10px 7px !important;
+        font-size: 10px !important;
+    }
+
+    #sapo-products .pp-table tbody td {
+        padding: 11px 7px !important;
+        font-size: 11.5px !important;
+    }
+
+    #sapo-products .pp-action-button {
+        min-width: 48px !important;
+        padding: 5px 6px !important;
+        font-size: 10.5px !important;
+    }
+}
+
+@media (max-width: 850px) {
+    #sapo-products .pp-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+
+    #sapo-products .pp-header-actions,
+    #sapo-products .pp-header-actions .pp-button-primary {
+        width: 100% !important;
+    }
+
+    #sapo-products .pp-toolbar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+
+    #sapo-products .pp-toolbar-search,
+    #sapo-products .pp-toolbar-select,
+    #sapo-products .pp-toolbar .pp-button,
+    #sapo-products .pp-result-count {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    #sapo-products .pp-table-scroll {
+        max-height: none !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        background: var(--pp-bg) !important;
+        border: 0 !important;
+    }
+
+    #sapo-products .pp-table,
+    #sapo-products .pp-table tbody,
+    #sapo-products .pp-table tr,
+    #sapo-products .pp-table td {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+
+    #sapo-products .pp-table thead {
+        display: none !important;
+    }
+
+    #sapo-products .pp-table tbody {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+
+    #sapo-products .pp-table tbody tr {
+        overflow: hidden !important;
+        background: var(--pp-white) !important;
+        border: 1px solid var(--pp-border) !important;
+        border-radius: 8px !important;
+    }
+
+    #sapo-products .pp-table tbody tr:hover td {
+        background: var(--pp-white) !important;
+    }
+
+    #sapo-products .pp-table tbody td {
+        display: grid !important;
+        width: 100% !important;
+        grid-template-columns: 140px minmax(0, 1fr) !important;
+        align-items: center !important;
+        gap: 12px !important;
+        min-height: 44px !important;
+        padding: 10px 14px !important;
+        border-bottom: 1px solid var(--pp-border) !important;
+    }
+
+    #sapo-products .pp-table tbody td:last-child {
+        border-bottom: 0 !important;
+    }
+
+    #sapo-products .pp-table tbody td::before {
+        content: attr(data-label) !important;
+        color: var(--pp-muted) !important;
+        font-size: 11px !important;
+        font-weight: 650 !important;
+        text-transform: uppercase !important;
+    }
+
+    #sapo-products .pp-table .pp-table-state {
+        display: block !important;
+        min-height: 140px !important;
+        padding: 40px 16px !important;
+        text-align: center !important;
+    }
+
+    #sapo-products .pp-table .pp-table-state::before {
+        display: none !important;
+        content: none !important;
+    }
+
+    #sapo-products .pp-table-actions {
+        justify-content: flex-start !important;
+    }
+}
+
+@media (max-width: 640px) {
+    #sapo-products {
+        gap: 16px !important;
+    }
+
+    #sapo-products .pp-header {
+        padding: 16px !important;
+    }
+
+    #sapo-products .pp-panel {
+        padding: 14px !important;
+    }
+
+    #sapo-products .pp-pagination {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+
+    #sapo-products .pp-pagination-button {
+        width: 100% !important;
+    }
+
+    #sapo-products .pp-pagination span {
+        text-align: center !important;
+    }
+}
+
+@media (max-width: 480px) {
+    #sapo-products .pp-table tbody td {
+        grid-template-columns: 110px minmax(0, 1fr) !important;
+    }
+
+    #sapo-products .pp-table-actions {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    #sapo-products .pp-action-button {
+        width: 100% !important;
+    }
 }
 `;
 
@@ -924,7 +2755,7 @@ export default function ProductsPage() {
         );
 
     const categoryInputRef =
-        useRef<HTMLSelectElement | null>(
+        useRef<HTMLButtonElement | null>(
             null,
         );
 
@@ -934,7 +2765,7 @@ export default function ProductsPage() {
         );
 
     const unitInputRef =
-        useRef<HTMLSelectElement | null>(
+        useRef<HTMLButtonElement | null>(
             null,
         );
 
@@ -1064,6 +2895,32 @@ export default function ProductsPage() {
         setSuccessMessage,
     ] =
         useState('');
+
+    const categorySearchOptions =
+        useMemo<
+            SearchableSelectOption[]
+        >(
+            () =>
+                categories.map(
+                    (
+                        category,
+                    ) => ({
+                        value:
+                            String(
+                                category.id,
+                            ),
+
+                        label:
+                            category.name,
+
+                        searchText:
+                            `${category.name} ${category.id}`,
+                    }),
+                ),
+            [
+                categories,
+            ],
+        );
 
     const selectedCategory =
         useMemo(
@@ -2025,10 +3882,6 @@ export default function ProductsPage() {
                                                 <h3 className="pm-section-title">
                                                     1. Product Category
                                                 </h3>
-
-                                                <p className="pm-section-copy">
-                                                    Select the category used for reporting and product lookup.
-                                                </p>
                                             </div>
                                         </div>
 
@@ -2041,26 +3894,29 @@ export default function ProductsPage() {
                                                 </span>
                                             </span>
 
-                                            <select
-                                                ref={
+                                            <SearchableSelect
+                                                triggerRef={
                                                     categoryInputRef
                                                 }
-                                                className="pm-select"
                                                 value={
                                                     form.category_id
-                                                    ?? ''
+                                                        ? String(
+                                                            form.category_id,
+                                                        )
+                                                        : ''
                                                 }
+                                                options={
+                                                    categorySearchOptions
+                                                }
+                                                placeholder="Select category"
+                                                searchPlaceholder="Search category..."
+                                                emptyMessage="No category matches your search."
                                                 disabled={
                                                     isSubmitting
                                                     || isCategoryLoading
                                                 }
-                                                onKeyDown={(event) => {
-                                                    handleEnterFocus(
-                                                        event,
-                                                        nameInputRef.current,
-                                                    );
-                                                }}
-                                                onChange={(event) => {
+                                                ariaLabel="Select product category"
+                                                onChange={(value) => {
                                                     setForm(
                                                         (
                                                             current,
@@ -2068,42 +3924,24 @@ export default function ProductsPage() {
                                                             ...current,
 
                                                             category_id:
-                                                                event
-                                                                    .target
-                                                                    .value
+                                                                value
                                                                     ? Number(
-                                                                        event
-                                                                            .target
-                                                                            .value,
+                                                                        value,
                                                                     )
                                                                     : null,
                                                         }),
                                                     );
-                                                }}
-                                            >
-                                                <option value="">
-                                                    Select category
-                                                </option>
 
-                                                {categories.map(
-                                                    (
-                                                        category,
-                                                    ) => (
-                                                        <option
-                                                            key={
-                                                                category.id
-                                                            }
-                                                            value={
-                                                                category.id
-                                                            }
-                                                        >
-                                                            {
-                                                                category.name
-                                                            }
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
+                                                    setFormError(
+                                                        '',
+                                                    );
+                                                }}
+                                                onAdvance={() => {
+                                                    focusElement(
+                                                        nameInputRef.current,
+                                                    );
+                                                }}
+                                            />
 
                                             {selectedCategory && (
                                                 <small>
@@ -2127,10 +3965,6 @@ export default function ProductsPage() {
                                                 <h3 className="pm-section-title">
                                                     2. Product Information
                                                 </h3>
-
-                                                <p className="pm-section-copy">
-                                                    Enter the common information shared by all package sizes.
-                                                </p>
                                             </div>
                                         </div>
 
@@ -2188,26 +4022,24 @@ export default function ProductsPage() {
                                                     </span>
                                                 </span>
 
-                                                <select
-                                                    ref={
+                                                <SearchableSelect
+                                                    triggerRef={
                                                         unitInputRef
                                                     }
-                                                    className="pm-select"
                                                     value={
                                                         form.unit
                                                     }
-                                                    onKeyDown={(event) => {
-                                                        handleEnterFocus(
-                                                            event,
-                                                            barcodeInputRef.current,
-                                                        );
-                                                    }}
-                                                    onChange={(event) => {
-                                                        const unit =
-                                                            event
-                                                                .target
-                                                                .value;
-
+                                                    options={
+                                                        COMMON_UNIT_OPTIONS
+                                                    }
+                                                    placeholder="Select unit"
+                                                    searchPlaceholder="Search unit..."
+                                                    emptyMessage="No unit matches your search."
+                                                    disabled={
+                                                        isSubmitting
+                                                    }
+                                                    ariaLabel="Select main product unit"
+                                                    onChange={(unit) => {
                                                         setForm(
                                                             (
                                                                 current,
@@ -2233,31 +4065,17 @@ export default function ProductsPage() {
                                                                         ),
                                                             }),
                                                         );
-                                                    }}
-                                                >
-                                                    <option value="">
-                                                        Select unit
-                                                    </option>
 
-                                                    {COMMON_UNITS.map(
-                                                        (
-                                                            unit,
-                                                        ) => (
-                                                            <option
-                                                                key={
-                                                                    unit
-                                                                }
-                                                                value={
-                                                                    unit
-                                                                }
-                                                            >
-                                                                {
-                                                                    unit
-                                                                }
-                                                            </option>
-                                                        ),
-                                                    )}
-                                                </select>
+                                                        setFormError(
+                                                            '',
+                                                        );
+                                                    }}
+                                                    onAdvance={() => {
+                                                        focusElement(
+                                                            barcodeInputRef.current,
+                                                        );
+                                                    }}
+                                                />
                                             </label>
 
                                             <label className="pm-field">
@@ -2330,11 +4148,11 @@ export default function ProductsPage() {
                                             </label>
                                         </div>
 
-                                        <div className="pm-info">
+                                        {/* <div className="pm-info">
                                             For products with package variants, each variant can have its own barcode. Cost price, selling price, batch, expiry and stock are still recorded when purchasing stock.
-                                        </div>
+                                        </div> */}
 
-                                        <div className="pm-keyboard-help">
+                                        {/* <div className="pm-keyboard-help">
                                             <span className="pm-key">
                                                 Enter
                                             </span>
@@ -2358,7 +4176,7 @@ export default function ProductsPage() {
                                             <span>
                                                 Add variant
                                             </span>
-                                        </div>
+                                        </div> */}
                                     </section>
 
                                     {/* VARIANTS */}
@@ -2369,10 +4187,7 @@ export default function ProductsPage() {
                                                 <h3 className="pm-section-title">
                                                     3. Package Variants
                                                 </h3>
-
-                                                <p className="pm-section-copy">
-                                                    Add sizes such as 100g, 200g and 500g under this same product.
-                                                </p>
+                                                
                                             </div>
 
                                             <button
@@ -2412,9 +4227,9 @@ export default function ProductsPage() {
                                         {form.variants.length
                                             === 0 ? (
                                             <div className="pm-empty-variants">
-                                                This is currently a normal product with no package variants.
+                                                {/* This is currently a normal product with no package variants.
                                                 <br />
-                                                Click <strong>Add Variant</strong> when the product has multiple package sizes.
+                                                Click <strong>Add Variant</strong> when the product has multiple package sizes. */}
                                             </div>
                                         ) : (
                                             <div className="pm-variant-list">
@@ -2501,58 +4316,41 @@ export default function ProductsPage() {
                                                                         Size Unit
                                                                     </span>
 
-                                                                    <select
-                                                                        className="pm-select"
-                                                                        data-variant-index={
-                                                                            index
-                                                                        }
-                                                                        data-variant-field="size-unit"
+                                                                    <SearchableSelect
                                                                         value={
                                                                             variant
                                                                                 .size_unit
                                                                         }
-                                                                        onKeyDown={(event) => {
-                                                                            handleVariantFieldEnter(
-                                                                                event,
-                                                                                index,
-                                                                                'package',
-                                                                            );
-                                                                        }}
-                                                                        onChange={(event) => {
+                                                                        options={
+                                                                            VARIANT_SIZE_UNIT_OPTIONS
+                                                                        }
+                                                                        placeholder="Select"
+                                                                        searchPlaceholder="Search size unit..."
+                                                                        emptyMessage="No size unit matches your search."
+                                                                        disabled={
+                                                                            isSubmitting
+                                                                        }
+                                                                        ariaLabel={`Select size unit for variant ${index + 1}`}
+                                                                        dataVariantIndex={
+                                                                            index
+                                                                        }
+                                                                        dataVariantField="size-unit"
+                                                                        onChange={(value) => {
                                                                             updateVariant(
                                                                                 index,
                                                                                 {
                                                                                     size_unit:
-                                                                                        event
-                                                                                            .target
-                                                                                            .value,
+                                                                                        value,
                                                                                 },
                                                                             );
                                                                         }}
-                                                                    >
-                                                                        <option value="">
-                                                                            Select
-                                                                        </option>
-
-                                                                        {VARIANT_SIZE_UNITS.map(
-                                                                            (
-                                                                                unit,
-                                                                            ) => (
-                                                                                <option
-                                                                                    key={
-                                                                                        unit
-                                                                                    }
-                                                                                    value={
-                                                                                        unit
-                                                                                    }
-                                                                                >
-                                                                                    {
-                                                                                        unit
-                                                                                    }
-                                                                                </option>
-                                                                            ),
-                                                                        )}
-                                                                    </select>
+                                                                        onAdvance={() => {
+                                                                            focusVariantField(
+                                                                                index,
+                                                                                'package',
+                                                                            );
+                                                                        }}
+                                                                    />
                                                                 </label>
 
                                                                 <label className="pm-field">
@@ -2560,58 +4358,41 @@ export default function ProductsPage() {
                                                                         Package
                                                                     </span>
 
-                                                                    <select
-                                                                        className="pm-select"
-                                                                        data-variant-index={
-                                                                            index
-                                                                        }
-                                                                        data-variant-field="package"
+                                                                    <SearchableSelect
                                                                         value={
                                                                             variant
                                                                                 .package_unit
                                                                         }
-                                                                        onKeyDown={(event) => {
-                                                                            handleVariantFieldEnter(
-                                                                                event,
-                                                                                index,
-                                                                                'barcode',
-                                                                            );
-                                                                        }}
-                                                                        onChange={(event) => {
+                                                                        options={
+                                                                            COMMON_UNIT_OPTIONS
+                                                                        }
+                                                                        placeholder="Select"
+                                                                        searchPlaceholder="Search package unit..."
+                                                                        emptyMessage="No package unit matches your search."
+                                                                        disabled={
+                                                                            isSubmitting
+                                                                        }
+                                                                        ariaLabel={`Select package unit for variant ${index + 1}`}
+                                                                        dataVariantIndex={
+                                                                            index
+                                                                        }
+                                                                        dataVariantField="package"
+                                                                        onChange={(value) => {
                                                                             updateVariant(
                                                                                 index,
                                                                                 {
                                                                                     package_unit:
-                                                                                        event
-                                                                                            .target
-                                                                                            .value,
+                                                                                        value,
                                                                                 },
                                                                             );
                                                                         }}
-                                                                    >
-                                                                        <option value="">
-                                                                            Select
-                                                                        </option>
-
-                                                                        {COMMON_UNITS.map(
-                                                                            (
-                                                                                unit,
-                                                                            ) => (
-                                                                                <option
-                                                                                    key={
-                                                                                        unit
-                                                                                    }
-                                                                                    value={
-                                                                                        unit
-                                                                                    }
-                                                                                >
-                                                                                    {
-                                                                                        unit
-                                                                                    }
-                                                                                </option>
-                                                                            ),
-                                                                        )}
-                                                                    </select>
+                                                                        onAdvance={() => {
+                                                                            focusVariantField(
+                                                                                index,
+                                                                                'barcode',
+                                                                            );
+                                                                        }}
+                                                                    />
                                                                 </label>
 
                                                                 <label className="pm-field">
@@ -2746,22 +4527,17 @@ export default function ProductsPage() {
                 <div className="pp-container">
                     <header className="pp-header">
                         <div>
+                            {/* <span className="pp-kicker">
+                                Product Catalog
+                            </span> */}
+
                             <h1>
                                 Products
                             </h1>
 
-                            <p className="pp-subtitle">
-                                Manage normal products and multi-size package variants from one place.
-                            </p>
                         </div>
 
                         <div className="pp-header-actions">
-                            <span className="pp-count">
-                                {pagination.total}
-                                {' '}
-                                Products
-                            </span>
-
                             <button
                                 type="button"
                                 className="pp-button pp-button-primary"
@@ -2811,84 +4587,81 @@ export default function ProductsPage() {
                                 );
                             }}
                         >
-                            <label className="pp-field">
-                                <span className="pp-label">
-                                    Search Products
-                                </span>
-
-                                <input
-                                    className="pp-input"
-                                    value={
-                                        searchInput
-                                    }
-                                    placeholder="Name, SKU, barcode, category or variant"
-                                    onChange={(event) => {
-                                        setSearchInput(
-                                            event
-                                                .target
-                                                .value,
-                                        );
-                                    }}
-                                />
-                            </label>
+                            <input
+                                type="search"
+                                className="pp-toolbar-search"
+                                value={
+                                    searchInput
+                                }
+                                placeholder="Search product name, SKU, barcode, category or variant..."
+                                aria-label="Search products"
+                                onChange={(event) => {
+                                    setSearchInput(
+                                        event
+                                            .target
+                                            .value,
+                                    );
+                                }}
+                            />
 
                             <button
                                 type="submit"
-                                className="pp-button"
+                                className="pp-button pp-secondary-button"
                             >
                                 <Icon name="search" />
 
                                 Search
                             </button>
 
-                            <label className="pp-field">
-                                <span className="pp-label">
-                                    Rows
-                                </span>
-
-                                <select
-                                    className="pp-select"
-                                    value={
-                                        perPage
-                                    }
-                                    onChange={(event) => {
-                                        setPerPage(
-                                            Number(
-                                                event
-                                                    .target
-                                                    .value,
-                                            ),
-                                        );
-
-                                        setPage(
-                                            1,
-                                        );
-                                    }}
-                                >
-                                    {PAGE_SIZE_OPTIONS.map(
-                                        (
-                                            option,
-                                        ) => (
-                                            <option
-                                                key={
-                                                    option
-                                                }
-                                                value={
-                                                    option
-                                                }
-                                            >
-                                                {
-                                                    option
-                                                }
-                                            </option>
+                            <select
+                                className="pp-toolbar-select"
+                                value={
+                                    perPage
+                                }
+                                aria-label="Rows per page"
+                                onChange={(event) => {
+                                    setPerPage(
+                                        Number(
+                                            event
+                                                .target
+                                                .value,
                                         ),
-                                    )}
-                                </select>
-                            </label>
+                                    );
+
+                                    setPage(
+                                        1,
+                                    );
+                                }}
+                            >
+                                {PAGE_SIZE_OPTIONS.map(
+                                    (
+                                        option,
+                                    ) => (
+                                        <option
+                                            key={
+                                                option
+                                            }
+                                            value={
+                                                option
+                                            }
+                                        >
+                                            {option} Rows
+                                        </option>
+                                    ),
+                                )}
+                            </select>
+
+                            <span className="pp-result-count">
+                                {pagination.total}
+                                {' '}
+                                {pagination.total === 1
+                                    ? 'Product'
+                                    : 'Products'}
+                            </span>
                         </form>
 
                         <div className="pp-table-scroll">
-                            <table>
+                            <table className="pp-table">
                                 <thead>
                                     <tr>
                                         <th>
@@ -2928,14 +4701,20 @@ export default function ProductsPage() {
                                 <tbody>
                                     {isLoading ? (
                                         <tr>
-                                            <td colSpan={8}>
+                                            <td
+                                                colSpan={6}
+                                                className="pp-table-state"
+                                            >
                                                 Loading products...
                                             </td>
                                         </tr>
                                     ) : products.length
                                         === 0 ? (
                                         <tr>
-                                            <td colSpan={8}>
+                                            <td
+                                                colSpan={6}
+                                                className="pp-table-state"
+                                            >
                                                 No products found.
                                             </td>
                                         </tr>
@@ -2949,7 +4728,7 @@ export default function ProductsPage() {
                                                         product.id
                                                     }
                                                 >
-                                                    <td>
+                                                    <td data-label="Product">
                                                         <strong className="pp-product-name">
                                                             {
                                                                 product.name
@@ -2965,7 +4744,7 @@ export default function ProductsPage() {
                                                         </span>
                                                     </td>
 
-                                                    <td>
+                                                    <td data-label="Category">
                                                         <span className="pp-badge">
                                                             {product
                                                                 .category
@@ -2974,7 +4753,7 @@ export default function ProductsPage() {
                                                         </span>
                                                     </td>
 
-                                                    <td>
+                                                    <td data-label="Main Unit">
                                                         {
                                                             product.unit
                                                         }
@@ -3012,7 +4791,7 @@ export default function ProductsPage() {
                                                         )}
                                                     </td> */}
 
-                                                    <td>
+                                                    <td data-label="Barcode">
                                                         {product.barcode
                                                             || (
                                                                 product
@@ -3109,19 +4888,25 @@ export default function ProductsPage() {
                                                         )}
                                                     </td> */}
 
-                                                    <td>
-                                                        <span className="pp-badge">
+                                                    <td data-label="Status">
+                                                        <span
+                                                            className={
+                                                                product.is_active
+                                                                    ? 'pp-status-badge pp-status-active'
+                                                                    : 'pp-status-badge pp-status-inactive'
+                                                            }
+                                                        >
                                                             {product.is_active
                                                                 ? 'Active'
                                                                 : 'Inactive'}
                                                         </span>
                                                     </td>
 
-                                                    <td>
-                                                        <div className="pp-actions">
+                                                    <td data-label="Actions">
+                                                        <div className="pp-actions pp-table-actions">
                                                             <button
                                                                 type="button"
-                                                                className="pp-button"
+                                                                className="pp-button pp-view-button pp-action-button"
                                                                 onClick={() => {
                                                                     navigate(
                                                                         `/admin/products/${product.id}`,
@@ -3129,11 +4914,12 @@ export default function ProductsPage() {
                                                                 }}
                                                             >
                                                                 <Icon name="eye" />
+                                                                View
                                                             </button>
 
                                                             <button
                                                                 type="button"
-                                                                className="pp-button"
+                                                                className="pp-button pp-secondary-button pp-action-button"
                                                                 onClick={() => {
                                                                     openEditForm(
                                                                         product,
@@ -3141,11 +4927,12 @@ export default function ProductsPage() {
                                                                 }}
                                                             >
                                                                 <Icon name="edit" />
+                                                                Edit
                                                             </button>
 
                                                             <button
                                                                 type="button"
-                                                                className="pp-button pp-button-danger"
+                                                                className="pp-button pp-button-danger pp-action-button"
                                                                 onClick={() => {
                                                                     void handleDelete(
                                                                         product,
@@ -3153,6 +4940,7 @@ export default function ProductsPage() {
                                                                 }}
                                                             >
                                                                 <Icon name="trash" />
+                                                                Delete
                                                             </button>
                                                         </div>
                                                     </td>
@@ -3166,95 +4954,64 @@ export default function ProductsPage() {
 
                         {pagination.total > 0 && (
                             <footer className="pp-pagination">
+                                <button
+                                    type="button"
+                                    className="pp-pagination-button"
+                                    disabled={
+                                        page <= 1
+                                    }
+                                    onClick={() => {
+                                        setPage(
+                                            (
+                                                current,
+                                            ) =>
+                                                Math.max(
+                                                    1,
+                                                    current
+                                                    - 1,
+                                                ),
+                                        );
+                                    }}
+                                >
+                                    Previous
+                                </button>
+
                                 <span>
-                                    Showing
+                                    Page
                                     {' '}
                                     <strong>
-                                        {pagination.from
-                                            ?? 0}
-                                    </strong>
-                                    {' '}
-                                    -
-                                    {' '}
-                                    <strong>
-                                        {pagination.to
-                                            ?? 0}
+                                        {pagination.current_page}
                                     </strong>
                                     {' '}
                                     of
                                     {' '}
                                     <strong>
-                                        {
-                                            pagination.total
-                                        }
+                                        {pagination.last_page}
                                     </strong>
                                 </span>
 
-                                <div className="pp-actions">
-                                    <button
-                                        type="button"
-                                        className="pp-button"
-                                        disabled={
-                                            page <= 1
-                                        }
-                                        onClick={() => {
-                                            setPage(
-                                                (
-                                                    current,
-                                                ) =>
-                                                    Math.max(
-                                                        1,
-                                                        current
-                                                        - 1,
-                                                    ),
-                                            );
-                                        }}
-                                    >
-                                        <Icon name="chevron-left" />
-
-                                        Previous
-                                    </button>
-
-                                    <span>
-                                        Page
-                                        {' '}
-                                        {
-                                            pagination.current_page
-                                        }
-                                        {' '}
-                                        /
-                                        {' '}
-                                        {
-                                            pagination.last_page
-                                        }
-                                    </span>
-
-                                    <button
-                                        type="button"
-                                        className="pp-button"
-                                        disabled={
-                                            page
-                                            >= pagination.last_page
-                                        }
-                                        onClick={() => {
-                                            setPage(
-                                                (
-                                                    current,
-                                                ) =>
-                                                    Math.min(
-                                                        pagination
-                                                            .last_page,
-                                                        current
-                                                        + 1,
-                                                    ),
-                                            );
-                                        }}
-                                    >
-                                        Next
-
-                                        <Icon name="chevron-right" />
-                                    </button>
-                                </div>
+                                <button
+                                    type="button"
+                                    className="pp-pagination-button"
+                                    disabled={
+                                        page
+                                        >= pagination.last_page
+                                    }
+                                    onClick={() => {
+                                        setPage(
+                                            (
+                                                current,
+                                            ) =>
+                                                Math.min(
+                                                    pagination.last_page,
+                                                    current
+                                                    + 1,
+                                                ),
+                                        );
+                                    }}
+                                >
+                                    Next
+                                </button>
                             </footer>
                         )}
                     </section>

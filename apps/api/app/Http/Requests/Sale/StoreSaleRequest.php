@@ -27,6 +27,18 @@ class StoreSaleRequest extends FormRequest
                 'notes',
             );
 
+        /*
+         * Due Date is optional.
+         *
+         * Convert an empty string coming from the
+         * React payment form into null before
+         * Laravel validation.
+         */
+        $dueDate =
+            $this->input(
+                'due_date',
+            );
+
         $items = collect(
             $this->input(
                 'items',
@@ -38,7 +50,9 @@ class StoreSaleRequest extends FormRequest
                     mixed $item,
                 ): array {
                     $item =
-                        is_array($item)
+                        is_array(
+                            $item,
+                        )
                         ? $item
                         : [];
 
@@ -91,6 +105,21 @@ class StoreSaleRequest extends FormRequest
                 'amount_received',
                 0,
             ),
+
+            /*
+             * Empty due date becomes null.
+             */
+            'due_date' =>
+            is_string(
+                $dueDate,
+            )
+                && trim(
+                    $dueDate,
+                ) !== ''
+                ? trim(
+                    $dueDate,
+                )
+                : null,
 
             'reference_number' =>
             is_string(
@@ -159,6 +188,12 @@ class StoreSaleRequest extends FormRequest
                 'min:0',
             ],
 
+            /*
+             * OPTIONAL:
+             *
+             * Partial and Due sales may now be
+             * completed without a due date.
+             */
             'due_date' => [
                 'nullable',
                 'date_format:Y-m-d',
@@ -264,13 +299,8 @@ class StoreSaleRequest extends FormRequest
                         'payment_method',
                     );
 
-                $dueDate =
-                    $this->input(
-                        'due_date',
-                    );
-
                 /*
-                 * Partial and due sales require
+                 * Partial and due sales still require
                  * a registered customer.
                  */
                 if (
@@ -293,27 +323,16 @@ class StoreSaleRequest extends FormRequest
                 }
 
                 /*
-                 * Partial and due sales require
-                 * a due date.
+                 * IMPORTANT:
+                 *
+                 * Due Date is intentionally NOT checked
+                 * here anymore.
+                 *
+                 * It is optional for:
+                 *
+                 * - Partial Payment
+                 * - Entire Sale on Due
                  */
-                if (
-                    in_array(
-                        $type,
-                        [
-                            Sale::SETTLEMENT_PARTIAL,
-                            Sale::SETTLEMENT_DUE,
-                        ],
-                        true,
-                    )
-                    && ! $dueDate
-                ) {
-                    $validator
-                        ->errors()
-                        ->add(
-                            'due_date',
-                            'Please enter the due date.',
-                        );
-                }
 
                 /*
                  * Full and partial payments require
@@ -375,7 +394,8 @@ class StoreSaleRequest extends FormRequest
                         );
 
                     if (
-                        $saleUnit === ''
+                        $saleUnit
+                        === ''
                     ) {
                         $validator
                             ->errors()
@@ -392,7 +412,8 @@ class StoreSaleRequest extends FormRequest
                         );
 
                     if (
-                        $quantity <= 0
+                        $quantity
+                        <= 0
                     ) {
                         $validator
                             ->errors()
@@ -409,7 +430,8 @@ class StoreSaleRequest extends FormRequest
                         );
 
                     if (
-                        $discount < 0
+                        $discount
+                        < 0
                     ) {
                         $validator
                             ->errors()
@@ -476,6 +498,9 @@ class StoreSaleRequest extends FormRequest
 
             'amount_received.min' =>
             'The received amount cannot be negative.',
+
+            'due_date.date_format' =>
+            'Please enter a valid due date.',
         ];
     }
 }
