@@ -71,6 +71,7 @@ type IconName =
     | 'calendar'
     | 'card'
     | 'cash'
+    | 'cheque'
     | 'check'
     | 'close'
     | 'receipt'
@@ -162,6 +163,21 @@ function Icon({
                     />
 
                     <path d="M7 9h.01M17 15h.01" />
+                </svg>
+            );
+
+        case 'cheque':
+            return (
+                <svg {...commonProps}>
+                    <rect
+                        x="3"
+                        y="5"
+                        width="18"
+                        height="14"
+                        rx="2"
+                    />
+
+                    <path d="M7 9h6M7 13h4M15 14l1.5 1.5L19 12" />
                 </svg>
             );
 
@@ -1642,6 +1658,11 @@ const paymentMethodOptions: Array<{
             label: 'Bank Transfer',
             icon: 'bank',
         },
+        {
+            value: 'cheque',
+            label: 'Cheque',
+            icon: 'cheque',
+        },
     ];
 
 function createPaymentDraft(
@@ -2687,7 +2708,7 @@ export default function PaymentModal({
                                         ) : (
                                             <>
                                                 <span className="payment-split-hint">
-                                                    You can use one method or split this sale between Cash, Card and Bank Transfer.
+                                                    You can use one method or split this sale between Cash, Card, Bank Transfer and Cheque.
                                                     When Cash is the only method, you may enter a higher tendered amount and the system will calculate change.
                                                 </span>
 
@@ -2860,7 +2881,9 @@ export default function PaymentModal({
                                                                                         ? 'Card slip / transaction reference'
                                                                                         : payment.payment_method === 'bank_transfer'
                                                                                             ? 'Bank transfer reference'
-                                                                                            : 'Optional reference'
+                                                                                            : payment.payment_method === 'cheque'
+                                                                                                ? 'Cheque number'
+                                                                                                : 'Optional reference'
                                                                                 }
                                                                                 onChange={(event) => {
                                                                                     updatePayment(

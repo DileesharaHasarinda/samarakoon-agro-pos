@@ -1,4 +1,4 @@
-export type PosPaymentMethod = "cash" | "card" | "bank_transfer";
+export type PosPaymentMethod = "cash" | "card" | "bank_transfer" | "cheque";
 
 /*
  * A SalePayment row always contains
@@ -266,6 +266,10 @@ export interface CompleteSaleItemInput {
  *   {
  *     payment_method: "bank_transfer",
  *     amount: 1000
+ *   },
+ *   {
+ *     payment_method: "cheque",
+ *     amount: 500
  *   }
  * ]
  */
@@ -341,9 +345,10 @@ export interface CompleteSaleValues {
    *
    * Full sale:
    *
-   * Cash 2500
-   * Card 1500
-   * Bank 1000
+   * Cash    2000
+   * Card    1500
+   * Bank    1000
+   * Cheque   500
    *
    * payments total = 5000
    *
@@ -549,6 +554,7 @@ export interface SaleReceipt {
    * cash
    * card
    * bank_transfer
+   * cheque
    *
    * For multiple:
    *
@@ -647,6 +653,7 @@ export interface SaleHistoryItem {
    * cash
    * card
    * bank_transfer
+   * cheque
    * mixed
    * null
    */

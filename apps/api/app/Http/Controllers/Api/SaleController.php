@@ -51,6 +51,7 @@ class SaleController extends Controller
                     SalePayment::METHOD_CASH,
                     SalePayment::METHOD_CARD,
                     SalePayment::METHOD_BANK_TRANSFER,
+                    SalePayment::METHOD_CHEQUE,
                 ]),
             ],
 
@@ -1435,6 +1436,7 @@ class SaleController extends Controller
                  * Cash          2,500
                  * Card          1,500
                  * Bank Transfer 1,000
+                 * Cheque          500
                  *
                  * This makes reports, cashier shift totals and payment-method
                  * breakdowns accurate without a new database table.

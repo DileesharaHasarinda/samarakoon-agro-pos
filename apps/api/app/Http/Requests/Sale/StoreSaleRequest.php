@@ -88,6 +88,7 @@ class StoreSaleRequest extends FormRequest
          * Cash          2,500
          * Card          1,500
          * Bank Transfer 1,000
+         * Cheque        500
          *
          * During rollout, older clients may still send only the
          * legacy top-level payment_method + amount_received fields.
@@ -289,6 +290,7 @@ class StoreSaleRequest extends FormRequest
                     SalePayment::METHOD_CASH,
                     SalePayment::METHOD_CARD,
                     SalePayment::METHOD_BANK_TRANSFER,
+                    SalePayment::METHOD_CHEQUE,
                 ]),
             ],
 
@@ -301,7 +303,7 @@ class StoreSaleRequest extends FormRequest
             'payments' => [
                 'present',
                 'array',
-                'max:3',
+                'max:4',
             ],
 
             'payments.*.payment_method' => [
@@ -311,6 +313,7 @@ class StoreSaleRequest extends FormRequest
                     SalePayment::METHOD_CASH,
                     SalePayment::METHOD_CARD,
                     SalePayment::METHOD_BANK_TRANSFER,
+                    SalePayment::METHOD_CHEQUE,
                 ]),
             ],
 
@@ -660,7 +663,7 @@ class StoreSaleRequest extends FormRequest
             'Payment information is invalid.',
 
             'payments.max' =>
-            'A sale can use a maximum of three payment methods.',
+            'A sale can use a maximum of four payment methods.',
 
             'payments.*.payment_method.required' =>
             'Please select the payment method.',

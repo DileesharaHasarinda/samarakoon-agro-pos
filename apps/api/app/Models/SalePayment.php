@@ -19,6 +19,19 @@ class SalePayment extends Model
     public const METHOD_BANK_TRANSFER =
     'bank_transfer';
 
+    public const METHOD_CHEQUE =
+    'cheque';
+
+    /**
+     * @var array<int, string>
+     */
+    public const PAYMENT_METHODS = [
+        self::METHOD_CASH,
+        self::METHOD_CARD,
+        self::METHOD_BANK_TRANSFER,
+        self::METHOD_CHEQUE,
+    ];
+
     public const TYPE_INITIAL =
     'initial_payment';
 
@@ -44,9 +57,14 @@ class SalePayment extends Model
     protected function casts(): array
     {
         return [
-            'sale_id' => 'integer',
-            'amount' => 'decimal:2',
-            'created_by' => 'integer',
+            'sale_id' =>
+            'integer',
+
+            'amount' =>
+            'decimal:2',
+
+            'created_by' =>
+            'integer',
         ];
     }
 
