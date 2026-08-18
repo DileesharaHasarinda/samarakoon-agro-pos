@@ -25,6 +25,10 @@ jobs:
 
       - name: Build installer
         working-directory: apps/desktop
+        env:
+          VITE_REVERB_APP_KEY: ${{ secrets.VITE_REVERB_APP_KEY }}
+          VITE_REVERB_PORT: ${{ secrets.VITE_REVERB_PORT }}
+          VITE_REVERB_SCHEME: ${{ secrets.VITE_REVERB_SCHEME }}
         run: npm run make
 
       - name: Upload installer artifact
