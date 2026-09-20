@@ -627,40 +627,7 @@ class ReportController extends Controller
             )
             ->values();
 
-        $inventorySummary =
-            DB::table('stock_batches')
-            ->where(
-                'available_quantity',
-                '>',
-                0,
-            )
-            ->selectRaw(
-                '
-                        COALESCE(
-                            SUM(available_quantity),
-                            0
-                        ) AS quantity,
-
-                        COALESCE(
-                            SUM(
-                                available_quantity
-                                * purchase_cost
-                            ),
-                            0
-                        ) AS purchase_value,
-
-                        COALESCE(
-                            SUM(
-                                available_quantity
-                                * selling_price
-                            ),
-                            0
-                        ) AS retail_value
-                    ',
-            )
-            ->first();
-
-        $inventoryRows =
+        $inventoryBatches =
             DB::table('stock_batches')
             ->join(
                 'products',
@@ -668,7 +635,7 @@ class ReportController extends Controller
                 '=',
                 'stock_batches.product_id',
             )
-            ->join(
+            ->leftJoin(
                 'categories',
                 'categories.id',
                 '=',
@@ -679,98 +646,391 @@ class ReportController extends Controller
                 '>',
                 0,
             )
-            ->selectRaw(
-                '
-                        products.id,
-                        products.name,
-                        products.unit,
+            ->get([
+                'stock_batches.id',
+                'stock_batches.product_id',
+                'stock_batches.available_quantity',
+                'stock_batches.purchase_cost',
+                'stock_batches.selling_price',
+                'stock_batches.is_dual_unit',
+                'stock_batches.stock_unit',
+                'stock_batches.secondary_unit',
+                'stock_batches.conversion_factor',
+                'stock_batches.secondary_selling_price',
+                'stock_batches.base_unit_cost',
+                'stock_batches.expiry_date',
 
-                        categories.id
-                            AS category_id,
+                'products.name AS product_name',
+                'products.unit AS product_unit',
 
-                        categories.name
-                            AS category_name,
-
-                        SUM(
-                            stock_batches.available_quantity
-                        ) AS quantity,
-
-                        SUM(
-                            stock_batches.available_quantity
-                            * stock_batches.purchase_cost
-                        ) AS purchase_value,
-
-                        SUM(
-                            stock_batches.available_quantity
-                            * stock_batches.selling_price
-                        ) AS retail_value,
-
-                        COUNT(stock_batches.id)
-                            AS batch_count,
-
-                        MIN(
-                            stock_batches.expiry_date
-                        ) AS nearest_expiry
-                    ',
-            )
-            ->groupBy(
-                'products.id',
-                'products.name',
-                'products.unit',
-                'categories.id',
-                'categories.name',
-            )
-            ->orderByDesc(
-                'purchase_value',
-            )
-            ->limit(100)
-            ->get()
+                'categories.id AS category_id',
+                'categories.name AS category_name',
+            ])
             ->map(
-                fn(
-                    object $product,
-                ): array => [
-                    'id' =>
-                    (int) $product->id,
+                function (
+                    object $batch,
+                ): array {
+                    $availableQuantity =
+                        max(
+                            0,
+                            (float) (
+                                $batch
+                                ->available_quantity
+                                ?? 0
+                            ),
+                        );
 
-                    'name' =>
-                    (string) $product->name,
+                    $conversionFactor =
+                        max(
+                            1,
+                            (float) (
+                                $batch
+                                ->conversion_factor
+                                ?? 1
+                            ),
+                        );
 
-                    'unit' =>
-                    (string) $product->unit,
+                    $secondaryUnit =
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->secondary_unit
+                                ?? null,
+                        );
 
-                    'category' => [
+                    $storedStockUnit =
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->stock_unit
+                                ?? null,
+                        );
+
+                    $productUnit =
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->product_unit
+                                ?? null,
+                        )
+                        ?? 'Unit';
+
+                    $isDualUnit =
+                        $this->inventoryBoolean(
+                            $batch
+                                ->is_dual_unit
+                                ?? false,
+                        )
+                        || (
+                            $secondaryUnit
+                            !== null
+                            && $conversionFactor
+                            > 1
+                        );
+
+                    $stockUnit =
+                        $this->resolveInventoryStockUnit(
+                            $productUnit,
+                            $isDualUnit,
+                            $storedStockUnit,
+                            $secondaryUnit,
+                            $conversionFactor,
+                        );
+
+                    $purchaseCost =
+                        (float) (
+                            $batch
+                            ->purchase_cost
+                            ?? 0
+                        );
+
+                    $sellingPrice =
+                        (float) (
+                            $batch
+                            ->selling_price
+                            ?? 0
+                        );
+
+                    $baseUnitCost =
+                        $batch
+                        ->base_unit_cost
+                        !== null
+                        && (float) $batch
+                            ->base_unit_cost
+                        > 0
+                        ? (float) $batch
+                            ->base_unit_cost
+                        : null;
+
+                    $secondarySellingPrice =
+                        $batch
+                        ->secondary_selling_price
+                        !== null
+                        ? (float) $batch
+                            ->secondary_selling_price
+                        : null;
+
+                    $purchaseValue =
+                        $this->inventoryBatchPurchaseValue(
+                            availableQuantity: $availableQuantity,
+                            purchaseCost: $purchaseCost,
+                            baseUnitCost: $baseUnitCost,
+                            conversionFactor: $conversionFactor,
+                            isDualUnit: $isDualUnit,
+                        );
+
+                    $retailValue =
+                        $this->inventoryBatchRetailValue(
+                            availableQuantity: $availableQuantity,
+                            sellingPrice: $sellingPrice,
+                            secondarySellingPrice: $secondarySellingPrice,
+                            conversionFactor: $conversionFactor,
+                            isDualUnit: $isDualUnit,
+                        );
+
+                    return [
                         'id' =>
-                        (int) $product
-                            ->category_id,
+                        (int) $batch->id,
+
+                        'product_id' =>
+                        (int) $batch
+                            ->product_id,
+
+                        'product_name' =>
+                        (string) $batch
+                            ->product_name,
+
+                        'product_unit' =>
+                        $productUnit,
+
+                        'category_id' =>
+                        $batch
+                            ->category_id
+                            !== null
+                            ? (int) $batch
+                                ->category_id
+                            : 0,
+
+                        'category_name' =>
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->category_name
+                                ?? null,
+                        )
+                            ?? 'Uncategorized',
+
+                        'available_quantity' =>
+                        round(
+                            $availableQuantity,
+                            3,
+                        ),
+
+                        'stock_unit' =>
+                        $stockUnit,
+
+                        'purchase_value' =>
+                        $purchaseValue,
+
+                        'retail_value' =>
+                        $retailValue,
+
+                        'expiry_date' =>
+                        $batch
+                            ->expiry_date
+                            !== null
+                            ? (string) $batch
+                                ->expiry_date
+                            : null,
+                    ];
+                },
+            )
+            ->values();
+
+        $inventoryQuantityByUnit =
+            $this->inventoryQuantityByUnit(
+                $inventoryBatches,
+            );
+
+        $inventoryPurchaseValue =
+            round(
+                (float) $inventoryBatches
+                    ->sum(
+                        'purchase_value',
+                    ),
+                2,
+            );
+
+        $inventoryRetailValue =
+            round(
+                (float) $inventoryBatches
+                    ->sum(
+                        'retail_value',
+                    ),
+                2,
+            );
+
+        /*
+         * Keep the old numeric quantity field for API backward
+         * compatibility. The authoritative display value is
+         * quantity_display / quantity_by_unit because quantities
+         * with different units must never be presented as one unit.
+         */
+        $inventoryQuantity =
+            count(
+                $inventoryQuantityByUnit,
+            ) === 1
+            ? (float) (
+                $inventoryQuantityByUnit[0]['quantity']
+                ?? 0
+            )
+            : round(
+                (float) $inventoryBatches
+                    ->sum(
+                        'available_quantity',
+                    ),
+                3,
+            );
+
+        $inventoryRows =
+            $inventoryBatches
+            ->groupBy(
+                'product_id',
+            )
+            ->map(
+                function (
+                    Collection $batches,
+                ): array {
+                    $first =
+                        $batches->first();
+
+                    $quantityByUnit =
+                        $this->inventoryQuantityByUnit(
+                            $batches,
+                        );
+
+                    $singleStockUnit =
+                        count(
+                            $quantityByUnit,
+                        ) === 1
+                        ? (string) (
+                            $quantityByUnit[0]['unit']
+                            ?? 'Unit'
+                        )
+                        : 'Mixed';
+
+                    $quantity =
+                        count(
+                            $quantityByUnit,
+                        ) === 1
+                        ? (float) (
+                            $quantityByUnit[0]['quantity']
+                            ?? 0
+                        )
+                        : round(
+                            (float) $batches
+                                ->sum(
+                                    'available_quantity',
+                                ),
+                            3,
+                        );
+
+                    $nearestExpiry =
+                        $batches
+                        ->pluck(
+                            'expiry_date',
+                        )
+                        ->filter(
+                            fn(
+                                mixed $value,
+                            ): bool =>
+                            is_string(
+                                $value,
+                            )
+                                && trim(
+                                    $value,
+                                ) !== '',
+                        )
+                        ->sort()
+                        ->first();
+
+                    return [
+                        'id' =>
+                        (int) (
+                            $first['product_id']
+                            ?? 0
+                        ),
 
                         'name' =>
-                        (string) $product
-                            ->category_name,
-                    ],
+                        (string) (
+                            $first['product_name']
+                            ?? ''
+                        ),
 
-                    'quantity' =>
-                    (float) $product
-                        ->quantity,
+                        /*
+                         * `unit` is kept for backward compatibility,
+                         * but now correctly represents the physical
+                         * stock unit instead of products.unit.
+                         */
+                        'unit' =>
+                        $singleStockUnit,
 
-                    'purchase_value' =>
-                    (float) $product
-                        ->purchase_value,
+                        'stock_unit' =>
+                        $singleStockUnit,
 
-                    'retail_value' =>
-                    (float) $product
-                        ->retail_value,
+                        'quantity' =>
+                        $quantity,
 
-                    'batch_count' =>
-                    (int) $product
-                        ->batch_count,
+                        'quantity_by_unit' =>
+                        $quantityByUnit,
 
-                    'nearest_expiry' =>
-                    $product->nearest_expiry
-                        ? (string) $product
-                            ->nearest_expiry
-                        : null,
-                ],
+                        'quantity_display' =>
+                        $this->inventoryQuantityDisplay(
+                            $quantityByUnit,
+                        ),
+
+                        'category' => [
+                            'id' =>
+                            (int) (
+                                $first['category_id']
+                                ?? 0
+                            ),
+
+                            'name' =>
+                            (string) (
+                                $first['category_name']
+                                ?? 'Uncategorized'
+                            ),
+                        ],
+
+                        'purchase_value' =>
+                        round(
+                            (float) $batches
+                                ->sum(
+                                    'purchase_value',
+                                ),
+                            2,
+                        ),
+
+                        'retail_value' =>
+                        round(
+                            (float) $batches
+                                ->sum(
+                                    'retail_value',
+                                ),
+                            2,
+                        ),
+
+                        'batch_count' =>
+                        $batches->count(),
+
+                        'nearest_expiry' =>
+                        $nearestExpiry
+                            ? (string) $nearestExpiry
+                            : null,
+                    ];
+                },
             )
+            ->sortByDesc(
+                'purchase_value',
+            )
+            ->take(100)
             ->values();
 
         $businessToday =
@@ -920,25 +1180,21 @@ class ReportController extends Controller
                 'inventory' => [
                     'summary' => [
                         'quantity' =>
-                        (float) (
-                            $inventorySummary
-                            ?->quantity
-                            ?? 0
+                        $inventoryQuantity,
+
+                        'quantity_by_unit' =>
+                        $inventoryQuantityByUnit,
+
+                        'quantity_display' =>
+                        $this->inventoryQuantityDisplay(
+                            $inventoryQuantityByUnit,
                         ),
 
                         'purchase_value' =>
-                        (float) (
-                            $inventorySummary
-                            ?->purchase_value
-                            ?? 0
-                        ),
+                        $inventoryPurchaseValue,
 
                         'retail_value' =>
-                        (float) (
-                            $inventorySummary
-                            ?->retail_value
-                            ?? 0
-                        ),
+                        $inventoryRetailValue,
 
                         'expiring_batch_count' =>
                         $expiringBatchCount,
@@ -955,6 +1211,351 @@ class ReportController extends Controller
                 now()->toISOString(),
             ],
         ]);
+    }
+
+    /*
+     * =========================================================
+     * INVENTORY REPORT HELPERS
+     * =========================================================
+     */
+
+    private function cleanInventoryUnit(
+        mixed $value,
+    ): ?string {
+        if (
+            ! is_string(
+                $value,
+            )
+            && ! is_numeric(
+                $value,
+            )
+        ) {
+            return null;
+        }
+
+        $unit =
+            trim(
+                (string) $value,
+            );
+
+        return $unit !== ''
+            ? $unit
+            : null;
+    }
+
+    private function inventoryBoolean(
+        mixed $value,
+    ): bool {
+        if (
+            is_bool(
+                $value,
+            )
+        ) {
+            return $value;
+        }
+
+        if (
+            is_numeric(
+                $value,
+            )
+        ) {
+            return (int) $value === 1;
+        }
+
+        if (
+            is_string(
+                $value,
+            )
+        ) {
+            return in_array(
+                strtolower(
+                    trim(
+                        $value,
+                    ),
+                ),
+                [
+                    '1',
+                    'true',
+                    'yes',
+                    'on',
+                ],
+                true,
+            );
+        }
+
+        return false;
+    }
+
+    private function resolveInventoryStockUnit(
+        string $productUnit,
+        bool $isDualUnit,
+        ?string $stockUnit,
+        ?string $secondaryUnit,
+        float $conversionFactor,
+    ): string {
+        /*
+         * Dual-unit example:
+         *
+         *     product.unit    = Bag
+         *     secondary_unit = Kg
+         *     stock unit     = Kg
+         */
+        if (
+            $isDualUnit
+            && $conversionFactor > 1
+            && $secondaryUnit !== null
+        ) {
+            return $secondaryUnit;
+        }
+
+        if (
+            $stockUnit !== null
+        ) {
+            return $stockUnit;
+        }
+
+        if (
+            $secondaryUnit !== null
+            && $conversionFactor > 1
+        ) {
+            return $secondaryUnit;
+        }
+
+        return $productUnit !== ''
+            ? $productUnit
+            : 'Unit';
+    }
+
+    private function inventoryBatchPurchaseValue(
+        float $availableQuantity,
+        float $purchaseCost,
+        ?float $baseUnitCost,
+        float $conversionFactor,
+        bool $isDualUnit,
+    ): float {
+        if (
+            $availableQuantity <= 0
+        ) {
+            return 0.0;
+        }
+
+        if (
+            $isDualUnit
+            && $conversionFactor > 0
+        ) {
+            $costPerPhysicalUnit =
+                $baseUnitCost !== null
+                && $baseUnitCost > 0
+                ? $baseUnitCost
+                : (
+                    $purchaseCost
+                    / $conversionFactor
+                );
+
+            return
+                $availableQuantity
+                * $costPerPhysicalUnit;
+        }
+
+        return
+            $availableQuantity
+            * $purchaseCost;
+    }
+
+    private function inventoryBatchRetailValue(
+        float $availableQuantity,
+        float $sellingPrice,
+        ?float $secondarySellingPrice,
+        float $conversionFactor,
+        bool $isDualUnit,
+    ): float {
+        if (
+            $availableQuantity <= 0
+        ) {
+            return 0.0;
+        }
+
+        if (
+            ! $isDualUnit
+            || $conversionFactor <= 0
+        ) {
+            return
+                $availableQuantity
+                * $sellingPrice;
+        }
+
+        /*
+         * Example:
+         *
+         * 75 Kg remaining
+         * 1 Bag = 50 Kg
+         *
+         * full main units = 1 Bag
+         * loose remainder = 25 Kg
+         */
+        $fullPrimaryUnits =
+            floor(
+                (
+                    $availableQuantity
+                    + 0.0000001
+                )
+                    / $conversionFactor,
+            );
+
+        $looseQuantity =
+            max(
+                0,
+                $availableQuantity
+                    - (
+                        $fullPrimaryUnits
+                        * $conversionFactor
+                    ),
+            );
+
+        $looseSellingPrice =
+            $secondarySellingPrice
+            !== null
+            ? $secondarySellingPrice
+            : (
+                $conversionFactor > 0
+                ? (
+                    $sellingPrice
+                    / $conversionFactor
+                )
+                : 0
+            );
+
+        return (
+                $fullPrimaryUnits
+                * $sellingPrice
+            )
+            + (
+                $looseQuantity
+                * $looseSellingPrice
+            );
+    }
+
+    /**
+     * @param Collection<int, array<string, mixed>> $batches
+     *
+     * @return array<int, array{unit: string, quantity: float}>
+     */
+    private function inventoryQuantityByUnit(
+        Collection $batches,
+    ): array {
+        $units = [];
+
+        foreach (
+            $batches
+            as $batch
+        ) {
+            $unit =
+                $this->cleanInventoryUnit(
+                    $batch['stock_unit']
+                        ?? null,
+                )
+                ?? 'Unit';
+
+            $key =
+                mb_strtolower(
+                    $unit,
+                );
+
+            if (
+                ! isset(
+                    $units[$key],
+                )
+            ) {
+                $units[$key] = [
+                    'unit' =>
+                    $unit,
+
+                    'quantity' =>
+                    0.0,
+                ];
+            }
+
+            $units[$key]['quantity'] =
+                round(
+                    (float) $units[$key]['quantity']
+                        + (float) (
+                            $batch['available_quantity']
+                            ?? 0
+                        ),
+                    3,
+                );
+        }
+
+        return array_values(
+            $units,
+        );
+    }
+
+    /**
+     * @param array<int, array{unit: string, quantity: float}> $quantityByUnit
+     */
+    private function inventoryQuantityDisplay(
+        array $quantityByUnit,
+    ): string {
+        if (
+            $quantityByUnit === []
+        ) {
+            return '0 Unit';
+        }
+
+        return collect(
+            $quantityByUnit,
+        )
+            ->map(
+                fn(
+                    array $item,
+                ): string =>
+                $this->formatInventoryQuantity(
+                    (float) (
+                        $item['quantity']
+                        ?? 0
+                    ),
+                )
+                    . ' '
+                    . (
+                        $this->cleanInventoryUnit(
+                            $item['unit']
+                                ?? null,
+                        )
+                        ?? 'Unit'
+                    ),
+            )
+            ->implode(
+                ' • ',
+            );
+    }
+
+    private function formatInventoryQuantity(
+        float $quantity,
+    ): string {
+        $formatted =
+            number_format(
+                round(
+                    $quantity,
+                    3,
+                ),
+                3,
+                '.',
+                '',
+            );
+
+        $formatted =
+            rtrim(
+                rtrim(
+                    $formatted,
+                    '0',
+                ),
+                '.',
+            );
+
+        return $formatted !== ''
+            ? $formatted
+            : '0';
     }
 
     /**

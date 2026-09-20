@@ -2,6 +2,7 @@ import {
     useCallback,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from 'react';
 
@@ -35,6 +36,15 @@ const currencyFormatter =
             style: 'currency',
             currency: 'LKR',
             minimumFractionDigits: 2,
+        },
+    );
+
+const quantityFormatter =
+    new Intl.NumberFormat(
+        'en-GB',
+        {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 3,
         },
     );
 
@@ -174,6 +184,152 @@ function escapeCsv(
 
 type CsvCell = string | number | null;
 
+interface InventoryQuantityByUnit {
+    unit: string;
+    quantity: number;
+}
+
+type InventoryProductRow =
+    ReportOverviewData['inventory']['products'][number]
+    & {
+        stock_unit?: string;
+        quantity_by_unit?: InventoryQuantityByUnit[];
+        quantity_display?: string;
+    };
+
+type InventorySummaryRow =
+    ReportOverviewData['inventory']['summary']
+    & {
+        quantity_by_unit?: InventoryQuantityByUnit[];
+        quantity_display?: string;
+    };
+
+function formatQuantity(
+    value: number,
+): string {
+    const number =
+        Number(
+            value,
+        );
+
+    return quantityFormatter.format(
+        Number.isFinite(
+            number,
+        )
+            ? number
+            : 0,
+    );
+}
+
+function formatQuantityByUnit(
+    items:
+        InventoryQuantityByUnit[]
+        | undefined,
+): string {
+    if (
+        !Array.isArray(
+            items,
+        )
+        || items.length === 0
+    ) {
+        return '';
+    }
+
+    return items
+        .filter(
+            (item) =>
+                item
+                && typeof item.unit === 'string'
+                && item.unit.trim() !== '',
+        )
+        .map(
+            (item) =>
+                `${formatQuantity(
+                    Number(
+                        item.quantity,
+                    ),
+                )} ${item.unit.trim()}`,
+        )
+        .join(' • ');
+}
+
+function inventorySummaryQuantityText(
+    summary:
+        ReportOverviewData['inventory']['summary'],
+): string {
+    const extended =
+        summary as InventorySummaryRow;
+
+    if (
+        typeof extended.quantity_display === 'string'
+        && extended.quantity_display.trim() !== ''
+    ) {
+        return extended.quantity_display.trim();
+    }
+
+    const grouped =
+        formatQuantityByUnit(
+            extended.quantity_by_unit,
+        );
+
+    if (
+        grouped !== ''
+    ) {
+        return grouped;
+    }
+
+    return formatQuantity(
+        Number(
+            summary.quantity
+            ?? 0,
+        ),
+    );
+}
+
+function inventoryProductQuantityText(
+    product:
+        ReportOverviewData['inventory']['products'][number],
+): string {
+    const extended =
+        product as InventoryProductRow;
+
+    if (
+        typeof extended.quantity_display === 'string'
+        && extended.quantity_display.trim() !== ''
+    ) {
+        return extended.quantity_display.trim();
+    }
+
+    const grouped =
+        formatQuantityByUnit(
+            extended.quantity_by_unit,
+        );
+
+    if (
+        grouped !== ''
+    ) {
+        return grouped;
+    }
+
+    const stockUnit =
+        typeof extended.stock_unit === 'string'
+            && extended.stock_unit.trim() !== ''
+            ? extended.stock_unit.trim()
+            : (
+                typeof product.unit === 'string'
+                    && product.unit.trim() !== ''
+                    ? product.unit.trim()
+                    : 'Unit'
+            );
+
+    return `${formatQuantity(
+        Number(
+            product.quantity
+            ?? 0,
+        ),
+    )} ${stockUnit}`;
+}
+
 function downloadCsv(
     report: ReportOverviewData,
 ): void {
@@ -261,15 +417,24 @@ function downloadCsv(
 
     rows.push([]);
     rows.push(['Inventory']);
-    rows.push(['Product', 'Category', 'Quantity', 'Unit', 'Batch Count', 'Purchase Value', 'Retail Value', 'Nearest Expiry']);
+    rows.push([
+        'Product',
+        'Category',
+        'Stock Quantity',
+        'Batch Count',
+        'Purchase Value',
+        'Retail Value',
+        'Nearest Expiry',
+    ]);
 
     report.inventory.products.forEach(
         (product) => {
             rows.push([
                 product.name,
                 product.category.name,
-                product.quantity,
-                product.unit,
+                inventoryProductQuantityText(
+                    product,
+                ),
                 product.batch_count,
                 product.purchase_value,
                 product.retail_value,
@@ -830,6 +995,21 @@ const reportsPageStyles = `
     #sapo-reports-page .rp-negative-value { color: var(--rp-red) !important; }
     #sapo-reports-page .rp-warning-value { color: var(--rp-amber) !important; }
 
+    #sapo-reports-page .rp-inventory-quantity {
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        line-height: 1.35 !important;
+    }
+
+    #sapo-reports-page .rp-current-stock-note {
+        display: block !important;
+        margin-top: 3px !important;
+        color: var(--rp-subtle) !important;
+        font-size: 12px !important;
+        line-height: 1.4 !important;
+        background: transparent !important;
+    }
+
     /* ---------- Scrollable tables ---------- */
     #sapo-reports-page .rp-table-container {
         max-height: 520px !important;
@@ -981,38 +1161,127 @@ export default function ReportsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
 
+    const requestIdRef =
+        useRef(
+            0,
+        );
+
     const loadReport = useCallback(
         async (): Promise<void> => {
+            const requestId =
+                requestIdRef.current
+                + 1;
+
+            requestIdRef.current =
+                requestId;
+
             if (!token) {
+                setReport(
+                    null,
+                );
+
+                setErrorMessage(
+                    'Authentication is required to generate reports.',
+                );
+
+                setIsLoading(
+                    false,
+                );
+
                 return;
             }
 
-            setIsLoading(true);
-            setErrorMessage('');
-
-            try {
-                const response = await getReportOverview(
-                    token,
-                    {
-                        dateFrom,
-                        dateTo,
-                        paymentMethod,
-                        paymentStatus,
-                    },
+            if (
+                !dateFrom
+                || !dateTo
+            ) {
+                setErrorMessage(
+                    'Select both From and To dates.',
                 );
 
-                setReport(response.data);
+                setIsLoading(
+                    false,
+                );
+
+                return;
+            }
+
+            if (
+                dateFrom
+                > dateTo
+            ) {
+                setErrorMessage(
+                    'The From date cannot be after the To date.',
+                );
+
+                setIsLoading(
+                    false,
+                );
+
+                return;
+            }
+
+            setIsLoading(
+                true,
+            );
+
+            setErrorMessage(
+                '',
+            );
+
+            try {
+                const response =
+                    await getReportOverview(
+                        token,
+                        {
+                            dateFrom,
+                            dateTo,
+                            paymentMethod,
+                            paymentStatus,
+                        },
+                    );
+
+                if (
+                    requestIdRef.current
+                    !== requestId
+                ) {
+                    return;
+                }
+
+                setReport(
+                    response.data,
+                );
             } catch (error) {
+                if (
+                    requestIdRef.current
+                    !== requestId
+                ) {
+                    return;
+                }
+
                 setErrorMessage(
                     error instanceof ApiError
                         ? error.message
                         : 'Unable to generate the report.',
                 );
             } finally {
-                setIsLoading(false);
+                if (
+                    requestIdRef.current
+                    === requestId
+                ) {
+                    setIsLoading(
+                        false,
+                    );
+                }
             }
         },
-        [token, dateFrom, dateTo, paymentMethod, paymentStatus],
+        [
+            token,
+            dateFrom,
+            dateTo,
+            paymentMethod,
+            paymentStatus,
+        ],
     );
 
     useEffect(() => {
@@ -1481,30 +1750,61 @@ export default function ReportsPage() {
                             <section className="rp-summary-grid">
                                 <article>
                                     <span>Stock Quantity</span>
-                                    <strong>{report.inventory.summary.quantity}</strong>
+
+                                    <strong className="rp-inventory-quantity">
+                                        {inventorySummaryQuantityText(
+                                            report
+                                                .inventory
+                                                .summary,
+                                        )}
+                                    </strong>
                                 </article>
 
                                 <article>
                                     <span>Purchase Value</span>
-                                    <strong>{currencyFormatter.format(report.inventory.summary.purchase_value)}</strong>
+
+                                    <strong>
+                                        {currencyFormatter.format(
+                                            report
+                                                .inventory
+                                                .summary
+                                                .purchase_value,
+                                        )}
+                                    </strong>
                                 </article>
 
                                 <article>
                                     <span>Retail Value</span>
-                                    <strong>{currencyFormatter.format(report.inventory.summary.retail_value)}</strong>
+
+                                    <strong>
+                                        {currencyFormatter.format(
+                                            report
+                                                .inventory
+                                                .summary
+                                                .retail_value,
+                                        )}
+                                    </strong>                                  
                                 </article>
 
                                 <article>
                                     <span>Expiring Batches</span>
+
                                     <strong className="rp-warning-value">
-                                        {report.inventory.summary.expiring_batch_count}
+                                        {report
+                                            .inventory
+                                            .summary
+                                            .expiring_batch_count}
                                     </strong>
                                 </article>
 
                                 <article>
                                     <span>Expired Batches</span>
+
                                     <strong className="rp-negative-value">
-                                        {report.inventory.summary.expired_batch_count}
+                                        {report
+                                            .inventory
+                                            .summary
+                                            .expired_batch_count}
                                     </strong>
                                 </article>
                             </section>
@@ -1512,8 +1812,17 @@ export default function ReportsPage() {
                             <section className="rp-card">
                                 <header className="rp-card-header">
                                     <div>
-                                        <span className="rp-kicker">Current stock</span>
-                                        <h3>Inventory Value Report</h3>
+                                        <span className="rp-kicker">
+                                            Current stock
+                                        </span>
+
+                                        <h3>
+                                            Inventory Value Report
+                                        </h3>
+
+                                        <small className="rp-current-stock-note">
+                                            Inventory is a live current-stock snapshot and is not limited by the selected sales-report date range.
+                                        </small>
                                     </div>
                                 </header>
 
@@ -1523,7 +1832,7 @@ export default function ReportsPage() {
                                             <tr>
                                                 <th>Product</th>
                                                 <th>Category</th>
-                                                <th>Quantity</th>
+                                                <th>Physical Stock</th>
                                                 <th>Batches</th>
                                                 <th>Purchase Value</th>
                                                 <th>Retail Value</th>
@@ -1532,24 +1841,78 @@ export default function ReportsPage() {
                                         </thead>
 
                                         <tbody>
-                                            {report.inventory.products.length === 0 ? (
+                                            {report
+                                                .inventory
+                                                .products
+                                                .length
+                                                === 0 ? (
                                                 <tr>
-                                                    <td colSpan={7} className="rp-table-state">
+                                                    <td
+                                                        colSpan={7}
+                                                        className="rp-table-state"
+                                                    >
                                                         No available stock.
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                report.inventory.products.map((product) => (
-                                                    <tr key={product.id}>
-                                                        <td><strong>{product.name}</strong></td>
-                                                        <td>{product.category.name}</td>
-                                                        <td>{product.quantity} {product.unit}</td>
-                                                        <td>{product.batch_count}</td>
-                                                        <td>{currencyFormatter.format(product.purchase_value)}</td>
-                                                        <td>{currencyFormatter.format(product.retail_value)}</td>
-                                                        <td>{formatDate(product.nearest_expiry)}</td>
-                                                    </tr>
-                                                ))
+                                                report
+                                                    .inventory
+                                                    .products
+                                                    .map(
+                                                        (
+                                                            product,
+                                                        ) => (
+                                                            <tr
+                                                                key={
+                                                                    product.id
+                                                                }
+                                                            >
+                                                                <td>
+                                                                    <strong>
+                                                                        {product.name}
+                                                                    </strong>
+                                                                </td>
+
+                                                                <td>
+                                                                    {product
+                                                                        .category
+                                                                        .name}
+                                                                </td>
+
+                                                                <td className="rp-inventory-quantity">
+                                                                    {inventoryProductQuantityText(
+                                                                        product,
+                                                                    )}
+                                                                </td>
+
+                                                                <td>
+                                                                    {product
+                                                                        .batch_count}
+                                                                </td>
+
+                                                                <td>
+                                                                    {currencyFormatter.format(
+                                                                        product
+                                                                            .purchase_value,
+                                                                    )}
+                                                                </td>
+
+                                                                <td>
+                                                                    {currencyFormatter.format(
+                                                                        product
+                                                                            .retail_value,
+                                                                    )}
+                                                                </td>
+
+                                                                <td>
+                                                                    {formatDate(
+                                                                        product
+                                                                            .nearest_expiry,
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        ),
+                                                    )
                                             )}
                                         </tbody>
                                     </table>

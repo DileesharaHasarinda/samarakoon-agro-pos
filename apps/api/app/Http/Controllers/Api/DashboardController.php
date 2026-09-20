@@ -176,6 +176,28 @@ class DashboardController extends Controller
             (float) Sale::query()
                 ->sum('due_amount');
 
+        /*
+         * Current stock valuation.
+         *
+         * Single-unit batches:
+         *   cost   = available quantity × purchase cost
+         *   retail = available quantity × selling price
+         *
+         * Dual-unit batches:
+         *   available_quantity is stored in the physical / secondary stock
+         *   unit (for example Kg), while purchase_cost and selling_price are
+         *   the primary-unit values (for example Bag).
+         *
+         * Therefore:
+         *   cost = available physical quantity × base-unit cost
+         *
+         * and retail value is:
+         *   full primary units × primary selling price
+         *   + loose remainder × secondary selling price.
+         *
+         * The secondary-unit + conversion-factor check also supports older
+         * batches where is_dual_unit may not have been populated correctly.
+         */
         $stockSummary =
             DB::table('stock_batches')
             ->where(
@@ -186,22 +208,138 @@ class DashboardController extends Controller
             ->selectRaw(
                 '
                         COALESCE(
-                            SUM(available_quantity),
+                            SUM(
+                                available_quantity
+                            ),
                             0
                         ) AS total_quantity,
 
                         COALESCE(
                             SUM(
-                                available_quantity
-                                * purchase_cost
+                                CASE
+                                    WHEN
+                                        (
+                                            is_dual_unit = 1
+                                            OR (
+                                                secondary_unit IS NOT NULL
+                                                AND CHAR_LENGTH(
+                                                    TRIM(
+                                                        secondary_unit
+                                                    )
+                                                ) > 0
+                                                AND COALESCE(
+                                                    conversion_factor,
+                                                    0
+                                                ) > 1
+                                            )
+                                        )
+                                        AND COALESCE(
+                                            conversion_factor,
+                                            0
+                                        ) > 0
+                                    THEN
+                                        available_quantity
+                                        *
+                                        CASE
+                                            WHEN
+                                                base_unit_cost IS NOT NULL
+                                                AND base_unit_cost > 0
+                                            THEN
+                                                base_unit_cost
+                                            ELSE
+                                                COALESCE(
+                                                    purchase_cost
+                                                    / NULLIF(
+                                                        conversion_factor,
+                                                        0
+                                                    ),
+                                                    0
+                                                )
+                                        END
+                                    ELSE
+                                        available_quantity
+                                        * COALESCE(
+                                            purchase_cost,
+                                            0
+                                        )
+                                END
                             ),
                             0
                         ) AS purchase_value,
 
                         COALESCE(
                             SUM(
-                                available_quantity
-                                * selling_price
+                                CASE
+                                    WHEN
+                                        (
+                                            is_dual_unit = 1
+                                            OR (
+                                                secondary_unit IS NOT NULL
+                                                AND CHAR_LENGTH(
+                                                    TRIM(
+                                                        secondary_unit
+                                                    )
+                                                ) > 0
+                                                AND COALESCE(
+                                                    conversion_factor,
+                                                    0
+                                                ) > 1
+                                            )
+                                        )
+                                        AND COALESCE(
+                                            conversion_factor,
+                                            0
+                                        ) > 0
+                                    THEN
+                                        (
+                                            FLOOR(
+                                                (
+                                                    available_quantity
+                                                    + 0.0000001
+                                                )
+                                                / conversion_factor
+                                            )
+                                            * COALESCE(
+                                                selling_price,
+                                                0
+                                            )
+                                        )
+                                        +
+                                        (
+                                            GREATEST(
+                                                0,
+                                                available_quantity
+                                                - (
+                                                    FLOOR(
+                                                        (
+                                                            available_quantity
+                                                            + 0.0000001
+                                                        )
+                                                        / conversion_factor
+                                                    )
+                                                    * conversion_factor
+                                                )
+                                            )
+                                            * COALESCE(
+                                                NULLIF(
+                                                    secondary_selling_price,
+                                                    0
+                                                ),
+                                                selling_price
+                                                / NULLIF(
+                                                    conversion_factor,
+                                                    0
+                                                ),
+                                                0
+                                            )
+                                        )
+                                    ELSE
+                                        available_quantity
+                                        * COALESCE(
+                                            selling_price,
+                                            0
+                                        )
+                                END
                             ),
                             0
                         ) AS retail_value
