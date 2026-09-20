@@ -92,6 +92,9 @@ import CustomersPage
 import DueManagementPage
     from './pages/shared/DueManagementPage';
 
+import DevicePrinterSettingsPage
+    from './pages/shared/DevicePrinterSettingsPage';
+
 import PosPage
     from './pages/shared/PosPage';
 
@@ -345,6 +348,13 @@ export default function App() {
                     />
 
                     <Route
+                        path="device-printer"
+                        element={
+                            <DevicePrinterSettingsPage />
+                        }
+                    />
+
+                    <Route
                         path="settings"
                         element={
                             <SettingsPage />
@@ -429,6 +439,13 @@ export default function App() {
                         path="dues"
                         element={
                             <DueManagementPage />
+                        }
+                    />
+
+                    <Route
+                        path="device-printer"
+                        element={
+                            <DevicePrinterSettingsPage />
                         }
                     />
                 </Route>

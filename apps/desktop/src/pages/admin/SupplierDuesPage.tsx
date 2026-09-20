@@ -3230,6 +3230,39 @@ export default function SupplierDuesPage() {
                                             purchase,
                                         );
 
+                                    /*
+                                     * IMPORTANT:
+                                     *
+                                     * An unconfigured purchase commonly has
+                                     * due_amount = 0 before its settlement
+                                     * type is selected. That does NOT mean it
+                                     * is fully paid.
+                                     *
+                                     * Payment state must be driven primarily
+                                     * by payment_status, not by due_amount
+                                     * alone.
+                                     */
+                                    const needsPaymentSetup =
+                                        purchase
+                                            .payment_status
+                                        === 'unconfigured';
+
+                                    const hasOutstandingDue =
+                                        !needsPaymentSetup
+                                        && Number(
+                                            purchase
+                                                .due_amount,
+                                        ) > 0;
+
+                                    const isFullyPaid =
+                                        purchase
+                                            .payment_status
+                                        === 'paid'
+                                        && Number(
+                                            purchase
+                                                .due_amount,
+                                        ) <= 0;
+
                                     return (
                                         <article
                                             key={purchase.id}
@@ -3399,56 +3432,53 @@ export default function SupplierDuesPage() {
                                             </div>
 
                                             <div className="sdp-actions">
-                                                {purchase.payment_status
-                                                    === 'unconfigured' && (
-                                                        <button
-                                                            type="button"
-                                                            className="sdp-btn sdp-primary sdp-action"
-                                                            onClick={() => {
-                                                                setModalError(
-                                                                    '',
-                                                                );
+                                                {needsPaymentSetup && (
+                                                    <button
+                                                        type="button"
+                                                        className="sdp-btn sdp-primary sdp-action"
+                                                        onClick={() => {
+                                                            setModalError(
+                                                                '',
+                                                            );
 
-                                                                setSettlementPurchase(
-                                                                    purchase,
-                                                                );
-                                                            }}
-                                                        >
-                                                            <Icon name="settings" />
+                                                            setSettlementPurchase(
+                                                                purchase,
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="settings" />
 
-                                                            Configure
-                                                        </button>
-                                                    )}
+                                                        Configure
+                                                    </button>
+                                                )}
 
-                                                {purchase.due_amount
-                                                    > 0 && (
-                                                        <button
-                                                            type="button"
-                                                            className="sdp-btn sdp-blue sdp-action"
-                                                            onClick={() => {
-                                                                setModalError(
-                                                                    '',
-                                                                );
+                                                {hasOutstandingDue && (
+                                                    <button
+                                                        type="button"
+                                                        className="sdp-btn sdp-blue sdp-action"
+                                                        onClick={() => {
+                                                            setModalError(
+                                                                '',
+                                                            );
 
-                                                                setPaymentPurchase(
-                                                                    purchase,
-                                                                );
-                                                            }}
-                                                        >
-                                                            <Icon name="money" />
+                                                            setPaymentPurchase(
+                                                                purchase,
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Icon name="money" />
 
-                                                            Record Payment
-                                                        </button>
-                                                    )}
+                                                        Record Payment
+                                                    </button>
+                                                )}
 
-                                                {purchase.due_amount
-                                                    <= 0 && (
-                                                        <span className="sdp-paid">
-                                                            <Icon name="check" />
+                                                {isFullyPaid && (
+                                                    <span className="sdp-paid">
+                                                        <Icon name="check" />
 
-                                                            Fully Paid
-                                                        </span>
-                                                    )}
+                                                        Fully Paid
+                                                    </span>
+                                                )}
                                             </div>
                                         </article>
                                     );
