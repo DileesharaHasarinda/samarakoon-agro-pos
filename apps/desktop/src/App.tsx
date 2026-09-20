@@ -95,6 +95,9 @@ import DueManagementPage
 import PosPage
     from './pages/shared/PosPage';
 
+import AllProductsSalePage
+    from './pages/shared/AllProductsSalePage';
+
 import SalesHistoryPage
     from './pages/shared/SalesHistoryPage';
 
@@ -103,9 +106,6 @@ import SalesReturnsPage
 
 import ShiftRegisterPage
     from './pages/shared/ShiftRegisterPage';
-
-import DevicePrinterSettingsPage
-    from './pages/shared/DevicePrinterSettingsPage';
 
 import ProductDetailsPage
     from './pages/admin/ProductDetailsPage';
@@ -207,6 +207,13 @@ export default function App() {
                     />
 
                     <Route
+                        path="all-products-sale"
+                        element={
+                            <AllProductsSalePage />
+                        }
+                    />
+
+                    <Route
                         path="sales"
                         element={
                             <SalesHistoryPage />
@@ -231,13 +238,6 @@ export default function App() {
                         path="dues"
                         element={
                             <DueManagementPage />
-                        }
-                    />
-
-                    <Route
-                        path="device-printer"
-                        element={
-                            <DevicePrinterSettingsPage />
                         }
                     />
 
@@ -398,6 +398,13 @@ export default function App() {
                     />
 
                     <Route
+                        path="all-products-sale"
+                        element={
+                            <AllProductsSalePage />
+                        }
+                    />
+
+                    <Route
                         path="sales"
                         element={
                             <SalesHistoryPage />
@@ -422,13 +429,6 @@ export default function App() {
                         path="dues"
                         element={
                             <DueManagementPage />
-                        }
-                    />
-
-                    <Route
-                        path="device-printer"
-                        element={
-                            <DevicePrinterSettingsPage />
                         }
                     />
                 </Route>

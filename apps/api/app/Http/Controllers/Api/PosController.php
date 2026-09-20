@@ -10,6 +10,7 @@ use App\Models\StockBatch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class PosController extends Controller
 {
@@ -62,6 +63,21 @@ class PosController extends Controller
                 'min:5',
                 'max:100',
             ],
+
+            /*
+             * Customer-requested full-catalogue mode.
+             *
+             * Normal New Sale does not send this flag and therefore
+             * continues to return only products with current stock.
+             *
+             * All Products Sale sends include_all=1 and receives every
+             * catalogue product, including products with zero stock or
+             * products that have never been purchased.
+             */
+            'include_all' => [
+                'nullable',
+                'boolean',
+            ],
         ]);
 
         $search = trim(
@@ -79,6 +95,12 @@ class PosController extends Controller
             $validated['per_page']
             ?? 24
         );
+
+        $includeAllProducts =
+            (bool) (
+                $validated['include_all']
+                ?? false
+            );
 
         $products = Product::query()
             ->with([
@@ -116,12 +138,51 @@ class PosController extends Controller
                  * fallback.
                  */
                 'stockBatches' =>
-                function ($query): void {
-                    $query
-                        ->where(
+                function (
+                    $query,
+                ) use (
+                    $includeAllProducts,
+                ): void {
+                    /*
+                     * Normal New Sale:
+                     * only current positive stock is loaded.
+                     *
+                     * Training / full catalogue:
+                     * historical batches are also loaded so the
+                     * trainee can still choose the correct variant
+                     * and Bag/Kg style units without changing stock.
+                     */
+                    if (
+                        ! $includeAllProducts
+                    ) {
+                        $query->where(
                             'available_quantity',
                             '>',
                             0,
+                        );
+                    }
+
+                    /*
+                     * Expired lots must never be exposed to either
+                     * the real POS or the training catalogue.
+                     *
+                     * expiry_date = today is still valid today.
+                     */
+                    $query
+                        ->where(
+                            function (
+                                Builder $dateQuery,
+                            ): void {
+                                $dateQuery
+                                    ->whereNull(
+                                        'expiry_date',
+                                    )
+                                    ->orWhereDate(
+                                        'expiry_date',
+                                        '>=',
+                                        today(),
+                                    );
+                            },
                         )
                         ->with([
                             'purchaseItem:id,product_id,product_variant_id,unit_cost',
@@ -137,15 +198,53 @@ class PosController extends Controller
                         );
                 },
             ])
-            ->whereHas(
+            /*
+             * Count every historical stock batch so the catalogue page
+             * can distinguish:
+             *
+             * - never purchased,
+             * - purchased before but currently out of stock,
+             * - currently available for sale.
+             */
+            ->withCount(
                 'stockBatches',
+            )
+            /*
+             * Preserve the existing New Sale behaviour unless
+             * include_all was explicitly requested.
+             */
+            ->when(
+                ! $includeAllProducts,
                 function (
                     Builder $query,
                 ): void {
-                    $query->where(
-                        'available_quantity',
-                        '>',
-                        0,
+                    $query->whereHas(
+                        'stockBatches',
+                        function (
+                            Builder $stockQuery,
+                        ): void {
+                            $stockQuery
+                                ->where(
+                                    'available_quantity',
+                                    '>',
+                                    0,
+                                )
+                                ->where(
+                                    function (
+                                        Builder $dateQuery,
+                                    ): void {
+                                        $dateQuery
+                                            ->whereNull(
+                                                'expiry_date',
+                                            )
+                                            ->orWhereDate(
+                                                'expiry_date',
+                                                '>=',
+                                                today(),
+                                            );
+                                    },
+                                );
+                        },
                     );
                 },
             )
@@ -273,40 +372,8 @@ class PosController extends Controller
                 ): array =>
                 $this->productData(
                     $product,
+                    $includeAllProducts,
                 ),
-            )
-            ->filter(
-                fn(
-                    array $product,
-                ): bool =>
-                (float) (
-                    $product['total_available_quantity']
-                    ?? 0
-                ) > 0
-                    && collect(
-                        $product['batches']
-                            ?? [],
-                    )->contains(
-                        fn(
-                            array $batch,
-                        ): bool =>
-                        (float) (
-                            $batch['available_quantity']
-                            ?? 0
-                        ) > 0
-                            && collect(
-                                $batch['sale_options']
-                                    ?? [],
-                            )->contains(
-                                fn(
-                                    array $option,
-                                ): bool =>
-                                (float) (
-                                    $option['available_quantity']
-                                    ?? 0
-                                ) > 0,
-                            ),
-                    ),
             )
             ->values();
 
@@ -371,6 +438,21 @@ class PosController extends Controller
                         '>',
                         0,
                     )
+                    ->where(
+                        function (
+                            Builder $dateQuery,
+                        ): void {
+                            $dateQuery
+                                ->whereNull(
+                                    'expiry_date',
+                                )
+                                ->orWhereDate(
+                                    'expiry_date',
+                                    '>=',
+                                    today(),
+                                );
+                        },
+                    )
                     ->with([
                         'purchaseItem:id,product_id,product_variant_id,unit_cost',
                     ])
@@ -386,51 +468,11 @@ class PosController extends Controller
             },
         ]);
 
-        $data =
-            $this->productData(
-                $product,
-            );
-
-        $hasSellableStock =
-            (float) (
-                $data['total_available_quantity']
-                ?? 0
-            ) > 0
-            && collect(
-                $data['batches']
-                    ?? [],
-            )->contains(
-                fn(
-                    array $batch,
-                ): bool =>
-                (float) (
-                    $batch['available_quantity']
-                    ?? 0
-                ) > 0
-                    && collect(
-                        $batch['sale_options']
-                            ?? [],
-                    )->contains(
-                        fn(
-                            array $option,
-                        ): bool =>
-                        (float) (
-                            $option['available_quantity']
-                            ?? 0
-                        ) > 0,
-                    ),
-            );
-
-        if (! $hasSellableStock) {
-            return response()->json([
-                'message' =>
-                'This product has no available stock for sale.',
-            ], 404);
-        }
-
         return response()->json([
             'data' =>
-            $data,
+            $this->productData(
+                $product,
+            ),
         ]);
     }
 
@@ -442,6 +484,7 @@ class PosController extends Controller
 
     private function productData(
         Product $product,
+        bool $includeTrainingOptions = false,
     ): array {
         /*
          * Active variants only.
@@ -486,8 +529,41 @@ class PosController extends Controller
          * 100g stock can never be mixed with
          * 200g or 500g stock.
          */
-        $batches = $product
+        /*
+         * In include_all mode the relationship may contain historical
+         * zero-stock batches. Keep them for training metadata, while the
+         * normal POS calculations below continue to use positive stock only.
+         */
+        $historicalBatches =
+            $product
             ->stockBatches
+            ->filter(
+                function (
+                    StockBatch $batch,
+                ): bool {
+                    /*
+                     * Defensive expiry guard.
+                     *
+                     * Even if this method is called with a relation that was
+                     * loaded somewhere else, an expired lot must not be
+                     * returned to the POS or training UI.
+                     */
+                    if (
+                        ! $batch->expiry_date
+                    ) {
+                        return true;
+                    }
+
+                    return ! $batch
+                        ->expiry_date
+                        ->isBefore(
+                            today(),
+                        );
+                },
+            )
+            ->values();
+
+        $batches = $historicalBatches
             ->filter(
                 function (
                     StockBatch $batch,
@@ -605,6 +681,45 @@ class PosController extends Controller
             );
 
         /*
+         * =====================================================
+         * CATALOGUE SALE STATUS
+         * =====================================================
+         *
+         * stock_batches_count is loaded by index() using
+         * withCount('stockBatches'). show() remains compatible via
+         * the relation fallback below.
+         */
+        $stockBatchCount =
+            (int) (
+                $product->getAttribute(
+                    'stock_batches_count',
+                )
+                ?? (
+                    $product
+                    ->relationLoaded(
+                        'stockBatches',
+                    )
+                    ? $product
+                    ->stockBatches
+                    ->count()
+                    : 0
+                )
+            );
+
+        $canSell =
+            $batches->isNotEmpty()
+            && $totalAvailableQuantity > 0;
+
+        $catalogStatus =
+            $canSell
+            ? 'available'
+            : (
+                $stockBatchCount > 0
+                ? 'out_of_stock'
+                : 'not_purchased'
+            );
+
+        /*
          * Build the variant selector data
          * required by BatchSelectionModal.
          */
@@ -620,24 +735,16 @@ class PosController extends Controller
                     $batches,
                 ),
             )
-            ->filter(
-                fn(
-                    array $variant,
-                ): bool =>
-                (bool) (
-                    $variant['has_stock']
-                    ?? false
-                )
-                    && (float) (
-                        $variant['total_available_quantity']
-                        ?? 0
-                    ) > 0
-                    && (int) (
-                        $variant['batches_count']
-                        ?? 0
-                    ) > 0,
-            )
             ->values();
+
+        $trainingOptions =
+            $includeTrainingOptions
+            ? $this->trainingOptions(
+                $product,
+                $historicalBatches,
+                $variants,
+            )
+            : [];
 
         return [
             'id' =>
@@ -668,11 +775,22 @@ class PosController extends Controller
             $hasDualUnitBatch,
 
             /*
+             * Metadata used by the All Products Sale page.
+             */
+            'has_purchase_history' =>
+            $stockBatchCount > 0,
+
+            'can_sell' =>
+            $canSell,
+
+            'catalog_status' =>
+            $catalogStatus,
+
+            /*
              * NEW
              */
             'has_variants' =>
-            $variantData
-                ->isNotEmpty(),
+            $hasVariants,
 
             /*
              * NEW
@@ -687,6 +805,13 @@ class PosController extends Controller
              */
             'variants' =>
             $variantData,
+
+            /*
+             * Training-only choices. No price is included here.
+             * These options are never submitted to the real SaleController.
+             */
+            'training_options' =>
+            $trainingOptions,
 
             'category' => [
                 'id' =>
@@ -736,6 +861,383 @@ class PosController extends Controller
                 )
                 ->values(),
         ];
+    }
+
+    /*
+     * =====================================================
+     * TRAINING BILL OPTIONS
+     * =====================================================
+     *
+     * The All Products training page needs product/variant/unit choices
+     * even when current stock is zero. These options contain no selling
+     * prices and are not used by the real sale endpoint.
+     */
+    private function trainingOptions(
+        Product $product,
+        Collection $historicalBatches,
+        Collection $variants,
+    ): array {
+        $options = collect();
+
+        $appendOption =
+            function (
+                string $kind,
+                string $unit,
+                string $primaryUnit,
+                string $stockUnit,
+                ?ProductVariant $variant,
+                bool $isDualUnit,
+                float $conversionFactor,
+            ) use (
+                $options,
+            ): void {
+                $cleanUnit =
+                    trim(
+                        $unit,
+                    );
+
+                if (
+                    $cleanUnit === ''
+                ) {
+                    return;
+                }
+
+                $variantId =
+                    $variant
+                    ? (int) $variant->id
+                    : null;
+
+                $variantName =
+                    $variant
+                    ? $variant->displayName()
+                    : null;
+
+                $labelPrefix =
+                    $variantName
+                    ? "{$variantName} — "
+                    : '';
+
+                $unitLabel =
+                    $isDualUnit
+                    ? (
+                        $kind === 'secondary'
+                        ? "Loose {$cleanUnit}"
+                        : "Full {$cleanUnit}"
+                    )
+                    : $cleanUnit;
+
+                $options->push([
+                    'key' =>
+                    implode(
+                        ':',
+                        [
+                            $variantId
+                                ?? 'product',
+
+                            $kind,
+
+                            strtolower(
+                                $cleanUnit,
+                            ),
+                        ],
+                    ),
+
+                    'label' =>
+                    "{$labelPrefix}{$unitLabel}",
+
+                    'unit' =>
+                    $cleanUnit,
+
+                    'primary_unit' =>
+                    trim(
+                        $primaryUnit,
+                    ) !== ''
+                        ? trim(
+                            $primaryUnit,
+                        )
+                        : $cleanUnit,
+
+                    'stock_unit' =>
+                    trim(
+                        $stockUnit,
+                    ) !== ''
+                        ? trim(
+                            $stockUnit,
+                        )
+                        : $cleanUnit,
+
+                    'variant_id' =>
+                    $variantId,
+
+                    'variant_name' =>
+                    $variantName,
+
+                    'is_dual_unit' =>
+                    $isDualUnit,
+
+                    'conversion_factor' =>
+                    $conversionFactor > 0
+                        ? round(
+                            $conversionFactor,
+                            3,
+                        )
+                        : 1.0,
+                ]);
+            };
+
+        foreach (
+            $historicalBatches
+            as $batch
+        ) {
+            if (
+                ! $batch
+                    instanceof StockBatch
+            ) {
+                continue;
+            }
+
+            $variant =
+                $this
+                ->resolveBatchVariant(
+                    $product,
+                    $batch,
+                );
+
+            /*
+             * If this is a variant product, ignore historical batches
+             * belonging to removed/inactive variants.
+             */
+            if (
+                $variants->isNotEmpty()
+                && ! $variant
+            ) {
+                continue;
+            }
+
+            $variantPackageUnit =
+                $variant
+                ? trim(
+                    (string) $variant
+                        ->package_unit,
+                )
+                : '';
+
+            $primaryUnit =
+                $variantPackageUnit !== ''
+                ? $variantPackageUnit
+                : (
+                    trim(
+                        (string) $product
+                            ->unit,
+                    ) !== ''
+                    ? (string) $product
+                        ->unit
+                    : 'Unit'
+                );
+
+            $stockUnit =
+                $this
+                ->batchStockUnit(
+                    $batch,
+                    $product,
+                    $variant,
+                );
+
+            $secondaryUnit =
+                trim(
+                    (string) (
+                        $batch
+                        ->secondary_unit
+                        ?? ''
+                    ),
+                );
+
+            $rawConversionFactor =
+                (float) (
+                    $batch
+                    ->conversion_factor
+                    ?? 1
+                );
+
+            /*
+             * Legacy compatibility:
+             * some old batches may not have is_dual_unit populated.
+             */
+            $isDualUnit =
+                (bool) $batch
+                    ->is_dual_unit
+                || (
+                    $secondaryUnit !== ''
+                    && $rawConversionFactor > 1
+                );
+
+            $conversionFactor =
+                $isDualUnit
+                ? max(
+                    0.001,
+                    round(
+                        $rawConversionFactor,
+                        3,
+                    ),
+                )
+                : 1.0;
+
+            $appendOption(
+                kind: 'primary',
+
+                unit: $primaryUnit,
+
+                primaryUnit: $primaryUnit,
+
+                stockUnit: $stockUnit,
+
+                variant: $variant,
+
+                isDualUnit: $isDualUnit,
+
+                conversionFactor: $conversionFactor,
+            );
+
+            if (
+                $isDualUnit
+            ) {
+                $looseUnit =
+                    $secondaryUnit !== ''
+                    ? $secondaryUnit
+                    : $stockUnit;
+
+                $appendOption(
+                    kind: 'secondary',
+
+                    unit: $looseUnit,
+
+                    primaryUnit: $primaryUnit,
+
+                    stockUnit: $stockUnit,
+
+                    variant: $variant,
+
+                    isDualUnit: true,
+
+                    conversionFactor: 1.0,
+                );
+            }
+        }
+
+        /*
+         * A variant may exist before it has ever been purchased.
+         * Still expose that variant to the training bill.
+         */
+        foreach (
+            $variants
+            as $variant
+        ) {
+            if (
+                ! $variant
+                    instanceof ProductVariant
+            ) {
+                continue;
+            }
+
+            $alreadyIncluded =
+                $options->contains(
+                    fn(
+                        array $option,
+                    ): bool => (
+                        $option['variant_id']
+                        ?? null
+                    )
+                        === (int) $variant->id,
+                );
+
+            if (
+                $alreadyIncluded
+            ) {
+                continue;
+            }
+
+            $variantUnit =
+                trim(
+                    (string) $variant
+                        ->package_unit,
+                );
+
+            if (
+                $variantUnit === ''
+            ) {
+                $variantUnit =
+                    trim(
+                        (string) $product
+                            ->unit,
+                    );
+            }
+
+            if (
+                $variantUnit === ''
+            ) {
+                $variantUnit =
+                    'Unit';
+            }
+
+            $appendOption(
+                kind: 'primary',
+
+                unit: $variantUnit,
+
+                primaryUnit: $variantUnit,
+
+                stockUnit: $variantUnit,
+
+                variant: $variant,
+
+                isDualUnit: false,
+
+                conversionFactor: 1.0,
+            );
+        }
+
+        /*
+         * Product has never been purchased and has no variants.
+         */
+        if (
+            $options->isEmpty()
+        ) {
+            $unit =
+                trim(
+                    (string) $product
+                        ->unit,
+                );
+
+            if (
+                $unit === ''
+            ) {
+                $unit =
+                    'Unit';
+            }
+
+            $appendOption(
+                kind: 'primary',
+
+                unit: $unit,
+
+                primaryUnit: $unit,
+
+                stockUnit: $unit,
+
+                variant: null,
+
+                isDualUnit: false,
+
+                conversionFactor: 1.0,
+            );
+        }
+
+        return $options
+            ->unique(
+                'key',
+            )
+            ->values()
+            ->all();
     }
 
     /*
@@ -1085,59 +1587,54 @@ class PosController extends Controller
 
         $saleOptions = [];
 
-        if (
-            ! $isDualUnit
-            || $availablePrimaryQuantity > 0
-        ) {
-            $saleOptions[] = [
-                'key' =>
-                'primary',
+        $saleOptions[] = [
+            'key' =>
+            'primary',
 
-                'label' =>
-                $isDualUnit
-                    ? "Full {$primaryUnit}"
-                    : $primaryUnit,
+            'label' =>
+            $isDualUnit
+                ? "Full {$primaryUnit}"
+                : $primaryUnit,
 
-                'unit' =>
-                $primaryUnit,
+            'unit' =>
+            $primaryUnit,
 
-                /*
-                 * Correct selected variant batch price.
-                 */
-                'selling_price' =>
-                $primarySellingPrice,
+            /*
+             * Correct selected variant batch price.
+             */
+            'selling_price' =>
+            $primarySellingPrice,
 
-                'purchase_cost' =>
-                $purchaseCost,
+            'purchase_cost' =>
+            $purchaseCost,
 
-                'conversion_factor' =>
-                $isDualUnit
-                    ? $conversionFactor
-                    : 1,
+            'conversion_factor' =>
+            $isDualUnit
+                ? $conversionFactor
+                : 1,
 
-                'stock_quantity_per_unit' =>
-                $isDualUnit
-                    ? $conversionFactor
-                    : 1,
+            'stock_quantity_per_unit' =>
+            $isDualUnit
+                ? $conversionFactor
+                : 1,
 
-                'available_quantity' =>
-                $availablePrimaryQuantity,
+            'available_quantity' =>
+            $availablePrimaryQuantity,
 
-                'available_stock_quantity' =>
-                $availableStockQuantity,
+            'available_stock_quantity' =>
+            $availableStockQuantity,
 
-                'stock_unit' =>
-                $stockUnit,
+            'stock_unit' =>
+            $stockUnit,
 
-                'quantity_step' =>
-                $isDualUnit
-                    ? 1
-                    : 0.001,
+            'quantity_step' =>
+            $isDualUnit
+                ? 1
+                : 0.001,
 
-                'allow_decimal_quantity' =>
-                ! $isDualUnit,
-            ];
-        }
+            'allow_decimal_quantity' =>
+            ! $isDualUnit,
+        ];
 
         /*
          * Existing Bag + Kg support.
@@ -1146,7 +1643,6 @@ class PosController extends Controller
             $isDualUnit
             && $secondarySellingPrice
             !== null
-            && $availableStockQuantity > 0
         ) {
             $saleOptions[] = [
                 'key' =>

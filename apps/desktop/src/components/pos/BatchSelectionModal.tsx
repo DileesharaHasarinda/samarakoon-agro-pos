@@ -422,6 +422,97 @@ function formatDate(
     );
 }
 
+function getSriLankaTodayDateKey(): string {
+    const parts =
+        new Intl.DateTimeFormat(
+            'en-GB',
+            {
+                timeZone:
+                    'Asia/Colombo',
+
+                year:
+                    'numeric',
+
+                month:
+                    '2-digit',
+
+                day:
+                    '2-digit',
+            },
+        ).formatToParts(
+            new Date(),
+        );
+
+    const getPart = (
+        type:
+            | 'year'
+            | 'month'
+            | 'day',
+    ): string =>
+        parts.find(
+            (
+                part,
+            ) =>
+                part.type
+                === type,
+        )?.value
+        ?? '';
+
+    return `${getPart(
+        'year',
+    )}-${getPart(
+        'month',
+    )}-${getPart(
+        'day',
+    )}`;
+}
+
+function isBatchExpired(
+    batch:
+        PosStockBatch,
+): boolean {
+    /*
+     * The backend normally provides is_expired.
+     *
+     * We ALSO compare expiry_date on the desktop so an expired lot
+     * cannot appear even if the renderer receives an older/cached
+     * API response with a stale is_expired flag.
+     *
+     * A lot expiring TODAY is still valid today.
+     */
+    if (
+        Boolean(
+            batch.is_expired,
+        )
+    ) {
+        return true;
+    }
+
+    const expiryDate =
+        String(
+            batch.expiry_date
+            ?? '',
+        )
+            .trim()
+            .substring(
+                0,
+                10,
+            );
+
+    if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(
+            expiryDate,
+        )
+    ) {
+        return false;
+    }
+
+    return (
+        expiryDate
+        < getSriLankaTodayDateKey()
+    );
+}
+
 function isWholeNumber(
     value: number,
 ): boolean {
@@ -876,7 +967,9 @@ function hasSellableStock(
         PosStockBatch,
 ): boolean {
     if (
-        batch.is_expired
+        isBatchExpired(
+            batch,
+        )
     ) {
         return false;
     }
@@ -2624,6 +2717,58 @@ export default function BatchSelectionModal({
         );
 
     /* =====================================================
+       NON-EXPIRED SELLABLE BATCHES
+       ===================================================== */
+
+    const allSellableBatches =
+        useMemo(
+            () => {
+                if (!product) {
+                    return [];
+                }
+
+                return product
+                    .batches
+                    .filter(
+                        (
+                            batch,
+                        ) =>
+                            hasSellableStock(
+                                product,
+                                batch,
+                            ),
+                    );
+            },
+            [
+                product,
+            ],
+        );
+
+    const availableNonExpiredStockQuantity =
+        useMemo(
+            () =>
+                normaliseQuantity(
+                    allSellableBatches
+                        .reduce(
+                            (
+                                total,
+                                batch,
+                            ) =>
+                                total
+                                + Number(
+                                    batch
+                                        .available_quantity
+                                    ?? 0,
+                                ),
+                            0,
+                        ),
+                ),
+            [
+                allSellableBatches,
+            ],
+        );
+
+    /* =====================================================
        FILTER BATCHES BY SELECTED VARIANT
        ===================================================== */
 
@@ -2642,8 +2787,7 @@ export default function BatchSelectionModal({
                 if (
                     !isVariantProduct
                 ) {
-                    return product
-                        .batches;
+                    return allSellableBatches;
                 }
 
                 /*
@@ -2666,12 +2810,22 @@ export default function BatchSelectionModal({
                 return batchesForVariant(
                     product,
                     selectedVariantId,
-                );
+                )
+                    .filter(
+                        (
+                            batch,
+                        ) =>
+                            hasSellableStock(
+                                product,
+                                batch,
+                            ),
+                    );
             },
             [
                 product,
                 isVariantProduct,
                 selectedVariantId,
+                allSellableBatches,
             ],
         );
 
@@ -2705,7 +2859,7 @@ export default function BatchSelectionModal({
                 selectedBatchId
                     === null
                     ? null
-                    : visibleBatches.find(
+                    : selectableBatches.find(
                         (
                             batch,
                         ) =>
@@ -2714,7 +2868,7 @@ export default function BatchSelectionModal({
                     )
                     ?? null,
             [
-                visibleBatches,
+                selectableBatches,
                 selectedBatchId,
             ],
         );
@@ -3250,7 +3404,9 @@ export default function BatchSelectionModal({
             }
 
             if (
-                batch.is_expired
+                isBatchExpired(
+                    batch,
+                )
             ) {
                 setErrorMessage(
                     'This stock batch has expired and cannot be sold.',
@@ -3954,8 +4110,7 @@ export default function BatchSelectionModal({
                                     {' '}
 
                                     {formatQuantity(
-                                        product
-                                            .total_available_quantity,
+                                        availableNonExpiredStockQuantity,
                                     )}
 
                                     {' '}
@@ -4102,9 +4257,9 @@ export default function BatchSelectionModal({
                                                             variant.id,
                                                         );
 
-                                                    const sellable =
+                                                    const sellableVariantBatches =
                                                         variantBatches
-                                                            .some(
+                                                            .filter(
                                                                 (
                                                                     batch,
                                                                 ) =>
@@ -4113,6 +4268,28 @@ export default function BatchSelectionModal({
                                                                         batch,
                                                                     ),
                                                             );
+
+                                                    const sellable =
+                                                        sellableVariantBatches
+                                                            .length > 0;
+
+                                                    const variantAvailableQuantity =
+                                                        normaliseQuantity(
+                                                            sellableVariantBatches
+                                                                .reduce(
+                                                                    (
+                                                                        total,
+                                                                        batch,
+                                                                    ) =>
+                                                                        total
+                                                                        + Number(
+                                                                            batch
+                                                                                .available_quantity
+                                                                            ?? 0,
+                                                                        ),
+                                                                    0,
+                                                                ),
+                                                        );
 
                                                     return (
                                                         <button
@@ -4175,9 +4352,7 @@ export default function BatchSelectionModal({
                                                                 {' '}
 
                                                                 {formatQuantity(
-                                                                    variant
-                                                                        .total_available_quantity
-                                                                    ?? 0,
+                                                                    variantAvailableQuantity,
                                                                 )}
 
                                                                 {' '}
@@ -4282,26 +4457,26 @@ export default function BatchSelectionModal({
                                                     Select Stock Batch
                                                 </h3>
 
-                                             
+
                                             </div>
                                         </div>
 
-                                        {visibleBatches.length
+                                        {selectableBatches.length
                                             === 0 ? (
                                             <div className="bsm-empty">
                                                 <Icon name="package" />
 
                                                 <strong>
-                                                    No Stock Available
+                                                    No Non-Expired Stock Available
                                                 </strong>
 
                                                 <span>
-                                                    No stock batch is available for this selection.
+                                                    No non-expired sellable stock batch is available for this selection.
                                                 </span>
                                             </div>
                                         ) : (
                                             <div className="bsm-batches">
-                                                {visibleBatches.map(
+                                                {selectableBatches.map(
                                                     (
                                                         batch,
                                                     ) => {
@@ -4350,27 +4525,10 @@ export default function BatchSelectionModal({
                                                                     batch.id
                                                                 }
                                                                 type="button"
-                                                                className={[
-                                                                    'bsm-batch-card',
-
+                                                                className={
                                                                     selected
-                                                                        ? 'selected'
-                                                                        : '',
-
-                                                                    batch
-                                                                        .is_expired
-                                                                        ? 'expired'
-                                                                        : '',
-                                                                ]
-                                                                    .filter(
-                                                                        Boolean,
-                                                                    )
-                                                                    .join(
-                                                                        ' ',
-                                                                    )}
-                                                                disabled={
-                                                                    batch
-                                                                        .is_expired
+                                                                        ? 'bsm-batch-card selected'
+                                                                        : 'bsm-batch-card'
                                                                 }
                                                                 onClick={() => {
                                                                     confirmBatch(
@@ -4411,15 +4569,11 @@ export default function BatchSelectionModal({
                                                                         )}
                                                                     </div>
 
-                                                                    {batch.is_expired ? (
-                                                                        <span className="bsm-expired-badge">
-                                                                            Expired
-                                                                        </span>
-                                                                    ) : selected ? (
+                                                                    {selected && (
                                                                         <span className="bsm-selected-icon">
                                                                             <Icon name="check" />
                                                                         </span>
-                                                                    ) : null}
+                                                                    )}
                                                                 </div>
 
                                                                 <div className="bsm-info-grid">

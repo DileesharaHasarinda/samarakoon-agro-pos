@@ -6,6 +6,15 @@ import {
     useState,
 } from 'react';
 
+import type {
+    KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
+
+import {
+    useLocation,
+    useNavigate,
+} from 'react-router';
+
 import {
     useAuth,
 } from '../../auth/AuthContext';
@@ -18,6 +27,12 @@ import PaymentModal
 
 import SaleReceiptModal
     from '../../components/pos/SaleReceiptModal';
+
+import TrainingBillModal
+    from '../../components/pos/TrainingBillModal';
+
+import TrainingProductSelectionModal
+    from '../../components/pos/TrainingProductSelectionModal';
 
 import {
     ApiError,
@@ -38,6 +53,10 @@ import {
     getPosProducts,
 } from '../../services/posService';
 
+import {
+    getAllProductsForSale,
+} from '../../services/allProductsSaleService';
+
 import type {
     CompleteSaleValues,
     PosCartItem,
@@ -46,10 +65,225 @@ import type {
     PosProduct,
     PosSaleOption,
     PosStockBatch,
+    PosTrainingOption,
     SaleReceipt,
 } from '../../types/sale';
 
 const PRODUCT_PAGE_SIZE = 24;
+
+
+const POS_DRAFT_STORAGE_KEY =
+    'sdm-agro-pos:current-sale:v1';
+
+type PosDraftState = {
+    cart: PosCartItem[];
+    saleDiscount: string;
+};
+
+function getEmptyPosDraft(): PosDraftState {
+    return {
+        cart: [],
+        saleDiscount: '0',
+    };
+}
+
+function getPosDraftStorageKey(
+    token:
+        | string
+        | null
+        | undefined,
+    trainingMode = false,
+): string {
+    const tokenValue =
+        String(
+            token ?? '',
+        ).trim();
+
+    const modeSuffix =
+        trainingMode
+            ? ':training'
+            : '';
+
+    if (!tokenValue) {
+        return `${POS_DRAFT_STORAGE_KEY}:guest${modeSuffix}`;
+    }
+
+    let hash = 2166136261;
+
+    for (
+        let index = 0;
+        index < tokenValue.length;
+        index += 1
+    ) {
+        hash ^= tokenValue.charCodeAt(
+            index,
+        );
+
+        hash = Math.imul(
+            hash,
+            16777619,
+        );
+    }
+
+    return `${POS_DRAFT_STORAGE_KEY}:${(
+        hash >>> 0
+    ).toString(16)}${modeSuffix}`;
+}
+
+function loadPosDraft(
+    storageKey: string,
+): PosDraftState {
+    if (
+        typeof window
+        === 'undefined'
+    ) {
+        return getEmptyPosDraft();
+    }
+
+    try {
+        const storedDraft =
+            window.sessionStorage
+                .getItem(
+                    storageKey,
+                );
+
+        if (!storedDraft) {
+            return getEmptyPosDraft();
+        }
+
+        const parsedDraft =
+            JSON.parse(
+                storedDraft,
+            ) as {
+                cart?: unknown;
+                saleDiscount?: unknown;
+            };
+
+        const restoredCart =
+            Array.isArray(
+                parsedDraft.cart,
+            )
+                ? (
+                    parsedDraft.cart as PosCartItem[]
+                )
+                : [];
+
+        const restoredSaleDiscount =
+            typeof parsedDraft
+                .saleDiscount
+                === 'string'
+                ? parsedDraft
+                    .saleDiscount
+                : typeof parsedDraft
+                    .saleDiscount
+                    === 'number'
+                    ? String(
+                        parsedDraft
+                            .saleDiscount,
+                    )
+                    : '0';
+
+        return {
+            cart:
+                restoredCart,
+
+            saleDiscount:
+                restoredSaleDiscount,
+        };
+    } catch (error) {
+        console.warn(
+            'Unable to restore the current POS sale draft.',
+            error,
+        );
+
+        try {
+            window.sessionStorage
+                .removeItem(
+                    storageKey,
+                );
+        } catch {
+            // Ignore storage cleanup failures.
+        }
+
+        return getEmptyPosDraft();
+    }
+}
+
+function savePosDraft(
+    storageKey: string,
+    draft: PosDraftState,
+): void {
+    if (
+        typeof window
+        === 'undefined'
+    ) {
+        return;
+    }
+
+    try {
+        const parsedDiscount =
+            Number(
+                draft.saleDiscount
+                || 0,
+            );
+
+        const hasSaleDiscount =
+            Number.isFinite(
+                parsedDiscount,
+            )
+            && Math.abs(
+                parsedDiscount,
+            ) > 0.0001;
+
+        if (
+            draft.cart.length === 0
+            && !hasSaleDiscount
+        ) {
+            window.sessionStorage
+                .removeItem(
+                    storageKey,
+                );
+
+            return;
+        }
+
+        window.sessionStorage
+            .setItem(
+                storageKey,
+                JSON.stringify(
+                    draft,
+                ),
+            );
+    } catch (error) {
+        console.warn(
+            'Unable to save the current POS sale draft.',
+            error,
+        );
+    }
+}
+
+function removePosDraft(
+    storageKey: string,
+): void {
+    if (
+        typeof window
+        === 'undefined'
+    ) {
+        return;
+    }
+
+    try {
+        window.sessionStorage
+            .removeItem(
+                storageKey,
+            );
+    } catch (error) {
+        console.warn(
+            'Unable to clear the current POS sale draft.',
+            error,
+        );
+    }
+}
 
 const currencyFormatter =
     new Intl.NumberFormat(
@@ -219,6 +453,37 @@ function calculateStockQuantity(
     return normaliseQuantity(
         quantity
         * conversionFactor,
+    );
+}
+
+function getTrainingVirtualBatchId(
+    productId: number,
+    optionKey: string,
+): number {
+    const source =
+        `${productId}:${optionKey}`;
+
+    let hash =
+        2166136261;
+
+    for (
+        let index = 0;
+        index < source.length;
+        index += 1
+    ) {
+        hash ^= source.charCodeAt(
+            index,
+        );
+
+        hash = Math.imul(
+            hash,
+            16777619,
+        );
+    }
+
+    return -Math.max(
+        1,
+        hash >>> 0,
     );
 }
 
@@ -419,6 +684,33 @@ function hasSellableBatch(
                         ?? 0,
                     ) > 0,
             ),
+    );
+}
+
+function isProductSelectable(
+    product: PosProduct,
+    catalogMode: boolean,
+): boolean {
+    if (catalogMode) {
+        /*
+         * Training Billing intentionally allows every catalogue product,
+         * including zero-stock and never-purchased products.
+         */
+        return true;
+    }
+
+    return (
+        product.can_sell
+        ?? (
+            Number(
+                product
+                    .total_available_quantity
+                ?? 0,
+            ) > 0
+            && hasSellableBatch(
+                product,
+            )
+        )
     );
 }
 
@@ -1171,6 +1463,64 @@ const styles = `
     font-size: 12px !important;
 }
 
+#agro-pos .pos-header-actions {
+    display: flex !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        flex-end !important;
+
+    flex-wrap:
+        wrap !important;
+
+    gap: 10px !important;
+}
+
+#agro-pos .catalog-switch-button {
+    min-height: 38px !important;
+
+    padding:
+        8px 13px !important;
+
+    color:
+        var(--green-900) !important;
+
+    font-size: 12px !important;
+
+    font-weight: 800 !important;
+
+    background:
+        var(--green-50) !important;
+
+    border:
+        1px solid
+        #b8dfc3 !important;
+
+    border-radius:
+        9px !important;
+
+    cursor:
+        pointer !important;
+
+    transition:
+        border-color 0.15s ease,
+        background 0.15s ease,
+        transform 0.15s ease !important;
+}
+
+#agro-pos .catalog-switch-button:hover {
+    background:
+        #dcfce7 !important;
+
+    border-color:
+        var(--green-700) !important;
+
+    transform:
+        translateY(-1px) !important;
+}
+
 #agro-pos .realtime-status {
     display: inline-flex !important;
 
@@ -1315,6 +1665,100 @@ const styles = `
     min-width: 0 !important;
 
     flex: 1 !important;
+}
+
+#agro-pos .training-page-notice {
+    display: flex !important;
+
+    align-items: center !important;
+
+    gap: 10px !important;
+
+    margin:
+        12px
+        14px
+        0 !important;
+
+    padding:
+        11px
+        12px !important;
+
+    color:
+        #92400e !important;
+
+    background:
+        #fffbeb !important;
+
+    border:
+        1px solid
+        #fde68a !important;
+
+    border-radius:
+        9px !important;
+}
+
+#agro-pos .training-page-notice strong {
+    flex:
+        0 0 auto !important;
+
+    font-size:
+        12px !important;
+
+    font-weight:
+        850 !important;
+}
+
+#agro-pos .training-page-notice span {
+    color:
+        #78350f !important;
+
+    font-size:
+        12px !important;
+
+    font-weight:
+        650 !important;
+}
+
+#agro-pos .training-summary {
+    display: grid !important;
+
+    gap: 4px !important;
+
+    padding:
+        11px
+        12px !important;
+
+    color:
+        #14532d !important;
+
+    background:
+        #f0fdf4 !important;
+
+    border:
+        1px solid
+        #bbf7d0 !important;
+
+    border-radius:
+        9px !important;
+}
+
+#agro-pos .training-summary strong {
+    font-size:
+        13px !important;
+
+    font-weight:
+        850 !important;
+}
+
+#agro-pos .training-summary span {
+    color:
+        #166534 !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        650 !important;
 }
 
 #agro-pos .retry {
@@ -1601,6 +2045,71 @@ const styles = `
         box-shadow 0.15s ease !important;
 }
 
+#agro-pos .product-card.keyboard-selected {
+    border-color:
+        #2e90fa !important;
+
+    box-shadow:
+        0 0 0 4px
+        rgba(
+            46,
+            144,
+            250,
+            0.18
+        ),
+        0 8px 18px
+        rgba(
+            16,
+            24,
+            40,
+            0.10
+        ) !important;
+
+    transform:
+        translateY(-2px) !important;
+}
+
+#agro-pos .product-card.keyboard-selected::after {
+    position: absolute !important;
+
+    right: 10px !important;
+    bottom: 10px !important;
+
+    display:
+        inline-flex !important;
+
+    align-items:
+        center !important;
+
+    min-height:
+        24px !important;
+
+    padding:
+        2px 7px !important;
+
+    color:
+        #175cd3 !important;
+
+    font-size:
+        10px !important;
+
+    font-weight:
+        850 !important;
+
+    content:
+        'Enter' !important;
+
+    background:
+        #eff8ff !important;
+
+    border:
+        1px solid
+        #b2ddff !important;
+
+    border-radius:
+        6px !important;
+}
+
 #agro-pos .product-card:hover {
     border-color:
         var(--green-700) !important;
@@ -1616,6 +2125,54 @@ const styles = `
 
     transform:
         translateY(-2px) !important;
+}
+
+#agro-pos .product-card.unavailable,
+#agro-pos .product-card.unavailable:hover {
+    opacity: 0.82 !important;
+
+    cursor: not-allowed !important;
+
+    border-color:
+        var(--border) !important;
+
+    box-shadow:
+        0 2px 7px
+        rgba(
+            16,
+            24,
+            40,
+            0.045
+        ) !important;
+
+    transform:
+        none !important;
+}
+
+#agro-pos .product-card.unavailable
+.product-initial {
+    background:
+        #667085 !important;
+}
+
+#agro-pos .catalog-stock-status {
+    font-size: 12px !important;
+    font-weight: 800 !important;
+}
+
+#agro-pos .catalog-stock-status.available {
+    color:
+        var(--green-700) !important;
+}
+
+#agro-pos .catalog-stock-status.out_of_stock {
+    color:
+        #b54708 !important;
+}
+
+#agro-pos .catalog-stock-status.not_purchased {
+    color:
+        #667085 !important;
 }
 
 #agro-pos .dual-product-badge {
@@ -3075,15 +3632,86 @@ const styles = `
 }
 `;
 
-export default function PosPage() {
+interface PosPageProps {
+    /*
+     * false = existing real New Sale page.
+     * true  = All Products training / practice bill page.
+     */
+    catalogMode?: boolean;
+}
+
+export default function PosPage({
+    catalogMode = false,
+}: PosPageProps) {
     const {
         token,
     } = useAuth();
+
+    const location =
+        useLocation();
+
+    const navigate =
+        useNavigate();
+
+    const roleBasePath =
+        location.pathname.startsWith(
+            '/cashier/',
+        )
+            ? '/cashier'
+            : '/admin';
+
+    const alternateSalePath =
+        catalogMode
+            ? `${roleBasePath}/pos`
+            : `${roleBasePath}/all-products-sale`;
 
     const searchInputRef =
         useRef<HTMLInputElement | null>(
             null,
         );
+
+    const productCardRefs =
+        useRef<
+            Map<
+                number,
+                HTMLButtonElement
+            >
+        >(
+            new Map(),
+        );
+
+    const pendingEnterSelectionRef =
+        useRef(false);
+
+
+    const draftStorageKey =
+        useMemo(
+            () =>
+                getPosDraftStorageKey(
+                    token,
+                    catalogMode,
+                ),
+            [
+                token,
+                catalogMode,
+            ],
+        );
+
+    const [
+        initialDraft,
+    ] = useState<PosDraftState>(
+        () =>
+            loadPosDraft(
+                draftStorageKey,
+            ),
+    );
+
+    const [
+        draftOwnerKey,
+        setDraftOwnerKey,
+    ] = useState(
+        draftStorageKey,
+    );
 
     const loadProductsRef =
         useRef<
@@ -3115,7 +3743,9 @@ export default function PosPage() {
         setCart,
     ] = useState<
         PosCartItem[]
-    >([]);
+    >(
+        initialDraft.cart,
+    );
 
     const [
         selectedProduct,
@@ -3123,6 +3753,11 @@ export default function PosPage() {
     ] = useState<
         PosProduct | null
     >(null);
+
+    const [
+        keyboardProductIndex,
+        setKeyboardProductIndex,
+    ] = useState(-1);
 
     const [
         pagination,
@@ -3156,7 +3791,9 @@ export default function PosPage() {
     const [
         saleDiscount,
         setSaleDiscount,
-    ] = useState('0');
+    ] = useState(
+        initialDraft.saleDiscount,
+    );
 
     const [
         isLoading,
@@ -3194,6 +3831,11 @@ export default function PosPage() {
     ] = useState<
         SaleReceipt | null
     >(null);
+
+    const [
+        isTrainingBillOpen,
+        setIsTrainingBillOpen,
+    ] = useState(false);
 
     const [
         isClearCartConfirming,
@@ -3253,27 +3895,36 @@ export default function PosPage() {
                 setPageError('');
 
                 try {
+                    const parameters = {
+                        page,
+
+                        perPage:
+                            PRODUCT_PAGE_SIZE,
+
+                        search:
+                            appliedSearch,
+
+                        categoryId:
+                            categoryFilter,
+                    };
+
                     const response =
-                        await getPosProducts(
-                            token,
-                            {
-                                page,
-
-                                perPage:
-                                    PRODUCT_PAGE_SIZE,
-
-                                search:
-                                    appliedSearch,
-
-                                categoryId:
-                                    categoryFilter,
-                            },
-                        );
+                        catalogMode
+                            ? await getAllProductsForSale(
+                                token,
+                                parameters,
+                            )
+                            : await getPosProducts(
+                                token,
+                                parameters,
+                            );
 
                     const visibleProducts =
-                        getVisibleProducts(
-                            response.data,
-                        );
+                        catalogMode
+                            ? response.data
+                            : getVisibleProducts(
+                                response.data,
+                            );
 
                     setProducts(
                         visibleProducts,
@@ -3297,7 +3948,7 @@ export default function PosPage() {
                                 return null;
                             }
 
-                            return (
+                            const refreshedProduct =
                                 visibleProducts
                                     .find(
                                         (
@@ -3306,8 +3957,21 @@ export default function PosPage() {
                                             product.id
                                             === current.id,
                                     )
-                                ?? null
-                            );
+                                ?? null;
+
+                            if (
+                                !refreshedProduct
+                                || (
+                                    !catalogMode
+                                    && !hasSellableBatch(
+                                        refreshedProduct,
+                                    )
+                                )
+                            ) {
+                                return null;
+                            }
+
+                            return refreshedProduct;
                         },
                     );
                 } catch (error) {
@@ -3330,6 +3994,7 @@ export default function PosPage() {
                 page,
                 appliedSearch,
                 categoryFilter,
+                catalogMode,
             ],
         );
 
@@ -3350,6 +4015,156 @@ export default function PosPage() {
             loadProducts;
     }, [
         loadProducts,
+    ]);
+
+    const keyboardSelectableProducts =
+        useMemo(
+            () =>
+                products.filter(
+                    (
+                        product,
+                    ) =>
+                        isProductSelectable(
+                            product,
+                            catalogMode,
+                        ),
+                ),
+            [
+                products,
+                catalogMode,
+            ],
+        );
+
+    /*
+     * Keep the first result highlighted while the user is searching.
+     * The search input itself keeps keyboard focus, so typing can continue.
+     */
+    useEffect(() => {
+        if (
+            selectedProduct
+            || keyboardSelectableProducts
+                .length === 0
+            || searchInput
+                .trim() === ''
+        ) {
+            setKeyboardProductIndex(
+                -1,
+            );
+
+            return;
+        }
+
+        setKeyboardProductIndex(
+            (
+                current,
+            ) => {
+                if (
+                    current >= 0
+                    && current
+                    < keyboardSelectableProducts
+                        .length
+                ) {
+                    return current;
+                }
+
+                return 0;
+            },
+        );
+    }, [
+        keyboardSelectableProducts,
+        searchInput,
+        selectedProduct,
+    ]);
+
+    /*
+     * Keep the highlighted card visible while navigating with arrow keys.
+     */
+    useEffect(() => {
+        if (
+            keyboardProductIndex < 0
+            || keyboardProductIndex
+            >= keyboardSelectableProducts
+                .length
+        ) {
+            return;
+        }
+
+        const product =
+            keyboardSelectableProducts[
+            keyboardProductIndex
+            ];
+
+        productCardRefs
+            .current
+            .get(
+                product.id,
+            )
+            ?.scrollIntoView({
+                block:
+                    'nearest',
+
+                inline:
+                    'nearest',
+
+                behavior:
+                    'smooth',
+            });
+    }, [
+        keyboardProductIndex,
+        keyboardSelectableProducts,
+    ]);
+
+    /*
+     * If Enter is pressed before the 300 ms search debounce has completed,
+     * apply the current search immediately. When the result arrives, a
+     * single matching product is opened automatically.
+     */
+    useEffect(() => {
+        if (
+            !pendingEnterSelectionRef
+                .current
+            || isLoading
+            || searchInput
+                .trim()
+            !== appliedSearch
+        ) {
+            return;
+        }
+
+        pendingEnterSelectionRef
+            .current =
+            false;
+
+        if (
+            keyboardSelectableProducts
+                .length === 1
+        ) {
+            setKeyboardProductIndex(
+                0,
+            );
+
+            setSelectedProduct(
+                keyboardSelectableProducts[
+                0
+                ],
+            );
+
+            return;
+        }
+
+        if (
+            keyboardSelectableProducts
+                .length > 1
+        ) {
+            setKeyboardProductIndex(
+                0,
+            );
+        }
+    }, [
+        appliedSearch,
+        isLoading,
+        keyboardSelectableProducts,
+        searchInput,
     ]);
 
     useEffect(() => {
@@ -3404,15 +4219,19 @@ export default function PosPage() {
                                          * availability while the API refresh
                                          * is in flight.
                                          */
-                                        setCart(
-                                            (
-                                                current,
-                                            ) =>
-                                                applyRealtimeStockEventToCart(
+                                        if (
+                                            !catalogMode
+                                        ) {
+                                            setCart(
+                                                (
                                                     current,
-                                                    event,
-                                                ),
-                                        );
+                                                ) =>
+                                                    applyRealtimeStockEventToCart(
+                                                        current,
+                                                        event,
+                                                    ),
+                                            );
+                                        }
 
                                         /*
                                          * Re-fetch the current filtered POS
@@ -3485,6 +4304,7 @@ export default function PosPage() {
         };
     }, [
         token,
+        catalogMode,
     ]);
 
     useEffect(() => {
@@ -3511,6 +4331,77 @@ export default function PosPage() {
 
     useEffect(() => {
         if (
+            draftOwnerKey
+            === draftStorageKey
+        ) {
+            return;
+        }
+
+        const restoredDraft =
+            loadPosDraft(
+                draftStorageKey,
+            );
+
+        setCart(
+            restoredDraft.cart,
+        );
+
+        setSaleDiscount(
+            restoredDraft
+                .saleDiscount,
+        );
+
+        setSelectedProduct(
+            null,
+        );
+
+        setIsPaymentOpen(
+            false,
+        );
+
+        setIsTrainingBillOpen(
+            false,
+        );
+
+        setPaymentError('');
+        setCartError('');
+
+        setIsClearCartConfirming(
+            false,
+        );
+
+        setDraftOwnerKey(
+            draftStorageKey,
+        );
+    }, [
+        draftOwnerKey,
+        draftStorageKey,
+    ]);
+
+    useEffect(() => {
+        if (
+            draftOwnerKey
+            !== draftStorageKey
+        ) {
+            return;
+        }
+
+        savePosDraft(
+            draftStorageKey,
+            {
+                cart,
+                saleDiscount,
+            },
+        );
+    }, [
+        cart,
+        saleDiscount,
+        draftOwnerKey,
+        draftStorageKey,
+    ]);
+
+    useEffect(() => {
+        if (
             cart.length === 0
         ) {
             setIsClearCartConfirming(
@@ -3522,6 +4413,12 @@ export default function PosPage() {
     ]);
 
     useEffect(() => {
+        if (
+            catalogMode
+        ) {
+            return;
+        }
+
         const stockError =
             getCombinedCartStockError(
                 cart,
@@ -3534,6 +4431,7 @@ export default function PosPage() {
         }
     }, [
         cart,
+        catalogMode,
     ]);
 
     const subtotal =
@@ -3573,6 +4471,217 @@ export default function PosPage() {
             subtotal
             - safeSaleDiscount,
         );
+
+    const openProductFromKeyboard =
+        (
+            product:
+                PosProduct,
+        ): void => {
+            if (
+                !isProductSelectable(
+                    product,
+                    catalogMode,
+                )
+            ) {
+                return;
+            }
+
+            setSelectedProduct(
+                product,
+            );
+        };
+
+    const moveKeyboardProductSelection =
+        (
+            direction:
+                1
+                | -1,
+        ): void => {
+            if (
+                keyboardSelectableProducts
+                    .length === 0
+            ) {
+                setKeyboardProductIndex(
+                    -1,
+                );
+
+                return;
+            }
+
+            setKeyboardProductIndex(
+                (
+                    current,
+                ) => {
+                    if (
+                        current < 0
+                        || current
+                        >= keyboardSelectableProducts
+                            .length
+                    ) {
+                        return direction
+                            === 1
+                            ? 0
+                            : keyboardSelectableProducts
+                                .length - 1;
+                    }
+
+                    return (
+                        current
+                        + direction
+                        + keyboardSelectableProducts
+                            .length
+                    )
+                        % keyboardSelectableProducts
+                            .length;
+                },
+            );
+        };
+
+    const handleProductSearchKeyDown =
+        (
+            event:
+                ReactKeyboardEvent<HTMLInputElement>,
+        ): void => {
+            if (
+                selectedProduct
+                || isPaymentOpen
+                || isTrainingBillOpen
+            ) {
+                return;
+            }
+
+            const isForwardKey =
+                event.key
+                === 'ArrowDown'
+                || event.key
+                === 'ArrowRight';
+
+            const isBackwardKey =
+                event.key
+                === 'ArrowUp'
+                || event.key
+                === 'ArrowLeft';
+
+            const isEnterKey =
+                event.key
+                === 'Enter';
+
+            if (
+                !isForwardKey
+                && !isBackwardKey
+                && !isEnterKey
+            ) {
+                return;
+            }
+
+            const trimmedSearch =
+                searchInput.trim();
+
+            /*
+             * Keyboard product selection is intentionally tied to an
+             * active search/barcode value. With an empty search, Enter
+             * should not unexpectedly open the first catalogue product.
+             */
+            if (
+                trimmedSearch === ''
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+
+            /*
+             * Never navigate/select from a stale result list.
+             *
+             * A barcode scanner commonly types the value and immediately
+             * sends Enter, so Enter also remembers that it should open the
+             * single result as soon as the fresh API response arrives.
+             */
+            if (
+                trimmedSearch
+                !== appliedSearch
+            ) {
+                pendingEnterSelectionRef
+                    .current =
+                    isEnterKey;
+
+                setKeyboardProductIndex(
+                    -1,
+                );
+
+                setPage(
+                    1,
+                );
+
+                setAppliedSearch(
+                    trimmedSearch,
+                );
+
+                return;
+            }
+
+            if (
+                isForwardKey
+            ) {
+                moveKeyboardProductSelection(
+                    1,
+                );
+
+                return;
+            }
+
+            if (
+                isBackwardKey
+            ) {
+                moveKeyboardProductSelection(
+                    -1,
+                );
+
+                return;
+            }
+
+            if (
+                keyboardSelectableProducts
+                    .length === 0
+            ) {
+                return;
+            }
+
+            if (
+                keyboardSelectableProducts
+                    .length === 1
+            ) {
+                setKeyboardProductIndex(
+                    0,
+                );
+
+                openProductFromKeyboard(
+                    keyboardSelectableProducts[
+                    0
+                    ],
+                );
+
+                return;
+            }
+
+            const safeIndex =
+                keyboardProductIndex >= 0
+                    && keyboardProductIndex
+                    < keyboardSelectableProducts
+                        .length
+                    ? keyboardProductIndex
+                    : 0;
+
+            setKeyboardProductIndex(
+                safeIndex,
+            );
+
+            openProductFromKeyboard(
+                keyboardSelectableProducts[
+                safeIndex
+                ],
+            );
+        };
 
     const refocusSearch =
         (): void => {
@@ -3847,6 +4956,192 @@ export default function PosPage() {
         refocusSearch();
     };
 
+    const addTrainingItemToCart = (
+        product: PosProduct,
+        option: PosTrainingOption,
+        quantity: number,
+    ): void => {
+        setCartError('');
+
+        if (
+            !Number.isFinite(
+                quantity,
+            )
+            || quantity <= 0
+        ) {
+            setCartError(
+                'Quantity must be greater than zero.',
+            );
+
+            return;
+        }
+
+        const virtualBatchId =
+            getTrainingVirtualBatchId(
+                product.id,
+                option.key,
+            );
+
+        const existingItem =
+            cart.find(
+                (
+                    item,
+                ) =>
+                    isSameCartItem(
+                        item,
+                        virtualBatchId,
+                        option.unit,
+                    ),
+            );
+
+        const newQuantity =
+            normaliseQuantity(
+                (
+                    existingItem
+                        ?.quantity
+                    ?? 0
+                )
+                + quantity,
+            );
+
+        const conversionFactor =
+            Number.isFinite(
+                Number(
+                    option
+                        .conversion_factor,
+                ),
+            )
+                && Number(
+                    option
+                        .conversion_factor,
+                ) > 0
+                ? Number(
+                    option
+                        .conversion_factor,
+                )
+                : 1;
+
+        const productName =
+            option.variant_name
+                ? `${product.name} - ${option.variant_name}`
+                : product.name;
+
+        if (existingItem) {
+            setCart(
+                (
+                    current,
+                ) =>
+                    current.map(
+                        (
+                            item,
+                        ) =>
+                            isSameCartItem(
+                                item,
+                                virtualBatchId,
+                                option.unit,
+                            )
+                                ? {
+                                    ...item,
+
+                                    quantity:
+                                        newQuantity,
+
+                                    stock_quantity:
+                                        calculateStockQuantity(
+                                            newQuantity,
+                                            conversionFactor,
+                                        ),
+                                }
+                                : item,
+                    ),
+            );
+        } else {
+            setCart(
+                (
+                    current,
+                ) => [
+                        ...current,
+
+                        {
+                            stock_batch_id:
+                                virtualBatchId,
+
+                            product_id:
+                                product.id,
+
+                            product_name:
+                                productName,
+
+                            primary_unit:
+                                option.primary_unit
+                                || product.primary_unit
+                                || product.unit
+                                || option.unit,
+
+                            sale_unit:
+                                option.unit,
+
+                            stock_unit:
+                                option.stock_unit
+                                || option.unit,
+
+                            is_dual_unit:
+                                option.is_dual_unit,
+
+                            conversion_factor:
+                                conversionFactor,
+
+                            stock_quantity:
+                                calculateStockQuantity(
+                                    quantity,
+                                    conversionFactor,
+                                ),
+
+                            unit:
+                                option.unit,
+
+                            batch_code:
+                                'TRAINING',
+
+                            batch_number:
+                                null,
+
+                            expiry_date:
+                                null,
+
+                            /*
+                             * Training quantities are intentionally not tied
+                             * to available stock. These values keep the shared
+                             * cart UI type-safe; no backend sale is submitted.
+                             */
+                            available_quantity:
+                                Number.MAX_SAFE_INTEGER,
+
+                            available_stock_quantity:
+                                Number.MAX_SAFE_INTEGER,
+
+                            selling_price:
+                                0,
+
+                            quantity:
+                                normaliseQuantity(
+                                    quantity,
+                                ),
+
+                            discount:
+                                0,
+                        },
+                    ],
+            );
+        }
+
+        setSelectedProduct(
+            null,
+        );
+
+        refocusSearch();
+    };
+
     const updateCartQuantity = (
         batchId: number,
         saleUnit: string,
@@ -4101,6 +5396,10 @@ export default function PosPage() {
 
     const clearCart =
         (): void => {
+            removePosDraft(
+                draftStorageKey,
+            );
+
             setCart([]);
 
             setSaleDiscount(
@@ -4110,6 +5409,10 @@ export default function PosPage() {
             setCartError('');
 
             setPaymentError('');
+
+            setIsTrainingBillOpen(
+                false,
+            );
 
             setIsClearCartConfirming(
                 false,
@@ -4124,6 +5427,14 @@ export default function PosPage() {
 
             setPage(1);
 
+            setKeyboardProductIndex(
+                -1,
+            );
+
+            pendingEnterSelectionRef
+                .current =
+                false;
+
             searchInputRef
                 .current
                 ?.focus();
@@ -4131,9 +5442,11 @@ export default function PosPage() {
 
     const validateCombinedStock =
         (): string | null =>
-            getCombinedCartStockError(
-                cart,
-            );
+            catalogMode
+                ? null
+                : getCombinedCartStockError(
+                    cart,
+                );
 
     const openPayment =
         (): void => {
@@ -4142,6 +5455,39 @@ export default function PosPage() {
             ) {
                 setCartError(
                     'Add at least one product to the cart.',
+                );
+
+                return;
+            }
+
+            if (
+                catalogMode
+            ) {
+                const invalidTrainingItem =
+                    cart.find(
+                        (
+                            item,
+                        ) =>
+                            !Number.isFinite(
+                                item.quantity,
+                            )
+                            || item.quantity <= 0,
+                    );
+
+                if (
+                    invalidTrainingItem
+                ) {
+                    setCartError(
+                        `Enter a valid quantity for ${invalidTrainingItem.product_name}.`,
+                    );
+
+                    return;
+                }
+
+                setCartError('');
+
+                setIsTrainingBillOpen(
+                    true,
                 );
 
                 return;
@@ -4260,7 +5606,8 @@ export default function PosPage() {
                 CompleteSaleValues,
         ): Promise<void> => {
             if (
-                !token
+                catalogMode
+                || !token
                 || cart.length === 0
                 || isSubmitting
             ) {
@@ -4326,33 +5673,55 @@ export default function PosPage() {
                 <header className="pos-header">
                     <div>
                         <span className="eyebrow">
-                            Point of Sale
+                            {catalogMode
+                                ? 'Training Billing'
+                                : 'Point of Sale'}
                         </span>
 
                         <h1 className="page-title">
-                            New Sale
+                            {catalogMode
+                                ? 'All Products Training'
+                                : 'New Sale'}
                         </h1>
 
                     </div>
 
-                    <div
-                        className={`realtime-status ${realtimeStatus}`}
-                        title={
-                            realtimeStatus
-                                === 'connected'
-                                ? 'Stock changes from other cashier machines are being received automatically.'
-                                : 'Realtime stock synchronization is not currently connected.'
-                        }
-                    >
-                        <span className="realtime-dot" />
+                    <div className="pos-header-actions">
+                        <button
+                            type="button"
+                            className="catalog-switch-button"
+                            onClick={() => {
+                                navigate(
+                                    alternateSalePath,
+                                );
+                            }}
+                        >
+                            {catalogMode
+                                ? 'Back to New Sale'
+                                : 'Training Billing'}
+                        </button>
 
-                        <span>
-                            {getRealtimeStatusLabel(
-                                realtimeStatus,
-                            )}
-                        </span>
+                        <div
+                            className={`realtime-status ${realtimeStatus}`}
+                            title={
+                                realtimeStatus
+                                    === 'connected'
+                                    ? 'Stock changes from other cashier machines are being received automatically.'
+                                    : 'Realtime stock synchronization is not currently connected.'
+                            }
+                        >
+                            <span className="realtime-dot" />
+
+                            <span>
+                                {getRealtimeStatusLabel(
+                                    realtimeStatus,
+                                )}
+                            </span>
+                        </div>
                     </div>
                 </header>
+
+               
 
                 {pageError && (
                     <div
@@ -4417,7 +5786,14 @@ export default function PosPage() {
                                             .target
                                             .value,
                                     );
+
+                                    setKeyboardProductIndex(
+                                        -1,
+                                    );
                                 }}
+                                onKeyDown={
+                                    handleProductSearchKeyDown
+                                }
                             />
 
                             {searchInput && (
@@ -4504,9 +5880,9 @@ export default function PosPage() {
                             </strong>
 
                             <span>
-                                Checking available
-                                stock batches and
-                                selling options.
+                                {catalogMode
+                                    ? 'Loading the full product catalogue and current selling options.'
+                                    : 'Checking available stock batches and selling options.'}
                             </span>
                         </div>
                     ) : products.length
@@ -4517,120 +5893,281 @@ export default function PosPage() {
                             </span>
 
                             <strong>
-                                No Available Products
+                                {catalogMode
+                                    ? 'No Products Found'
+                                    : 'No Available Products'}
                             </strong>
 
                             <span>
-                                Try another search or
-                                category, or receive
-                                stock before creating
-                                the sale.
+                                {catalogMode
+                                    ? 'Try another search or category.'
+                                    : 'Try another search or category, or receive stock before creating the sale.'}
                             </span>
                         </div>
                     ) : (
                         products.map(
                             (
                                 product,
-                            ) => (
-                                <button
-                                    type="button"
-                                    className="product-card"
-                                    key={
-                                        product.id
-                                    }
-                                    onClick={() => {
-                                        setSelectedProduct(
+                                productIndex,
+                            ) => {
+                                const isSellable =
+                                    product.can_sell
+                                    ?? (
+                                        Number(
+                                            product
+                                                .total_available_quantity
+                                            ?? 0,
+                                        ) > 0
+                                        && hasSellableBatch(
                                             product,
-                                        );
-                                    }}
-                                >
-                                    {product
-                                        .is_dual_unit && (
-                                            <span className="dual-product-badge">
-                                                <Icon name="bag" />
+                                        )
+                                    );
 
-                                                Bag + Kg
-                                            </span>
-                                        )}
+                                const canSelectProduct =
+                                    catalogMode
+                                    || isSellable;
 
-                                    <div className="product-top">
-                                        <div className="product-initial">
-                                            {product
-                                                .name
-                                                .trim()
-                                                .charAt(
-                                                    0,
-                                                )
-                                                .toUpperCase()
-                                                || 'P'}
-                                        </div>
+                                const isKeyboardSelected =
+                                    productIndex
+                                    === keyboardProductIndex
+                                    && searchInput
+                                        .trim() !== '';
 
-                                        <div className="product-copy">
-                                            <span
-                                                className="category-badge"
-                                                title={
-                                                    product
-                                                        .category
-                                                        .name
-                                                }
-                                            >
-                                                {
-                                                    product
-                                                        .category
-                                                        .name
-                                                }
-                                            </span>
+                                const catalogStatus =
+                                    product.catalog_status
+                                    ?? (
+                                        isSellable
+                                            ? 'available'
+                                            : 'out_of_stock'
+                                    );
 
-                                            <strong
-                                                className="product-name"
-                                                title={
-                                                    product
-                                                        .name
-                                                }
-                                            >
-                                                {
-                                                    product
-                                                        .name
-                                                }
-                                            </strong>
+                                const catalogStatusLabel =
+                                    catalogStatus
+                                        === 'not_purchased'
+                                        ? 'Not Purchased'
+                                        : catalogStatus
+                                            === 'out_of_stock'
+                                            ? 'Out of Stock'
+                                            : 'Stock Available';
 
-                                            <small className="product-code">
+                                const hasTrainingDualUnit =
+                                    product
+                                        .is_dual_unit
+                                    || (
+                                        product
+                                            .training_options
+                                        ?? []
+                                    ).some(
+                                        (
+                                            option,
+                                        ) =>
+                                            option
+                                                .is_dual_unit,
+                                    );
+
+                                return (
+                                    <button
+                                        ref={(
+                                            node,
+                                        ) => {
+                                            if (node) {
+                                                productCardRefs
+                                                    .current
+                                                    .set(
+                                                        product.id,
+                                                        node,
+                                                    );
+                                            } else {
+                                                productCardRefs
+                                                    .current
+                                                    .delete(
+                                                        product.id,
+                                                    );
+                                            }
+                                        }}
+                                        type="button"
+                                        className={[
+                                            'product-card',
+
+                                            isKeyboardSelected
+                                                ? 'keyboard-selected'
+                                                : '',
+                                        ]
+                                            .filter(
+                                                Boolean,
+                                            )
+                                            .join(
+                                                ' ',
+                                            )}
+                                        key={
+                                            product.id
+                                        }
+                                        disabled={
+                                            !canSelectProduct
+                                        }
+                                        aria-disabled={
+                                            !canSelectProduct
+                                        }
+                                        aria-current={
+                                            isKeyboardSelected
+                                                ? 'true'
+                                                : undefined
+                                        }
+                                        onFocus={() => {
+                                            setKeyboardProductIndex(
+                                                productIndex,
+                                            );
+                                        }}
+                                        onMouseEnter={() => {
+                                            if (
+                                                searchInput
+                                                    .trim() !== ''
+                                            ) {
+                                                setKeyboardProductIndex(
+                                                    productIndex,
+                                                );
+                                            }
+                                        }}
+                                        onClick={() => {
+                                            if (
+                                                !canSelectProduct
+                                            ) {
+                                                return;
+                                            }
+
+                                            setKeyboardProductIndex(
+                                                productIndex,
+                                            );
+
+                                            setSelectedProduct(
+                                                product,
+                                            );
+                                        }}
+                                    >
+                                        {(
+                                            catalogMode
+                                                ? hasTrainingDualUnit
+                                                : product
+                                                    .is_dual_unit
+                                        ) && (
+                                                <span className="dual-product-badge">
+                                                    <Icon name="bag" />
+
+                                                    Bag + Kg
+                                                </span>
+                                            )}
+
+                                        <div className="product-top">
+                                            <div className="product-initial">
                                                 {product
-                                                    .sku
-                                                    || product
-                                                        .barcode
-                                                    || 'No product code'}
-                                            </small>
+                                                    .name
+                                                    .trim()
+                                                    .charAt(
+                                                        0,
+                                                    )
+                                                    .toUpperCase()
+                                                    || 'P'}
+                                            </div>
+
+                                            <div className="product-copy">
+                                                <span
+                                                    className="category-badge"
+                                                    title={
+                                                        product
+                                                            .category
+                                                            .name
+                                                    }
+                                                >
+                                                    {
+                                                        product
+                                                            .category
+                                                            .name
+                                                    }
+                                                </span>
+
+                                                <strong
+                                                    className="product-name"
+                                                    title={
+                                                        product
+                                                            .name
+                                                    }
+                                                >
+                                                    {
+                                                        product
+                                                            .name
+                                                    }
+                                                </strong>
+
+                                                <small className="product-code">
+                                                    {product
+                                                        .sku
+                                                        || product
+                                                            .barcode
+                                                        || 'No product code'}
+                                                </small>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    <div className="product-meta">
-                                        <div className="meta-box price">
-                                            <span>
-                                                Selling Price
-                                            </span>
+                                        <div className="product-meta">
+                                            {catalogMode ? (
+                                                <>
+                                                    <div className="meta-box price">
+                                                        <span>
+                                                            Training Bill
+                                                        </span>
 
-                                            <strong>
-                                                {getProductPriceLabel(
-                                                    product,
-                                                )}
-                                            </strong>
+                                                        <strong>
+                                                            No Price
+                                                        </strong>
+                                                    </div>
+
+                                                    <div className="meta-box">
+                                                        <span>
+                                                            Stock Status
+                                                        </span>
+
+                                                        <strong
+                                                            className={
+                                                                `catalog-stock-status ${catalogStatus}`
+                                                            }
+                                                        >
+                                                            {
+                                                                catalogStatusLabel
+                                                            }
+                                                        </strong>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="meta-box price">
+                                                        <span>
+                                                            Selling Price
+                                                        </span>
+
+                                                        <strong>
+                                                            {getProductPriceLabel(
+                                                                product,
+                                                            )}
+                                                        </strong>
+                                                    </div>
+
+                                                    <div className="meta-box">
+                                                        <span>
+                                                            Available
+                                                        </span>
+
+                                                        <strong>
+                                                            {getProductAvailableLabel(
+                                                                product,
+                                                            )}
+                                                        </strong>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
-
-                                        <div className="meta-box">
-                                            <span>
-                                                Available
-                                            </span>
-
-                                            <strong>
-                                                {getProductAvailableLabel(
-                                                    product,
-                                                )}
-                                            </strong>
-                                        </div>
-                                    </div>
-                                </button>
-                            ),
+                                    </button>
+                                );
+                            },
                         )
                     )}
                 </div>
@@ -4734,11 +6271,15 @@ export default function PosPage() {
                 <header className="cart-header">
                     <div>
                         <span className="eyebrow">
-                            Current Sale
+                            {catalogMode
+                                ? 'Training Bill'
+                                : 'Current Sale'}
                         </span>
 
                         <h2 className="cart-title">
-                            Cart
+                            {catalogMode
+                                ? 'Practice Cart'
+                                : 'Cart'}
                         </h2>
                     </div>
 
@@ -4777,9 +6318,9 @@ export default function PosPage() {
                             </strong>
 
                             <span>
-                                Select a product,
-                                stock batch and selling
-                                unit to start this sale.
+                                {catalogMode
+                                    ? 'Select any catalogue product and unit to create a price-free training bill. Real stock will not be deducted.'
+                                    : 'Select a product, stock batch and selling unit to start this sale.'}
                             </span>
                         </div>
                     ) : (
@@ -4841,13 +6382,19 @@ export default function PosPage() {
                                                 </strong>
 
                                                 <span className="batch">
-                                                    Batch:
-                                                    {' '}
+                                                    {catalogMode
+                                                        ? 'Training item • no stock deduction'
+                                                        : (
+                                                            <>
+                                                                Batch:
+                                                                {' '}
 
-                                                    {item
-                                                        .batch_number
-                                                        || item
-                                                            .batch_code}
+                                                                {item
+                                                                    .batch_number
+                                                                    || item
+                                                                        .batch_code}
+                                                            </>
+                                                        )}
                                                 </span>
 
                                                 <div className="sale-unit-row">
@@ -4889,8 +6436,9 @@ export default function PosPage() {
                                                         }
                                                     </span>
 
-                                                    {item
-                                                        .is_dual_unit && (
+                                                    {!catalogMode
+                                                        && item
+                                                            .is_dual_unit && (
                                                             <span className="stock-usage">
                                                                 {formatQuantity(
                                                                     item
@@ -4941,56 +6489,93 @@ export default function PosPage() {
                                         </header>
 
                                         <div className="cart-meta">
-                                            <div className="meta-box">
-                                                <span>
-                                                    Unit Price
-                                                </span>
+                                            {catalogMode ? (
+                                                <>
+                                                    <div className="meta-box">
+                                                        <span>
+                                                            Unit
+                                                        </span>
 
-                                                <strong>
-                                                    {currencyFormatter.format(
-                                                        item
-                                                            .selling_price,
-                                                    )}
-                                                    {' / '}
+                                                        <strong>
+                                                            {item
+                                                                .sale_unit}
+                                                        </strong>
+                                                    </div>
 
-                                                    {
-                                                        item
-                                                            .sale_unit
-                                                    }
-                                                </strong>
-                                            </div>
+                                                    <div className="meta-box">
+                                                        <span>
+                                                            Price
+                                                        </span>
 
-                                            <div className="meta-box">
-                                                <span>
-                                                    Available
-                                                </span>
+                                                        <strong>
+                                                            Not Used
+                                                        </strong>
+                                                    </div>
 
-                                                <strong>
-                                                    {formatQuantity(
-                                                        item
-                                                            .available_quantity,
-                                                    )}
-                                                    {' '}
+                                                    <div className="meta-box">
+                                                        <span>
+                                                            Stock Effect
+                                                        </span>
 
-                                                    {
-                                                        item
-                                                            .sale_unit
-                                                    }
-                                                </strong>
-                                            </div>
+                                                        <strong>
+                                                            None
+                                                        </strong>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="meta-box">
+                                                        <span>
+                                                            Unit Price
+                                                        </span>
 
-                                            <div className="meta-box">
-                                                <span>
-                                                    Expiry
-                                                </span>
+                                                        <strong>
+                                                            {currencyFormatter.format(
+                                                                item
+                                                                    .selling_price,
+                                                            )}
+                                                            {' / '}
 
-                                                <strong>
-                                                    {formatExpiryDate(
-                                                        item
-                                                            .expiry_date,
-                                                    )}
-                                                </strong>
-                                            </div>
+                                                            {
+                                                                item
+                                                                    .sale_unit
+                                                            }
+                                                        </strong>
+                                                    </div>
+
+                                                    <div className="meta-box">
+                                                        <span>
+                                                            Available
+                                                        </span>
+
+                                                        <strong>
+                                                            {formatQuantity(
+                                                                item
+                                                                    .available_quantity,
+                                                            )}
+                                                            {' '}
+
+                                                            {
+                                                                item
+                                                                    .sale_unit
+                                                            }
+                                                        </strong>
+                                                    </div>
+
+                                                    <div className="meta-box">
+                                                        <span>
+                                                            Expiry
+                                                        </span>
+
+                                                        <strong>
+                                                            {formatExpiryDate(
+                                                                item
+                                                                    .expiry_date,
+                                                            )}
+                                                        </strong>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
 
                                         <div className="quantity-row">
@@ -5042,8 +6627,10 @@ export default function PosPage() {
                                                     minimumQuantity
                                                 }
                                                 max={
-                                                    item
-                                                        .available_quantity
+                                                    catalogMode
+                                                        ? undefined
+                                                        : item
+                                                            .available_quantity
                                                 }
                                                 step={
                                                     step
@@ -5083,7 +6670,8 @@ export default function PosPage() {
                                                     } ${item.sale_unit
                                                     } quantity`}
                                                 disabled={
-                                                    item.quantity
+                                                    !catalogMode
+                                                    && item.quantity
                                                     >= item
                                                         .available_quantity
                                                     - 0.0001
@@ -5096,16 +6684,22 @@ export default function PosPage() {
                                                         item
                                                             .sale_unit,
 
-                                                        Math.min(
-                                                            item
-                                                                .available_quantity,
-
-                                                            normaliseQuantity(
+                                                        catalogMode
+                                                            ? normaliseQuantity(
                                                                 item
                                                                     .quantity
                                                                 + 1,
+                                                            )
+                                                            : Math.min(
+                                                                item
+                                                                    .available_quantity,
+
+                                                                normaliseQuantity(
+                                                                    item
+                                                                        .quantity
+                                                                    + 1,
+                                                                ),
                                                             ),
-                                                        ),
                                                     );
                                                 }}
                                             >
@@ -5113,54 +6707,58 @@ export default function PosPage() {
                                             </button>
 
                                             <strong className="line-total">
-                                                {currencyFormatter.format(
-                                                    Math.max(
-                                                        0,
-                                                        lineTotal,
-                                                    ),
-                                                )}
+                                                {catalogMode
+                                                    ? 'No Price'
+                                                    : currencyFormatter.format(
+                                                        Math.max(
+                                                            0,
+                                                            lineTotal,
+                                                        ),
+                                                    )}
                                             </strong>
                                         </div>
 
-                                        <label className="discount-row">
-                                            <span>
-                                                Item Discount
-                                                (LKR)
-                                            </span>
+                                        {!catalogMode && (
+                                            <label className="discount-row">
+                                                <span>
+                                                    Item Discount
+                                                    (LKR)
+                                                </span>
 
-                                            <input
-                                                type="number"
-                                                className="number-input"
-                                                min="0"
-                                                max={
-                                                    item.quantity
-                                                    * item
-                                                        .selling_price
-                                                }
-                                                step="0.01"
-                                                value={
-                                                    item
-                                                        .discount
-                                                }
-                                                onChange={(
-                                                    event,
-                                                ) => {
-                                                    updateItemDiscount(
+                                                <input
+                                                    type="number"
+                                                    className="number-input"
+                                                    min="0"
+                                                    max={
+                                                        item.quantity
+                                                        * item
+                                                            .selling_price
+                                                    }
+                                                    step="0.01"
+                                                    value={
                                                         item
-                                                            .stock_batch_id,
+                                                            .discount
+                                                    }
+                                                    onChange={(
+                                                        event,
+                                                    ) => {
+                                                        updateItemDiscount(
+                                                            item
+                                                                .stock_batch_id,
 
-                                                        item
-                                                            .sale_unit,
+                                                            item
+                                                                .sale_unit,
 
-                                                        Number(
-                                                            event
-                                                                .target
-                                                                .value,
-                                                        ),
-                                                    );
-                                                }}
-                                            />
-                                        </label>
+                                                            Number(
+                                                                event
+                                                                    .target
+                                                                    .value,
+                                                            ),
+                                                        );
+                                                    }}
+                                                />
+                                            </label>
+                                        )}
                                     </article>
                                 );
                             },
@@ -5169,77 +6767,92 @@ export default function PosPage() {
                 </div>
 
                 <div className="cart-summary">
-                    <label className="sale-discount">
-                        <span>
-                            Sale Discount
-                            (LKR)
-                        </span>
+                    {catalogMode ? (
+                        <div className="training-summary">
+                            <strong>
+                                Training / Practice Bill
+                            </strong>
 
-                        <input
-                            type="number"
-                            className="number-input"
-                            min="0"
-                            max={
-                                subtotal
-                            }
-                            step="0.01"
-                            value={
-                                saleDiscount
-                            }
-                            onChange={(
-                                event,
-                            ) => {
-                                setSaleDiscount(
-                                    event
-                                        .target
-                                        .value,
-                                );
+                            <span>
+                                Prices, payment and stock deduction are disabled.
+                                This bill will not be recorded as a real sale.
+                            </span>
+                        </div>
+                    ) : (
+                        <>
+                            <label className="sale-discount">
+                                <span>
+                                    Sale Discount
+                                    (LKR)
+                                </span>
 
-                                setCartError(
-                                    '',
-                                );
-                            }}
-                        />
-                    </label>
+                                <input
+                                    type="number"
+                                    className="number-input"
+                                    min="0"
+                                    max={
+                                        subtotal
+                                    }
+                                    step="0.01"
+                                    value={
+                                        saleDiscount
+                                    }
+                                    onChange={(
+                                        event,
+                                    ) => {
+                                        setSaleDiscount(
+                                            event
+                                                .target
+                                                .value,
+                                        );
 
-                    <div className="summary-row">
-                        <span>
-                            Items Total
-                        </span>
+                                        setCartError(
+                                            '',
+                                        );
+                                    }}
+                                />
+                            </label>
 
-                        <strong>
-                            {currencyFormatter.format(
-                                subtotal,
-                            )}
-                        </strong>
-                    </div>
+                            <div className="summary-row">
+                                <span>
+                                    Items Total
+                                </span>
 
-                    <div className="summary-row">
-                        <span>
-                            Sale Discount
-                        </span>
+                                <strong>
+                                    {currencyFormatter.format(
+                                        subtotal,
+                                    )}
+                                </strong>
+                            </div>
 
-                        <strong>
-                            -
-                            {' '}
+                            <div className="summary-row">
+                                <span>
+                                    Sale Discount
+                                </span>
 
-                            {currencyFormatter.format(
-                                safeSaleDiscount,
-                            )}
-                        </strong>
-                    </div>
+                                <strong>
+                                    -
+                                    {' '}
 
-                    <div className="grand-total">
-                        <span>
-                            Amount Due
-                        </span>
+                                    {currencyFormatter.format(
+                                        safeSaleDiscount,
+                                    )}
+                                </strong>
+                            </div>
 
-                        <strong>
-                            {currencyFormatter.format(
-                                grandTotal,
-                            )}
-                        </strong>
-                    </div>
+                            <div className="grand-total">
+                                <span>
+                                    Amount Due
+                                </span>
+
+                                <strong>
+                                    {currencyFormatter.format(
+                                        grandTotal,
+                                    )}
+                                </strong>
+                            </div>
+                        </>
+                    )}
 
                     <button
                         type="button"
@@ -5255,9 +6868,11 @@ export default function PosPage() {
                     >
                         <Icon name="receipt" />
 
-                        {isSubmitting
-                            ? 'Processing Sale...'
-                            : 'Proceed to Payment'}
+                        {catalogMode
+                            ? 'Create Training Bill'
+                            : isSubmitting
+                                ? 'Processing Sale...'
+                                : 'Proceed to Payment'}
                     </button>
 
                     {cart.length > 0 && (
@@ -5319,72 +6934,119 @@ export default function PosPage() {
                 </div>
             </aside>
 
-            <BatchSelectionModal
-                product={
-                    selectedProduct
-                }
-                onClose={() => {
-                    setSelectedProduct(
-                        null,
-                    );
+            {catalogMode ? (
+                <TrainingProductSelectionModal
+                    product={
+                        selectedProduct
+                    }
+                    onClose={() => {
+                        setSelectedProduct(
+                            null,
+                        );
 
-                    refocusSearch();
-                }}
-                onAdd={
-                    addBatchToCart
-                }
-            />
+                        refocusSearch();
+                    }}
+                    onAdd={
+                        addTrainingItemToCart
+                    }
+                />
+            ) : (
+                <BatchSelectionModal
+                    product={
+                        selectedProduct
+                    }
+                    onClose={() => {
+                        setSelectedProduct(
+                            null,
+                        );
 
-            <PaymentModal
-                isOpen={
-                    isPaymentOpen
-                }
-                grandTotal={
-                    grandTotal
-                }
-                discount={
-                    safeSaleDiscount
-                }
-                isSubmitting={
-                    isSubmitting
-                }
-                errorMessage={
-                    paymentError
-                }
-                onClose={() => {
-                    if (
-                        !isSubmitting
-                    ) {
-                        setIsPaymentOpen(
+                        refocusSearch();
+                    }}
+                    onAdd={
+                        addBatchToCart
+                    }
+                />
+            )}
+
+            {catalogMode ? (
+                <TrainingBillModal
+                    isOpen={
+                        isTrainingBillOpen
+                    }
+                    cart={
+                        cart
+                    }
+                    onClose={() => {
+                        setIsTrainingBillOpen(
                             false,
                         );
 
-                        setPaymentError(
-                            '',
+                        refocusSearch();
+                    }}
+                    onFinish={() => {
+                        setIsTrainingBillOpen(
+                            false,
                         );
-                    }
-                }}
-                onSubmit={(
-                    values,
-                ) => {
-                    void submitSale(
-                        values,
-                    );
-                }}
-            />
 
-            <SaleReceiptModal
-                receipt={
-                    receipt
-                }
-                onClose={() => {
-                    setReceipt(
-                        null,
-                    );
+                        clearCart();
 
-                    refocusSearch();
-                }}
-            />
+                        refocusSearch();
+                    }}
+                />
+            ) : (
+                <>
+                    <PaymentModal
+                        isOpen={
+                            isPaymentOpen
+                        }
+                        grandTotal={
+                            grandTotal
+                        }
+                        discount={
+                            safeSaleDiscount
+                        }
+                        isSubmitting={
+                            isSubmitting
+                        }
+                        errorMessage={
+                            paymentError
+                        }
+                        onClose={() => {
+                            if (
+                                !isSubmitting
+                            ) {
+                                setIsPaymentOpen(
+                                    false,
+                                );
+
+                                setPaymentError(
+                                    '',
+                                );
+                            }
+                        }}
+                        onSubmit={(
+                            values,
+                        ) => {
+                            void submitSale(
+                                values,
+                            );
+                        }}
+                    />
+
+                    <SaleReceiptModal
+                        receipt={
+                            receipt
+                        }
+                        onClose={() => {
+                            setReceipt(
+                                null,
+                            );
+
+                            refocusSearch();
+                        }}
+                    />
+                </>
+            )}
         </div>
     );
 }

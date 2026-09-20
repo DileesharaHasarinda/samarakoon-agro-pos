@@ -1,4 +1,4 @@
-export type PosPaymentMethod = "cash" | "card" | "bank_transfer" | "cheque";
+export type PosPaymentMethod = "cash" | "card" | "bank_transfer";
 
 /*
  * A SalePayment row always contains
@@ -115,6 +115,64 @@ export interface PosStockBatch {
 }
 
 /* =========================================================
+   PRODUCT VARIANT / TRAINING BILL OPTION
+   ========================================================= */
+
+export interface PosProductVariant {
+  id: number;
+
+  product_id: number;
+
+  display_name: string;
+
+  size_value: number;
+
+  size_unit: string;
+
+  package_unit: string;
+
+  sku: string | null;
+
+  barcode: string | null;
+
+  is_active: boolean;
+
+  sort_order: number;
+
+  stock_unit: string;
+
+  total_available_quantity: number;
+
+  minimum_price: number | null;
+
+  maximum_price: number | null;
+
+  batches_count: number;
+
+  has_stock: boolean;
+}
+
+export interface PosTrainingOption {
+  key: string;
+
+  label: string;
+
+  unit: string;
+
+  primary_unit: string;
+
+  stock_unit: string;
+
+  variant_id: number | null;
+
+  variant_name: string | null;
+
+  is_dual_unit: boolean;
+
+  conversion_factor: number;
+}
+
+/* =========================================================
    POS PRODUCT
    ========================================================= */
 
@@ -136,6 +194,35 @@ export interface PosProduct {
   stock_unit: string;
 
   is_dual_unit: boolean;
+
+  has_variants?: boolean;
+
+  variants?: PosProductVariant[];
+
+  /*
+   * Training-only unit/variant choices returned by the
+   * include_all catalogue endpoint. The normal New Sale
+   * endpoint returns an empty array here.
+   */
+  training_options?: PosTrainingOption[];
+
+  /*
+   * Full-catalogue sale metadata.
+   *
+   * available:
+   *   current sellable stock exists.
+   *
+   * out_of_stock:
+   *   the product has stock/purchase history but no current stock.
+   *
+   * not_purchased:
+   *   the product exists in the catalogue but has never received stock.
+   */
+  has_purchase_history: boolean;
+
+  can_sell: boolean;
+
+  catalog_status: "available" | "out_of_stock" | "not_purchased";
 
   category: {
     id: number;
@@ -266,10 +353,6 @@ export interface CompleteSaleItemInput {
  *   {
  *     payment_method: "bank_transfer",
  *     amount: 1000
- *   },
- *   {
- *     payment_method: "cheque",
- *     amount: 500
  *   }
  * ]
  */
@@ -345,10 +428,9 @@ export interface CompleteSaleValues {
    *
    * Full sale:
    *
-   * Cash    2000
-   * Card    1500
-   * Bank    1000
-   * Cheque   500
+   * Cash 2500
+   * Card 1500
+   * Bank 1000
    *
    * payments total = 5000
    *
@@ -554,7 +636,6 @@ export interface SaleReceipt {
    * cash
    * card
    * bank_transfer
-   * cheque
    *
    * For multiple:
    *
@@ -653,7 +734,6 @@ export interface SaleHistoryItem {
    * cash
    * card
    * bank_transfer
-   * cheque
    * mixed
    * null
    */
