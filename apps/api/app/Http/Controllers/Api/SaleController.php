@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sale\StoreSaleRequest;
 use App\Models\Customer;
+use App\Models\ProductVariant;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
@@ -488,6 +489,16 @@ class SaleController extends Controller
                     StockBatch::query()
                     ->with([
                         'product:id,name,unit',
+
+                        /*
+                         * StockBatch::primaryUnitValue() uses the variant's
+                         * package_unit for variant products.
+                         *
+                         * Example:
+                         * Tomato Seeds -> 100g Packet
+                         * sale unit     -> Packet
+                         */
+                        'productVariant:id,product_id,package_unit',
                     ])
                     ->whereIn(
                         'id',
@@ -1579,13 +1590,16 @@ class SaleController extends Controller
                         ->product_id,
 
                     /*
-                         * Product variants are not currently used by the
-                         * Samarakoon Agro POS stock-batch sale flow. Keep
-                         * this field in the event contract for forward
-                         * compatibility with realtimeStock.ts.
-                         */
+                     * Keep realtime stock updates variant-aware.
+                     *
+                     * Current batches normally store product_variant_id
+                     * directly. The helper also supports the legacy
+                     * purchase-item variant link.
+                     */
                     'product_variant_id' =>
-                    null,
+                    $this->stockBatchVariantId(
+                        $batch,
+                    ),
 
                     'available_quantity' =>
                     round(
@@ -1659,7 +1673,20 @@ class SaleController extends Controller
 
             'items.product:id,name,unit,sku,barcode',
 
-            'items.stockBatch:id,product_id,purchase_item_id,batch_code,batch_number,purchase_cost,selling_price,is_dual_unit,stock_unit,secondary_unit,conversion_factor,secondary_selling_price,base_unit_cost,received_quantity,available_quantity,manufactured_date,expiry_date,received_at',
+            /*
+             * product_variant_id is required so receipts can display the
+             * exact selected variant, for example:
+             *
+             * Tomato Seeds
+             * Variant: 100g Packet
+             */
+            'items.stockBatch:id,product_id,product_variant_id,purchase_item_id,batch_code,batch_number,purchase_cost,selling_price,is_dual_unit,stock_unit,secondary_unit,conversion_factor,secondary_selling_price,base_unit_cost,received_quantity,available_quantity,manufactured_date,expiry_date,received_at',
+
+            /*
+             * Compatibility fallback for older variant batches where the
+             * variant was stored only on purchase_items.
+             */
+            'items.stockBatch.purchaseItem:id,product_variant_id',
         ]);
     }
 
@@ -1835,6 +1862,66 @@ class SaleController extends Controller
         Sale $sale,
         bool $includeProfit,
     ): array {
+        /*
+         * -----------------------------------------------------
+         * RESOLVE THE EXACT VARIANTS USED BY THIS SALE
+         * -----------------------------------------------------
+         *
+         * Sale items are batch based. The batch is therefore the
+         * authoritative source for the selected product variant.
+         *
+         * Current data:
+         *   stock_batches.product_variant_id
+         *
+         * Legacy compatibility:
+         *   purchase_items.product_variant_id
+         *
+         * We collect every required variant ID first and load all
+         * ProductVariant rows in one query. This avoids an N+1 query
+         * while generating receipts / sale details.
+         */
+        $variantIds =
+            $sale
+            ->items
+            ->map(
+                fn(
+                    SaleItem $item,
+                ): ?int =>
+                $this->saleItemVariantId(
+                    $item,
+                ),
+            )
+            ->filter(
+                fn(
+                    ?int $variantId,
+                ): bool =>
+                $variantId !== null
+                    && $variantId > 0,
+            )
+            ->unique()
+            ->values();
+
+        $variants =
+            $variantIds->isEmpty()
+            ? collect()
+            : ProductVariant::query()
+            ->whereIn(
+                'id',
+                $variantIds->all(),
+            )
+            ->get([
+                'id',
+                'product_id',
+                'size_value',
+                'size_unit',
+                'package_unit',
+                'sku',
+                'barcode',
+                'is_active',
+                'sort_order',
+            ])
+            ->keyBy('id');
+
         return [
             ...$this->saleSummaryData(
                 $sale,
@@ -1845,180 +1932,247 @@ class SaleController extends Controller
             $sale
                 ->items
                 ->map(
-                    fn(
+                    function (
                         SaleItem $item,
-                    ): array => [
-                        'id' =>
-                        $item->id,
+                    ) use (
+                        $variants,
+                        $includeProfit,
+                    ): array {
+                        $variantId =
+                            $this
+                            ->saleItemVariantId(
+                                $item,
+                            );
 
-                        'product_id' =>
-                        $item
-                            ->product_id,
+                        $variant =
+                            $variantId !== null
+                            ? $variants->get(
+                                $variantId,
+                            )
+                            : null;
 
-                        'stock_batch_id' =>
-                        $item
-                            ->stock_batch_id,
+                        $variantData =
+                            $variant
+                            instanceof ProductVariant
+                            ? $this
+                            ->saleVariantData(
+                                $variant,
+                            )
+                            : null;
 
-                        'quantity' =>
-                        (float) $item
-                            ->quantity,
+                        return [
+                            'id' =>
+                            $item->id,
 
-                        'returned_quantity' =>
-                        (float) (
+                            'product_id' =>
                             $item
-                            ->returned_quantity
-                            ?? 0
-                        ),
+                                ->product_id,
 
-                        'remaining_returnable_quantity' =>
-                        $item
-                            ->remainingReturnableQuantity(),
+                            /*
+                             * Returned directly on the sale item because
+                             * receipt/invoice UIs should not need to infer
+                             * the selected variant from another object.
+                             */
+                            'product_variant_id' =>
+                            $variantId,
 
-                        'sale_unit' =>
-                        $item
-                            ->saleUnitValue(),
+                            'variant' =>
+                            $variantData,
 
-                        'conversion_factor' =>
-                        $item
-                            ->conversionFactorValue(),
+                            'stock_batch_id' =>
+                            $item
+                                ->stock_batch_id,
 
-                        'stock_quantity' =>
-                        $item
-                            ->stockQuantityValue(),
+                            'quantity' =>
+                            (float) $item
+                                ->quantity,
 
-                        'returned_stock_quantity' =>
-                        $item
-                            ->returnedStockQuantity(),
-
-                        'remaining_returnable_stock_quantity' =>
-                        $item
-                            ->remainingReturnableStockQuantity(),
-
-                        'purchase_cost' =>
-                        $includeProfit
-                            ? (float) $item
-                                ->purchase_cost
-                            : null,
-
-                        'selling_price' =>
-                        (float) $item
-                            ->selling_price,
-
-                        'discount' =>
-                        (float) $item
-                            ->discount,
-
-                        'line_total' =>
-                        (float) $item
-                            ->line_total,
-
-                        'gross_profit' =>
-                        $includeProfit
-                            ? (float) $item
-                                ->gross_profit
-                            : null,
-
-                        'product' =>
-                        $item->product
-                            ? [
-                                'id' =>
+                            'returned_quantity' =>
+                            (float) (
                                 $item
-                                    ->product
-                                    ->id,
+                                ->returned_quantity
+                                ?? 0
+                            ),
 
-                                'name' =>
-                                $item
-                                    ->product
-                                    ->name,
+                            'remaining_returnable_quantity' =>
+                            $item
+                                ->remainingReturnableQuantity(),
 
-                                'unit' =>
-                                $item
-                                    ->product
-                                    ->unit,
+                            /*
+                             * IMPORTANT:
+                             * This is the unit actually sold to the customer.
+                             *
+                             * Examples:
+                             * Bag
+                             * Kg
+                             * Packet
+                             * Bottle
+                             *
+                             * The receipt must use this instead of blindly
+                             * displaying product.unit.
+                             */
+                            'sale_unit' =>
+                            $item
+                                ->saleUnitValue(),
 
-                                'sku' =>
-                                $item
-                                    ->product
-                                    ->sku,
+                            'conversion_factor' =>
+                            $item
+                                ->conversionFactorValue(),
 
-                                'barcode' =>
-                                $item
-                                    ->product
-                                    ->barcode,
-                            ]
-                            : null,
+                            'stock_quantity' =>
+                            $item
+                                ->stockQuantityValue(),
 
-                        'batch' =>
-                        $item->stockBatch
-                            ? [
-                                'id' =>
-                                $item
-                                    ->stockBatch
-                                    ->id,
+                            'returned_stock_quantity' =>
+                            $item
+                                ->returnedStockQuantity(),
 
-                                'batch_code' =>
-                                $item
-                                    ->stockBatch
-                                    ->batch_code,
+                            'remaining_returnable_stock_quantity' =>
+                            $item
+                                ->remainingReturnableStockQuantity(),
 
-                                'batch_number' =>
-                                $item
-                                    ->stockBatch
-                                    ->batch_number,
+                            'purchase_cost' =>
+                            $includeProfit
+                                ? (float) $item
+                                    ->purchase_cost
+                                : null,
 
-                                'is_dual_unit' =>
-                                (bool) $item
-                                    ->stockBatch
-                                    ->is_dual_unit,
+                            'selling_price' =>
+                            (float) $item
+                                ->selling_price,
 
-                                'stock_unit' =>
-                                $item
-                                    ->stockBatch
-                                    ->stock_unit,
+                            'discount' =>
+                            (float) $item
+                                ->discount,
 
-                                'secondary_unit' =>
-                                $item
-                                    ->stockBatch
-                                    ->secondary_unit,
+                            'line_total' =>
+                            (float) $item
+                                ->line_total,
 
-                                'conversion_factor' =>
-                                (float) (
+                            'gross_profit' =>
+                            $includeProfit
+                                ? (float) $item
+                                    ->gross_profit
+                                : null,
+
+                            'product' =>
+                            $item->product
+                                ? [
+                                    'id' =>
                                     $item
-                                    ->stockBatch
-                                    ->conversion_factor
-                                    ?? 1
-                                ),
+                                        ->product
+                                        ->id,
 
-                                'primary_selling_price' =>
-                                (float) $item
-                                    ->stockBatch
-                                    ->selling_price,
+                                    'name' =>
+                                    $item
+                                        ->product
+                                        ->name,
 
-                                'secondary_selling_price' =>
-                                $item
-                                    ->stockBatch
-                                    ->secondary_selling_price
-                                    !== null
-                                    ? (float) $item
+                                    /*
+                                     * Keep the product's configured primary
+                                     * unit for reference. Receipt quantity
+                                     * display uses sale_unit above.
+                                     */
+                                    'unit' =>
+                                    $item
+                                        ->product
+                                        ->unit,
+
+                                    'sku' =>
+                                    $item
+                                        ->product
+                                        ->sku,
+
+                                    'barcode' =>
+                                    $item
+                                        ->product
+                                        ->barcode,
+                                ]
+                                : null,
+
+                            'batch' =>
+                            $item->stockBatch
+                                ? [
+                                    'id' =>
+                                    $item
+                                        ->stockBatch
+                                        ->id,
+
+                                    'product_variant_id' =>
+                                    $variantId,
+
+                                    /*
+                                     * Keep the variant under the batch as
+                                     * well for backwards/alternate receipt
+                                     * consumers.
+                                     */
+                                    'variant' =>
+                                    $variantData,
+
+                                    'batch_code' =>
+                                    $item
+                                        ->stockBatch
+                                        ->batch_code,
+
+                                    'batch_number' =>
+                                    $item
+                                        ->stockBatch
+                                        ->batch_number,
+
+                                    'is_dual_unit' =>
+                                    (bool) $item
+                                        ->stockBatch
+                                        ->is_dual_unit,
+
+                                    'stock_unit' =>
+                                    $item
+                                        ->stockBatch
+                                        ->stock_unit,
+
+                                    'secondary_unit' =>
+                                    $item
+                                        ->stockBatch
+                                        ->secondary_unit,
+
+                                    'conversion_factor' =>
+                                    (float) (
+                                        $item
+                                        ->stockBatch
+                                        ->conversion_factor
+                                        ?? 1
+                                    ),
+
+                                    'primary_selling_price' =>
+                                    (float) $item
+                                        ->stockBatch
+                                        ->selling_price,
+
+                                    'secondary_selling_price' =>
+                                    $item
                                         ->stockBatch
                                         ->secondary_selling_price
-                                    : null,
+                                        !== null
+                                        ? (float) $item
+                                            ->stockBatch
+                                            ->secondary_selling_price
+                                        : null,
 
-                                'available_quantity' =>
-                                (float) $item
-                                    ->stockBatch
-                                    ->available_quantity,
+                                    'available_quantity' =>
+                                    (float) $item
+                                        ->stockBatch
+                                        ->available_quantity,
 
-                                'expiry_date' =>
-                                $item
-                                    ->stockBatch
-                                    ->expiry_date
-                                    ?->format(
-                                        'Y-m-d',
-                                    ),
-                            ]
-                            : null,
-                    ],
+                                    'expiry_date' =>
+                                    $item
+                                        ->stockBatch
+                                        ->expiry_date
+                                        ?->format(
+                                            'Y-m-d',
+                                        ),
+                                ]
+                                : null,
+                        ];
+                    },
                 )
                 ->values(),
 
@@ -2075,6 +2229,138 @@ class SaleController extends Controller
                     ],
                 )
                 ->values(),
+        ];
+    }
+
+    /**
+     * Resolve the product variant connected to a stock batch.
+     *
+     * Current source:
+     * stock_batches.product_variant_id
+     *
+     * Legacy compatibility source:
+     * purchase_items.product_variant_id
+     */
+    private function stockBatchVariantId(
+        StockBatch $batch,
+    ): ?int {
+        $batchVariantId =
+            $batch->getAttribute(
+                'product_variant_id',
+            );
+
+        if (
+            $batchVariantId !== null
+            && (int) $batchVariantId > 0
+        ) {
+            return (int) $batchVariantId;
+        }
+
+        if (
+            $batch->relationLoaded(
+                'purchaseItem',
+            )
+            && $batch->purchaseItem
+        ) {
+            $purchaseVariantId =
+                $batch
+                ->purchaseItem
+                ->getAttribute(
+                    'product_variant_id',
+                );
+
+            if (
+                $purchaseVariantId !== null
+                && (int) $purchaseVariantId > 0
+            ) {
+                return (int) $purchaseVariantId;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve the variant for a sale item without changing the sale-item
+     * database schema.
+     *
+     * If a future/current installation already has product_variant_id on
+     * sale_items, use it first. Otherwise derive it from the exact stock
+     * batch that was sold.
+     */
+    private function saleItemVariantId(
+        SaleItem $item,
+    ): ?int {
+        $itemVariantId =
+            $item->getAttribute(
+                'product_variant_id',
+            );
+
+        if (
+            $itemVariantId !== null
+            && (int) $itemVariantId > 0
+        ) {
+            return (int) $itemVariantId;
+        }
+
+        if (
+            !$item->stockBatch
+                instanceof StockBatch
+        ) {
+            return null;
+        }
+
+        return $this
+            ->stockBatchVariantId(
+                $item->stockBatch,
+            );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function saleVariantData(
+        ProductVariant $variant,
+    ): array {
+        return [
+            'id' =>
+            (int) $variant->id,
+
+            'product_id' =>
+            (int) $variant
+                ->product_id,
+
+            'display_name' =>
+            $variant
+                ->displayName(),
+
+            'size_value' =>
+            (float) $variant
+                ->size_value,
+
+            'size_unit' =>
+            $variant
+                ->size_unit,
+
+            'package_unit' =>
+            $variant
+                ->package_unit,
+
+            'sku' =>
+            $variant
+                ->sku,
+
+            'barcode' =>
+            $variant
+                ->barcode,
+
+            'is_active' =>
+            (bool) $variant
+                ->is_active,
+
+            'sort_order' =>
+            (int) $variant
+                ->sort_order,
         ];
     }
 

@@ -1,4 +1,4 @@
-export type PosPaymentMethod = "cash" | "card" | "bank_transfer";
+export type PosPaymentMethod = "cash" | "card" | "bank_transfer" | "cheque";
 
 /*
  * A SalePayment row always contains
@@ -11,6 +11,25 @@ export type PosPaymentMethod = "cash" | "card" | "bank_transfer";
 export type PosPaymentSummaryMethod = PosPaymentMethod | "mixed";
 
 export type SaleSettlementType = "full" | "partial" | "due";
+
+/*
+ * =========================================================
+ * TRAINING PAYMENT
+ * =========================================================
+ *
+ * Training Billing intentionally does NOT create SalePayment
+ * database rows. This structure is only used to simulate the
+ * checkout/payment-method step and print it on a training bill.
+ */
+export interface TrainingPaymentDetails {
+  payment_method: PosPaymentMethod;
+
+  customer_reference: string;
+
+  reference_number: string;
+
+  notes: string;
+}
 
 export type PosSaleOptionKey = "primary" | "secondary";
 
@@ -34,6 +53,14 @@ export interface PosSaleOption {
   label: string;
 
   unit: string;
+
+  /*
+   * Training Mode may deliberately allow catalogue items that do not
+   * yet have an allocated selling price. In that case selling_price is
+   * kept as 0 for arithmetic compatibility, while price_available=false
+   * tells the UI/receipt not to display that value as a real price.
+   */
+  price_available?: boolean;
 
   selling_price: number;
 
@@ -60,6 +87,21 @@ export interface PosSaleOption {
 
 export interface PosStockBatch {
   id: number;
+
+  /*
+   * Frontend-only Training Mode batch used when a catalogue product or
+   * variant has never been purchased and therefore has no real stock batch.
+   * It is NEVER submitted to the real sale API.
+   */
+  is_training_virtual?: boolean;
+
+  /*
+   * Variant metadata is returned for variant-aware stock batches.
+   * Normal products keep these values null/undefined.
+   */
+  product_variant_id?: number | null;
+
+  variant?: PosProductVariant | null;
 
   purchase_item_id: number | null;
 
@@ -284,7 +326,32 @@ export interface PosCartItem {
 
   product_id: number;
 
+  /*
+   * Training-only metadata.
+   *
+   * price_available=false means no selling price has been allocated yet.
+   * is_training_virtual_batch=true means the item came from a synthetic
+   * Training Mode batch because no real purchase/stock batch exists.
+   */
+  price_available?: boolean;
+
+  is_training_virtual_batch?: boolean;
+
   product_name: string;
+
+  /*
+   * Keep enough source metadata in the cart to build the exact same
+   * receipt in Training Billing without creating a database sale.
+   */
+  product_unit?: string;
+
+  product_sku?: string | null;
+
+  product_barcode?: string | null;
+
+  product_variant_id?: number | null;
+
+  variant?: PosProductVariant | null;
 
   primary_unit: string;
 
@@ -292,9 +359,15 @@ export interface PosCartItem {
 
   stock_unit: string;
 
+  secondary_unit?: string | null;
+
   is_dual_unit: boolean;
 
   conversion_factor: number;
+
+  primary_selling_price?: number;
+
+  secondary_selling_price?: number | null;
 
   stock_quantity: number;
 
@@ -480,11 +553,51 @@ export interface SaleCashier {
 }
 
 /* =========================================================
+   RECEIPT VARIANT
+   ========================================================= */
+
+export interface SaleReceiptVariant {
+  id: number;
+
+  product_id: number;
+
+  /*
+   * Human-readable label returned by ProductVariant::displayName().
+   *
+   * Example:
+   * 100g Packet
+   */
+  display_name: string;
+
+  size_value: number;
+
+  size_unit: string;
+
+  package_unit: string;
+
+  sku: string | null;
+
+  barcode: string | null;
+
+  is_active: boolean;
+
+  sort_order: number;
+}
+
+/* =========================================================
    RECEIPT BATCH
    ========================================================= */
 
 export interface SaleReceiptBatch {
   id: number;
+
+  /*
+   * Exact product variant attached to this sold batch.
+   * Null for normal non-variant products.
+   */
+  product_variant_id: number | null;
+
+  variant: SaleReceiptVariant | null;
 
   batch_code: string;
 
@@ -516,6 +629,23 @@ export interface SaleReceiptItem {
 
   product_id: number;
 
+  /*
+   * Training receipts can contain catalogue products without an allocated
+   * selling price. When false, the receipt must omit unit/line prices for
+   * this item instead of printing a misleading LKR 0.00.
+   */
+  price_available?: boolean;
+
+  /*
+   * Exact variant sold.
+   *
+   * Example:
+   * Tomato Seeds -> 100g Packet
+   */
+  product_variant_id: number | null;
+
+  variant: SaleReceiptVariant | null;
+
   stock_batch_id: number;
 
   quantity: number;
@@ -524,6 +654,17 @@ export interface SaleReceiptItem {
 
   remaining_returnable_quantity: number;
 
+  /*
+   * Unit actually sold to the customer.
+   *
+   * Examples:
+   * Bag
+   * Kg
+   * Packet
+   * Bottle
+   *
+   * Receipt printing must use this value rather than product.unit.
+   */
   sale_unit: string;
 
   conversion_factor: number;
@@ -580,7 +721,18 @@ export interface SaleReceiptPayment {
 
   payment_type: string;
 
+  /*
+   * amount is the amount applied to the bill.
+   * received_amount/amount_received are optional tendered-cash values
+   * used by both persisted receipts and simulated Training Billing.
+   */
   amount: number;
+
+  received_amount?: number;
+
+  amount_received?: number;
+
+  change_amount?: number;
 
   reference_number: string | null;
 
@@ -602,6 +754,14 @@ export interface SaleReceiptPayment {
 export interface SaleReceipt {
   id: number;
 
+  /*
+   * Optional frontend-only flags used by Training Mode receipts.
+   * Real backend receipts simply omit these fields.
+   */
+  is_training?: boolean;
+
+  has_unpriced_items?: boolean;
+
   sale_number: string;
 
   sale_date: string;
@@ -615,6 +775,12 @@ export interface SaleReceipt {
   grand_total: number;
 
   paid_amount: number;
+
+  /*
+   * Optional tendered amount. The backend may omit it on older
+   * responses; the receipt renderer also derives it from payments.
+   */
+  amount_received?: number;
 
   due_amount: number;
 
@@ -636,6 +802,7 @@ export interface SaleReceipt {
    * cash
    * card
    * bank_transfer
+   * cheque
    *
    * For multiple:
    *
@@ -734,6 +901,7 @@ export interface SaleHistoryItem {
    * cash
    * card
    * bank_transfer
+   * cheque
    * mixed
    * null
    */

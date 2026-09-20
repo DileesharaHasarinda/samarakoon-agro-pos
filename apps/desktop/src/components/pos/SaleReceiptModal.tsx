@@ -95,27 +95,103 @@ type NumericValue =
     | null
     | undefined;
 
+interface PrintableVariant {
+    id?: number;
+
+    /*
+     * Current variant API shape normally uses display_name.
+     * name is kept as a compatibility fallback for older/newer payloads.
+     */
+    display_name?: string | null;
+    name?: string | null;
+
+    size_value?: NumericValue;
+    size_unit?: string | null;
+    package_unit?: string | null;
+
+    sku?: string | null;
+    barcode?: string | null;
+}
+
 interface PrintableProduct {
     name?: string;
     unit?: string | null;
     sku?: string | null;
     barcode?: string | null;
+
+    /*
+     * Compatibility fields in case the API places the selected variant
+     * beneath the product object.
+     */
+    variant?: PrintableVariant | null;
+    product_variant?: PrintableVariant | null;
 }
 
 interface PrintableBatch {
     batch_code?: string | null;
     batch_number?: string | null;
+
+    product_variant_id?: number | null;
+
+    is_dual_unit?: boolean | null;
+    stock_unit?: string | null;
+    secondary_unit?: string | null;
+    conversion_factor?: NumericValue;
+
+    /*
+     * Current/future API payloads may expose the batch variant using
+     * either of these names. Supporting both keeps receipt rendering
+     * backward compatible.
+     */
+    variant?: PrintableVariant | null;
+    product_variant?: PrintableVariant | null;
 }
 
 interface PrintableItem {
     id?: number;
+    product_id?: number;
+    stock_batch_id?: number;
+
+    /*
+     * Training Mode can bill an item before a selling price is allocated.
+     * false means the receipt must omit price values for this line.
+     */
+    price_available?: boolean | null;
+
+    product_variant_id?: number | null;
+
     product_name?: string;
+
     quantity?: NumericValue;
+
+    /*
+     * IMPORTANT:
+     * This is the unit actually sold to the customer.
+     *
+     * Examples:
+     * Bag
+     * Kg
+     * Packet
+     * Bottle
+     */
+    sale_unit?: string | null;
+
+    conversion_factor?: NumericValue;
+    stock_quantity?: NumericValue;
+
     selling_price?: NumericValue;
     unit_price?: NumericValue;
     discount?: NumericValue;
     line_total?: NumericValue;
-    product?: PrintableProduct;
+
+    product?: PrintableProduct | null;
+
+    /*
+     * Variant may be returned directly on the sale item.
+     */
+    variant?: PrintableVariant | null;
+    product_variant?: PrintableVariant | null;
+
     batch?: PrintableBatch | null;
     stock_batch?: PrintableBatch | null;
 }
@@ -154,6 +230,10 @@ interface PrintableUser {
 
 interface PrintableSale {
     id?: number;
+
+    is_training?: boolean;
+    has_unpriced_items?: boolean;
+
     sale_number?: string;
     sale_date?: string;
     created_at?: string;
@@ -185,6 +265,9 @@ interface PrintableSale {
 }
 
 interface DocumentView {
+    isTraining: boolean;
+    hasUnpricedItems: boolean;
+
     saleNumber: string;
     saleDate: string;
     cashierName: string;
@@ -353,6 +436,16 @@ function businessContactText(
     return `Tel: ${contacts.join(' / ')}`;
 }
 
+function itemPriceAvailable(
+    item: PrintableItem,
+): boolean {
+    return (
+        item
+            .price_available
+        !== false
+    );
+}
+
 function itemUnitPrice(
     item: PrintableItem,
 ): number {
@@ -394,6 +487,275 @@ function itemBatchNumber(
     return batch?.batch_number
         ?? batch?.batch_code
         ?? null;
+}
+
+
+function cleanText(
+    value:
+        | string
+        | null
+        | undefined,
+): string | null {
+    const cleaned =
+        String(
+            value
+            ?? '',
+        ).trim();
+
+    return cleaned !== ''
+        ? cleaned
+        : null;
+}
+
+function normaliseComparableUnit(
+    value:
+        | string
+        | null
+        | undefined,
+): string {
+    return String(
+        value
+        ?? '',
+    )
+        .trim()
+        .toLowerCase();
+}
+
+function formatVariantSizeValue(
+    value: NumericValue,
+): string | null {
+    if (
+        value === null
+        || value === undefined
+        || String(value).trim() === ''
+    ) {
+        return null;
+    }
+
+    const numeric =
+        Number(
+            value,
+        );
+
+    if (
+        Number.isFinite(
+            numeric,
+        )
+    ) {
+        return new Intl.NumberFormat(
+            'en-GB',
+            {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 3,
+            },
+        ).format(
+            numeric,
+        );
+    }
+
+    return String(
+        value,
+    ).trim()
+        || null;
+}
+
+function variantName(
+    variant:
+        PrintableVariant
+        | null
+        | undefined,
+): string | null {
+    if (!variant) {
+        return null;
+    }
+
+    const directName =
+        cleanText(
+            variant.display_name,
+        )
+        ?? cleanText(
+            variant.name,
+        );
+
+    if (directName) {
+        return directName;
+    }
+
+    const sizeValue =
+        formatVariantSizeValue(
+            variant.size_value,
+        );
+
+    const sizeUnit =
+        cleanText(
+            variant.size_unit,
+        );
+
+    const packageUnit =
+        cleanText(
+            variant.package_unit,
+        );
+
+    const sizeText =
+        sizeValue
+            ? `${sizeValue}${sizeUnit ?? ''}`
+            : null;
+
+    const combined =
+        [
+            sizeText,
+            packageUnit,
+        ]
+            .filter(
+                (
+                    value,
+                ): value is string =>
+                    Boolean(value),
+            )
+            .join(
+                ' ',
+            )
+            .trim();
+
+    return combined !== ''
+        ? combined
+        : null;
+}
+
+function itemVariant(
+    item: PrintableItem,
+): PrintableVariant | null {
+    const batch =
+        item.batch
+        ?? item.stock_batch;
+
+    return (
+        item.variant
+        ?? item.product_variant
+        ?? batch?.variant
+        ?? batch?.product_variant
+        ?? item.product?.variant
+        ?? item.product?.product_variant
+        ?? null
+    );
+}
+
+function itemVariantName(
+    item: PrintableItem,
+): string | null {
+    return variantName(
+        itemVariant(
+            item,
+        ),
+    );
+}
+
+function itemSaleUnit(
+    item: PrintableItem,
+): string {
+    return (
+        cleanText(
+            item.sale_unit,
+        )
+        ?? cleanText(
+            item.product?.unit,
+        )
+        ?? 'Unit'
+    );
+}
+
+function itemSaleMode(
+    item: PrintableItem,
+): string | null {
+    const batch =
+        item.batch
+        ?? item.stock_batch;
+
+    if (!batch) {
+        return null;
+    }
+
+    const saleUnit =
+        itemSaleUnit(
+            item,
+        );
+
+    const saleUnitKey =
+        normaliseComparableUnit(
+            saleUnit,
+        );
+
+    const productUnitKey =
+        normaliseComparableUnit(
+            item.product?.unit,
+        );
+
+    const secondaryUnit =
+        cleanText(
+            batch.secondary_unit,
+        );
+
+    const secondaryUnitKey =
+        normaliseComparableUnit(
+            secondaryUnit,
+        );
+
+    const isDualUnit =
+        Boolean(
+            batch.is_dual_unit,
+        )
+        || (
+            secondaryUnitKey !== ''
+            && numberValue(
+                batch.conversion_factor,
+                1,
+            ) > 1
+        );
+
+    if (
+        isDualUnit
+        && secondaryUnitKey !== ''
+        && saleUnitKey
+        === secondaryUnitKey
+    ) {
+        return `Loose ${saleUnit}`;
+    }
+
+    if (
+        isDualUnit
+        && productUnitKey !== ''
+        && saleUnitKey
+        === productUnitKey
+    ) {
+        return `Full ${saleUnit}`;
+    }
+
+    /*
+     * Compatibility fallback:
+     * if the sold unit differs from the product's configured primary unit,
+     * make that explicit on the bill even when an old batch payload does
+     * not contain complete dual-unit metadata.
+     */
+    if (
+        saleUnitKey !== ''
+        && productUnitKey !== ''
+        && saleUnitKey
+        !== productUnitKey
+    ) {
+        return `Sold as ${saleUnit}`;
+    }
+
+    return null;
+}
+
+function itemQuantityText(
+    item: PrintableItem,
+): string {
+    return `${formatQuantity(
+        item.quantity,
+    )} ${itemSaleUnit(
+        item,
+    )}`;
 }
 
 function createCurrencyFormatter(
@@ -681,7 +1043,38 @@ function createDocumentView(
                 - grandTotal,
             );
 
+    const hasUnpricedItems =
+        Boolean(
+            sale
+                .has_unpriced_items,
+        )
+        || items.some(
+            (
+                item,
+            ) =>
+                !itemPriceAvailable(
+                    item,
+                ),
+        );
+
+    const isTraining =
+        Boolean(
+            sale
+                .is_training,
+        )
+        || String(
+            sale.sale_number
+            ?? '',
+        )
+            .toUpperCase()
+            .startsWith(
+                'TRAINING-',
+            );
+
     return {
+        isTraining,
+
+        hasUnpricedItems,
         saleNumber:
             sale.sale_number
             ?? `SALE-${sale.id ?? ''}`,
@@ -823,9 +1216,23 @@ function receiptNeedsUnicodeRendering(
     document.items.forEach((item) => {
         visibleText.push(
             itemName(item),
+
+            itemVariantName(
+                item,
+            ),
+
+            itemSaleUnit(
+                item,
+            ),
+
+            itemSaleMode(
+                item,
+            ),
+
             settings.show_sku
                 ? item.product?.sku
                 : null,
+
             settings.show_batch_number
                 ? itemBatchNumber(item)
                 : null,
@@ -1770,6 +2177,28 @@ function ThermalReceipt({
                                 {itemName(item)}
                             </strong>
 
+                            {itemVariantName(
+                                item,
+                            ) && (
+                                    <small>
+                                        {' '}
+                                        {itemVariantName(
+                                            item,
+                                        )}
+                                    </small>
+                                )}
+
+                            {itemSaleMode(
+                                item,
+                            ) && (
+                                    <small>
+                                        {' '}
+                                        {itemSaleMode(
+                                            item,
+                                        )}
+                                    </small>
+                                )}
+
                             {settings.show_sku
                                 && item.product?.sku && (
                                     <small>
@@ -1790,29 +2219,44 @@ function ThermalReceipt({
 
                             <div>
                                 <span>
-                                    {formatQuantity(
-                                        item.quantity,
+                                    {itemQuantityText(
+                                        item,
                                     )}
-                                    {' × '}
-                                    {money(
-                                        itemUnitPrice(
-                                            item,
-                                        ),
-                                    )}
+
+                                    {itemPriceAvailable(
+                                        item,
+                                    ) && (
+                                            <>
+                                                {' × '}
+
+                                                {money(
+                                                    itemUnitPrice(
+                                                        item,
+                                                    ),
+                                                )}
+                                            </>
+                                        )}
                                 </span>
 
-                                <strong>
-                                    {money(
-                                        itemLineTotal(
-                                            item,
-                                        ),
+                                {itemPriceAvailable(
+                                    item,
+                                ) && (
+                                        <strong>
+                                            {money(
+                                                itemLineTotal(
+                                                    item,
+                                                ),
+                                            )}
+                                        </strong>
                                     )}
-                                </strong>
                             </div>
 
-                            {numberValue(
-                                item.discount,
-                            ) > 0 && (
+                            {itemPriceAvailable(
+                                item,
+                            )
+                                && numberValue(
+                                    item.discount,
+                                ) > 0 && (
                                     <small>
                                         Discount:
                                         {' -'}
@@ -1831,83 +2275,97 @@ function ThermalReceipt({
             <div className="thermal-divider" />
 
             <section className="thermal-totals">
-                <div>
-                    <span>
-                        Subtotal
-                    </span>
-
-                    <strong>
-                        {money(
-                            document.subtotal,
-                        )}
-                    </strong>
-                </div>
-
-                {document.totalDiscount > 0 && (
+                {document.hasUnpricedItems ? (
                     <div>
                         <span>
-                            Discount
+                            Pricing
                         </span>
 
                         <strong>
-                            -
-                            {money(
-                                document.totalDiscount,
-                            )}
+                            Not shown
                         </strong>
                     </div>
-                )}
+                ) : (
+                    <>
+                        <div>
+                            <span>
+                                Subtotal
+                            </span>
 
-                <div className="thermal-grand">
-                    <span>
-                        Grand Total
-                    </span>
+                            <strong>
+                                {money(
+                                    document.subtotal,
+                                )}
+                            </strong>
+                        </div>
 
-                    <strong>
-                        {money(
-                            document.grandTotal,
+                        {document.totalDiscount > 0 && (
+                            <div>
+                                <span>
+                                    Discount
+                                </span>
+
+                                <strong>
+                                    -
+                                    {money(
+                                        document.totalDiscount,
+                                    )}
+                                </strong>
+                            </div>
                         )}
-                    </strong>
-                </div>
 
-                <div>
-                    <span>
-                        Amount Received
-                    </span>
+                        <div className="thermal-grand">
+                            <span>
+                                Grand Total
+                            </span>
 
-                    <strong>
-                        {money(
-                            document.amountReceived,
+                            <strong>
+                                {money(
+                                    document.grandTotal,
+                                )}
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                Amount Received
+                            </span>
+
+                            <strong>
+                                {money(
+                                    document.amountReceived,
+                                )}
+                            </strong>
+                        </div>
+
+                        {document.dueAmount > 0 && (
+                            <div className="thermal-due">
+                                <span>
+                                    Due
+                                </span>
+
+                                <strong>
+                                    {money(
+                                        document.dueAmount,
+                                    )}
+                                </strong>
+                            </div>
                         )}
-                    </strong>
-                </div>
 
-                {document.dueAmount > 0 && (
-                    <div className="thermal-due">
-                        <span>
-                            Due
-                        </span>
+                        {document.changeAmount > 0 && (
+                            <div>
+                                <span>
+                                    Change
+                                </span>
 
-                        <strong>
-                            {money(
-                                document.dueAmount,
-                            )}
-                        </strong>
-                    </div>
-                )}
-
-                {document.changeAmount > 0 && (
-                    <div>
-                        <span>
-                            Change
-                        </span>
-
-                        <strong>
-                            {money(
-                                document.changeAmount,
-                            )}
-                        </strong>
-                    </div>
+                                <strong>
+                                    {money(
+                                        document.changeAmount,
+                                    )}
+                                </strong>
+                            </div>
+                        )}
+                    </>
                 )}
             </section>
 
@@ -1950,16 +2408,27 @@ function ThermalReceipt({
                                 </span>
 
                                 <strong>
-                                    {money(
-                                        numberValue(
-                                            payment.amount,
-                                        ),
-                                    )}
+                                    {document.hasUnpricedItems
+                                        ? (
+                                            settings.show_payment_reference
+                                                && payment.reference_number
+                                                ? payment.reference_number
+                                                : 'Selected'
+                                        )
+                                        : (
+                                            <>
+                                                {money(
+                                                    numberValue(
+                                                        payment.amount,
+                                                    ),
+                                                )}
 
-                                    {settings.show_payment_reference
-                                        && payment.reference_number
-                                        ? ` · ${payment.reference_number}`
-                                        : ''}
+                                                {settings.show_payment_reference
+                                                    && payment.reference_number
+                                                    ? ` · ${payment.reference_number}`
+                                                    : ''}
+                                            </>
+                                        )}
                                 </strong>
                             </div>
                         ),
@@ -2170,11 +2639,17 @@ function A4Invoice({
                                     {paymentMethodName(
                                         payment.payment_method,
                                     )}
-                                    {': '}
-                                    {money(
-                                        numberValue(
-                                            payment.amount,
-                                        ),
+
+                                    {!document.hasUnpricedItems && (
+                                        <>
+                                            {': '}
+
+                                            {money(
+                                                numberValue(
+                                                    payment.amount,
+                                                ),
+                                            )}
+                                        </>
                                     )}
                                 </p>
                             ),
@@ -2247,6 +2722,28 @@ function A4Invoice({
                                     </strong>
 
                                     <div className="invoice-item-meta">
+                                        {itemVariantName(
+                                            item,
+                                        ) && (
+                                                <small>
+                                                    {' '}
+                                                    {itemVariantName(
+                                                        item,
+                                                    )}
+                                                </small>
+                                            )}
+
+                                        {itemSaleMode(
+                                            item,
+                                        ) && (
+                                                <small>
+                                                    {' '}
+                                                    {itemSaleMode(
+                                                        item,
+                                                    )}
+                                                </small>
+                                            )}
+
                                         {settings.show_sku
                                             && item.product?.sku && (
                                                 <small>
@@ -2268,37 +2765,45 @@ function A4Invoice({
                                 </td>
 
                                 <td>
-                                    {formatQuantity(
-                                        item.quantity,
-                                    )}
-
-                                    {item.product?.unit
-                                        ? ` ${item.product.unit}`
-                                        : ''}
-                                </td>
-
-                                <td>
-                                    {money(
-                                        itemUnitPrice(
-                                            item,
-                                        ),
+                                    {itemQuantityText(
+                                        item,
                                     )}
                                 </td>
 
                                 <td>
-                                    {money(
-                                        numberValue(
-                                            item.discount,
-                                        ),
-                                    )}
+                                    {itemPriceAvailable(
+                                        item,
+                                    )
+                                        ? money(
+                                            itemUnitPrice(
+                                                item,
+                                            ),
+                                        )
+                                        : '—'}
                                 </td>
 
                                 <td>
-                                    {money(
-                                        itemLineTotal(
-                                            item,
-                                        ),
-                                    )}
+                                    {itemPriceAvailable(
+                                        item,
+                                    )
+                                        ? money(
+                                            numberValue(
+                                                item.discount,
+                                            ),
+                                        )
+                                        : '—'}
+                                </td>
+
+                                <td>
+                                    {itemPriceAvailable(
+                                        item,
+                                    )
+                                        ? money(
+                                            itemLineTotal(
+                                                item,
+                                            ),
+                                        )
+                                        : '—'}
                                 </td>
                             </tr>
                         ),
@@ -2333,14 +2838,20 @@ function A4Invoice({
                                     {paymentMethodName(
                                         payment.payment_method,
                                     )}
-                                    {': '}
-                                    <strong>
-                                        {money(
-                                            numberValue(
-                                                payment.amount,
-                                            ),
-                                        )}
-                                    </strong>
+
+                                    {!document.hasUnpricedItems && (
+                                        <>
+                                            {': '}
+
+                                            <strong>
+                                                {money(
+                                                    numberValue(
+                                                        payment.amount,
+                                                    ),
+                                                )}
+                                            </strong>
+                                        </>
+                                    )}
 
                                     {settings.show_payment_reference
                                         && payment.reference_number
@@ -2350,27 +2861,31 @@ function A4Invoice({
                             ),
                         )}
 
-                    <p>
-                        Paid:
-                        {' '}
+                    {!document.hasUnpricedItems && (
+                        <>
+                            <p>
+                                Paid:
+                                {' '}
 
-                        <strong>
-                            {money(
-                                document.paidAmount,
-                            )}
-                        </strong>
-                    </p>
+                                <strong>
+                                    {money(
+                                        document.paidAmount,
+                                    )}
+                                </strong>
+                            </p>
 
-                    <p>
-                        Outstanding:
-                        {' '}
+                            <p>
+                                Outstanding:
+                                {' '}
 
-                        <strong>
-                            {money(
-                                document.dueAmount,
-                            )}
-                        </strong>
-                    </p>
+                                <strong>
+                                    {money(
+                                        document.dueAmount,
+                                    )}
+                                </strong>
+                            </p>
+                        </>
+                    )}
 
                     {settings
                         .show_payment_reference
@@ -2414,79 +2929,93 @@ function A4Invoice({
                 </div>
 
                 <div className="invoice-totals">
-                    <div>
-                        <span>
-                            Subtotal
-                        </span>
+                    {document.hasUnpricedItems ? (
+                        <div className="invoice-grand">
+                            <span>
+                                Pricing
+                            </span>
 
-                        <strong>
-                            {money(
-                                document.subtotal,
-                            )}
-                        </strong>
-                    </div>
+                            <strong>
+                                Not shown for unpriced Training Mode items
+                            </strong>
+                        </div>
+                    ) : (
+                        <>
+                            <div>
+                                <span>
+                                    Subtotal
+                                </span>
 
-                    <div>
-                        <span>
-                            Item Discount
-                        </span>
+                                <strong>
+                                    {money(
+                                        document.subtotal,
+                                    )}
+                                </strong>
+                            </div>
 
-                        <strong>
-                            -
-                            {money(
-                                document.itemDiscount,
-                            )}
-                        </strong>
-                    </div>
+                            <div>
+                                <span>
+                                    Item Discount
+                                </span>
 
-                    <div>
-                        <span>
-                            Sale Discount
-                        </span>
+                                <strong>
+                                    -
+                                    {money(
+                                        document.itemDiscount,
+                                    )}
+                                </strong>
+                            </div>
 
-                        <strong>
-                            -
-                            {money(
-                                document.saleDiscount,
-                            )}
-                        </strong>
-                    </div>
+                            <div>
+                                <span>
+                                    Sale Discount
+                                </span>
 
-                    <div className="invoice-grand">
-                        <span>
-                            Grand Total
-                        </span>
+                                <strong>
+                                    -
+                                    {money(
+                                        document.saleDiscount,
+                                    )}
+                                </strong>
+                            </div>
 
-                        <strong>
-                            {money(
-                                document.grandTotal,
-                            )}
-                        </strong>
-                    </div>
+                            <div className="invoice-grand">
+                                <span>
+                                    Grand Total
+                                </span>
 
-                    <div>
-                        <span>
-                            Paid Amount
-                        </span>
+                                <strong>
+                                    {money(
+                                        document.grandTotal,
+                                    )}
+                                </strong>
+                            </div>
 
-                        <strong>
-                            {money(
-                                document.paidAmount,
-                            )}
-                        </strong>
-                    </div>
+                            <div>
+                                <span>
+                                    Paid Amount
+                                </span>
 
-                    <div>
-                        <span>
-                            Balance Due
-                        </span>
+                                <strong>
+                                    {money(
+                                        document.paidAmount,
+                                    )}
+                                </strong>
+                            </div>
 
-                        <strong>
-                            {money(
-                                document.dueAmount,
-                            )}
-                        </strong>
-                    </div>
+                            <div>
+                                <span>
+                                    Balance Due
+                                </span>
+
+                                <strong>
+                                    {money(
+                                        document.dueAmount,
+                                    )}
+                                </strong>
+                            </div>
+                        </>
+                    )}
                 </div>
             </section>
 
@@ -4235,6 +4764,32 @@ export default function SaleReceiptModal({
                     saleDocument.items.map((item) => {
                         const meta: string[] = [];
 
+                        const selectedVariantName =
+                            itemVariantName(
+                                item,
+                            );
+
+                        if (
+                            selectedVariantName
+                        ) {
+                            meta.push(
+                                `Variant: ${selectedVariantName}`,
+                            );
+                        }
+
+                        const saleMode =
+                            itemSaleMode(
+                                item,
+                            );
+
+                        if (
+                            saleMode
+                        ) {
+                            meta.push(
+                                `Sold as: ${saleMode}`,
+                            );
+                        }
+
                         if (
                             settings.show_sku
                             && item.product?.sku
@@ -4255,26 +4810,51 @@ export default function SaleReceiptModal({
                             }
                         }
 
+                        const priceAvailable =
+                            itemPriceAvailable(
+                                item,
+                            );
+
                         const quantityLine =
-                            `${formatQuantity(
-                                item.quantity,
-                            )} x ${money(
-                                itemUnitPrice(item),
-                            )}`;
+                            priceAvailable
+                                ? `${itemQuantityText(
+                                    item,
+                                )} x ${money(
+                                    itemUnitPrice(item),
+                                )}`
+                                : itemQuantityText(
+                                    item,
+                                );
 
                         const lineTotal =
-                            money(itemLineTotal(item));
+                            priceAvailable
+                                ? money(
+                                    itemLineTotal(
+                                        item,
+                                    ),
+                                )
+                                : '';
 
                         const discountValue =
-                            numberValue(item.discount);
+                            numberValue(
+                                item.discount,
+                            );
 
                         return {
-                            name: itemName(item),
+                            name:
+                                itemName(
+                                    item,
+                                ),
+
                             meta,
+
                             quantityLine,
+
                             lineTotal,
+
                             discountLine:
-                                discountValue > 0
+                                priceAvailable
+                                    && discountValue > 0
                                     ? `Discount: -${money(
                                         discountValue,
                                     )}`
@@ -4282,48 +4862,107 @@ export default function SaleReceiptModal({
                         };
                     });
 
-                const totalsLines: EscPosReceiptLine[] = [
-                    {
-                        left: 'Subtotal',
-                        right: money(saleDocument.subtotal),
-                    },
-                ];
+                const totalsLines:
+                    EscPosReceiptLine[] =
+                    saleDocument
+                        .hasUnpricedItems
+                        ? [
+                            {
+                                left:
+                                    'Pricing',
 
-                if (saleDocument.totalDiscount > 0) {
+                                right:
+                                    'Not shown',
+                            },
+                        ]
+                        : [
+                            {
+                                left:
+                                    'Subtotal',
+
+                                right:
+                                    money(
+                                        saleDocument
+                                            .subtotal,
+                                    ),
+                            },
+                        ];
+
+                if (
+                    !saleDocument
+                        .hasUnpricedItems
+                    && saleDocument
+                        .totalDiscount > 0
+                ) {
                     totalsLines.push({
-                        left: 'Discount',
-                        right: `-${money(
-                            saleDocument.totalDiscount,
-                        )}`,
+                        left:
+                            'Discount',
+
+                        right:
+                            `-${money(
+                                saleDocument
+                                    .totalDiscount,
+                            )}`,
                     });
                 }
 
-                totalsLines.push({
-                    left: 'GRAND TOTAL',
-                    right: money(saleDocument.grandTotal),
-                });
-
-                totalsLines.push({
-                    left: 'Amount Received',
-                    right: money(
-                        saleDocument.amountReceived,
-                    ),
-                });
-
-                if (saleDocument.dueAmount > 0) {
+                if (
+                    !saleDocument
+                        .hasUnpricedItems
+                ) {
                     totalsLines.push({
-                        left: 'Due',
-                        right: money(saleDocument.dueAmount),
-                    });
-                }
+                        left:
+                            'GRAND TOTAL',
 
-                if (saleDocument.changeAmount > 0) {
-                    totalsLines.push({
-                        left: 'Change',
-                        right: money(
-                            saleDocument.changeAmount,
-                        ),
+                        right:
+                            money(
+                                saleDocument
+                                    .grandTotal,
+                            ),
                     });
+
+                    totalsLines.push({
+                        left:
+                            'Amount Received',
+
+                        right:
+                            money(
+                                saleDocument
+                                    .amountReceived,
+                            ),
+                    });
+
+                    if (
+                        saleDocument
+                            .dueAmount > 0
+                    ) {
+                        totalsLines.push({
+                            left:
+                                'Due',
+
+                            right:
+                                money(
+                                    saleDocument
+                                        .dueAmount,
+                                ),
+                        });
+                    }
+
+                    if (
+                        saleDocument
+                            .changeAmount > 0
+                    ) {
+                        totalsLines.push({
+                            left:
+                                'Change',
+
+                            right:
+                                money(
+                                    saleDocument
+                                        .changeAmount,
+                                ),
+                        });
+                    }
                 }
 
                 const statusLines: EscPosReceiptLine[] = [
@@ -4347,14 +4986,29 @@ export default function SaleReceiptModal({
                                     : '';
 
                             statusLines.push({
-                                left: paymentMethodName(
-                                    payment.payment_method,
-                                ),
-                                right: `${money(
-                                    numberValue(
-                                        payment.amount,
+                                left:
+                                    paymentMethodName(
+                                        payment
+                                            .payment_method,
                                     ),
-                                )}${reference}`,
+
+                                right:
+                                    saleDocument
+                                        .hasUnpricedItems
+                                        ? (
+                                            reference
+                                                ? reference
+                                                    .replace(
+                                                        /^ \/ /,
+                                                        '',
+                                                    )
+                                                : 'Selected'
+                                        )
+                                        : `${money(
+                                            numberValue(
+                                                payment.amount,
+                                            ),
+                                        )}${reference}`,
                             });
                         },
                     );
@@ -4878,7 +5532,10 @@ export default function SaleReceiptModal({
                             <span className="sd-kicker">
                                 <Icon name="check" />
 
-                                Sale completed
+                                {saleDocument
+                                    .isTraining
+                                    ? 'Training bill completed'
+                                    : 'Sale completed'}
                             </span>
 
                             <h2
@@ -4896,13 +5553,20 @@ export default function SaleReceiptModal({
 
                         <div className="sd-total">
                             <span>
-                                Grand Total
+                                {saleDocument
+                                    .hasUnpricedItems
+                                    ? 'Pricing'
+                                    : 'Grand Total'}
                             </span>
 
                             <strong>
-                                {currencyFormatter.format(
-                                    saleDocument.grandTotal,
-                                )}
+                                {saleDocument
+                                    .hasUnpricedItems
+                                    ? 'Not Shown'
+                                    : currencyFormatter.format(
+                                        saleDocument
+                                            .grandTotal,
+                                    )}
                             </strong>
                         </div>
 

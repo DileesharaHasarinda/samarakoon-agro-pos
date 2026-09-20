@@ -26,16 +26,39 @@ import type {
     SaleSettlementType,
 } from '../../types/sale';
 
+export interface PaymentModalSubmitContext {
+    customer:
+    | {
+        id: number;
+        customer_code: string;
+        name: string;
+        mobile: string | null;
+    }
+    | null;
+}
+
 interface PaymentModalProps {
     isOpen: boolean;
     grandTotal: number;
     discount: number;
+
+    /*
+     * Training Mode only:
+     * when at least one cart item has no allocated price, the total is
+     * intentionally unknown. We still allow the cashier/trainee to choose
+     * a payment method with a zero simulated amount so a bill can be made.
+     */
+    allowZeroAmountPayment?: boolean;
+
+    pricingUnavailable?: boolean;
+
     isSubmitting: boolean;
     errorMessage: string;
     onClose: () => void;
 
     onSubmit: (
         values: CompleteSaleValues,
+        context: PaymentModalSubmitContext,
     ) => void;
 }
 
@@ -1718,6 +1741,8 @@ export default function PaymentModal({
     isOpen,
     grandTotal,
     discount,
+    allowZeroAmountPayment = false,
+    pricingUnavailable = false,
     isSubmitting,
     errorMessage,
     onClose,
@@ -2248,7 +2273,11 @@ export default function PaymentModal({
                     !Number.isFinite(
                         payment.amount,
                     )
-                    || payment.amount <= 0
+                    || (
+                        allowZeroAmountPayment
+                            ? payment.amount < 0
+                            : payment.amount <= 0
+                    )
                 ),
             );
 
@@ -2257,11 +2286,38 @@ export default function PaymentModal({
             && invalidPaymentIndex >= 0
         ) {
             setLocalError(
-                `Enter an amount greater than zero for ${paymentMethodLabel(
-                    paymentInputs[
-                        invalidPaymentIndex
-                    ].payment_method,
-                )}.`,
+                allowZeroAmountPayment
+                    ? `Enter a valid non-negative amount for ${paymentMethodLabel(
+                        paymentInputs[
+                            invalidPaymentIndex
+                        ].payment_method,
+                    )}.`
+                    : `Enter an amount greater than zero for ${paymentMethodLabel(
+                        paymentInputs[
+                            invalidPaymentIndex
+                        ].payment_method,
+                    )}.`,
+            );
+
+            return;
+        }
+
+        const missingChequeReferenceIndex =
+            paymentInputs.findIndex(
+                (payment) =>
+                    payment.payment_method
+                    === 'cheque'
+                    && payment
+                        .reference_number
+                        .trim() === '',
+            );
+
+        if (
+            settlementType !== 'due'
+            && missingChequeReferenceIndex >= 0
+        ) {
+            setLocalError(
+                'Enter the cheque number/reference before completing the sale.',
             );
 
             return;
@@ -2436,7 +2492,42 @@ export default function PaymentModal({
                 paymentInputs,
         };
 
-        onSubmit(payload);
+        const customerWithCode =
+            selectedCustomer
+                ? (
+                    selectedCustomer as
+                    Customer & {
+                        customer_code?: string;
+                    }
+                )
+                : null;
+
+        onSubmit(
+            payload,
+            {
+                customer:
+                    customerWithCode
+                        ? {
+                            id:
+                                customerWithCode.id,
+
+                            customer_code:
+                                String(
+                                    customerWithCode
+                                        .customer_code
+                                    ?? customerWithCode.id,
+                                ),
+
+                            name:
+                                customerWithCode.name,
+
+                            mobile:
+                                customerWithCode.mobile
+                                ?? null,
+                        }
+                        : null,
+            },
+        );
     };
 
     if (
@@ -2494,9 +2585,11 @@ export default function PaymentModal({
                                     </span>
 
                                     <strong>
-                                        {currencyFormatter.format(
-                                            grandTotal,
-                                        )}
+                                        {pricingUnavailable
+                                            ? 'Price Not Set'
+                                            : currencyFormatter.format(
+                                                grandTotal,
+                                            )}
                                     </strong>
                                 </div>
 
@@ -2525,6 +2618,21 @@ export default function PaymentModal({
 
                                             <span>
                                                 {localError || errorMessage}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {pricingUnavailable && (
+                                        <div
+                                            className="payment-error"
+                                            role="status"
+                                        >
+                                            <Icon name="alert" />
+
+                                            <span>
+                                                One or more Training Mode items do not have an allocated selling price.
+                                                Select the payment method normally; no monetary amount will be recorded
+                                                and the training receipt will hide price totals.
                                             </span>
                                         </div>
                                     )}
@@ -2864,10 +2972,21 @@ export default function PaymentModal({
 
                                                                         <label className="payment-field payment-split-reference">
                                                                             <span className="payment-field-label">
-                                                                                Reference Number{' '}
-                                                                                <span className="payment-optional-label">
-                                                                                    (Optional)
-                                                                                </span>
+                                                                                {payment.payment_method === 'cheque'
+                                                                                    ? 'Cheque Number / Reference '
+                                                                                    : 'Reference Number '}
+
+                                                                                {payment.payment_method === 'cheque'
+                                                                                    ? (
+                                                                                        <span className="payment-required">
+                                                                                            *
+                                                                                        </span>
+                                                                                    )
+                                                                                    : (
+                                                                                        <span className="payment-optional-label">
+                                                                                            (Optional)
+                                                                                        </span>
+                                                                                    )}
                                                                             </span>
 
                                                                             <input
@@ -2923,9 +3042,11 @@ export default function PaymentModal({
                                                 </span>
 
                                                 <strong>
-                                                    {currencyFormatter.format(
-                                                        grandTotal,
-                                                    )}
+                                                    {pricingUnavailable
+                                                        ? 'Price Not Set'
+                                                        : currencyFormatter.format(
+                                                            grandTotal,
+                                                        )}
                                                 </strong>
                                             </div>
 
@@ -2938,11 +3059,13 @@ export default function PaymentModal({
                                                 </span>
 
                                                 <strong>
-                                                    {currencyFormatter.format(
-                                                        settlementType === 'due'
-                                                            ? 0
-                                                            : paymentTotal,
-                                                    )}
+                                                    {pricingUnavailable
+                                                        ? 'Not Applicable'
+                                                        : currencyFormatter.format(
+                                                            settlementType === 'due'
+                                                                ? 0
+                                                                : paymentTotal,
+                                                        )}
                                                 </strong>
                                             </div>
 

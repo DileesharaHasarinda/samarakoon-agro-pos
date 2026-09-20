@@ -22,17 +22,12 @@ import {
 import BatchSelectionModal
     from '../../components/pos/BatchSelectionModal';
 
-import PaymentModal
-    from '../../components/pos/PaymentModal';
+import PaymentModal, {
+    type PaymentModalSubmitContext,
+} from '../../components/pos/PaymentModal';
 
 import SaleReceiptModal
     from '../../components/pos/SaleReceiptModal';
-
-import TrainingBillModal
-    from '../../components/pos/TrainingBillModal';
-
-import TrainingProductSelectionModal
-    from '../../components/pos/TrainingProductSelectionModal';
 
 import {
     ApiError,
@@ -65,7 +60,6 @@ import type {
     PosProduct,
     PosSaleOption,
     PosStockBatch,
-    PosTrainingOption,
     SaleReceipt,
 } from '../../types/sale';
 
@@ -101,7 +95,11 @@ function getPosDraftStorageKey(
 
     const modeSuffix =
         trainingMode
-            ? ':training'
+            /*
+             * v3 intentionally clears older training drafts before
+             * no-purchase / no-price Training Mode support is restored.
+             */
+            ? ':training:v3'
             : '';
 
     if (!tokenValue) {
@@ -456,35 +454,582 @@ function calculateStockQuantity(
     );
 }
 
-function getTrainingVirtualBatchId(
-    productId: number,
-    optionKey: string,
+function roundMoney(
+    value: number,
 ): number {
-    const source =
-        `${productId}:${optionKey}`;
+    return Math.round(
+        (
+            value
+            + Number.EPSILON
+        )
+        * 100,
+    ) / 100;
+}
 
-    let hash =
-        2166136261;
+function createTrainingSaleNumber(): string {
+    const parts =
+        new Intl.DateTimeFormat(
+            'en-GB',
+            {
+                timeZone:
+                    'Asia/Colombo',
 
-    for (
-        let index = 0;
-        index < source.length;
-        index += 1
-    ) {
-        hash ^= source.charCodeAt(
-            index,
+                year:
+                    'numeric',
+
+                month:
+                    '2-digit',
+
+                day:
+                    '2-digit',
+
+                hour:
+                    '2-digit',
+
+                minute:
+                    '2-digit',
+
+                second:
+                    '2-digit',
+
+                hour12:
+                    false,
+            },
+        ).formatToParts(
+            new Date(),
         );
 
-        hash = Math.imul(
-            hash,
-            16777619,
-        );
-    }
+    const value = (
+        type:
+            | 'year'
+            | 'month'
+            | 'day'
+            | 'hour'
+            | 'minute'
+            | 'second',
+    ): string =>
+        parts.find(
+            (
+                part,
+            ) =>
+                part.type
+                === type,
+        )?.value
+        ?? '00';
 
-    return -Math.max(
-        1,
-        hash >>> 0,
-    );
+    return [
+        'TRAINING',
+        value('year'),
+        value('month'),
+        value('day'),
+        value('hour'),
+        value('minute'),
+        value('second'),
+    ].join('-');
+}
+
+function createTrainingReceipt(
+    cart: PosCartItem[],
+    values: CompleteSaleValues,
+    saleDiscount: number,
+    context: PaymentModalSubmitContext,
+): SaleReceipt {
+    const createdAt =
+        new Date()
+            .toISOString();
+
+    const hasUnpricedItems =
+        cart.some(
+            (
+                item,
+            ) =>
+                item
+                    .price_available
+                === false,
+        );
+
+    const pricedSubtotal =
+        roundMoney(
+            cart.reduce(
+                (
+                    total,
+                    item,
+                ) =>
+                    item
+                        .price_available
+                        === false
+                        ? total
+                        : total
+                        + (
+                            Number(
+                                item.quantity,
+                            )
+                            * Number(
+                                item.selling_price,
+                            )
+                        ),
+                0,
+            ),
+        );
+
+    /*
+     * Once an item has no allocated price, a real invoice total cannot be
+     * calculated safely. Training Mode therefore keeps receipt monetary
+     * totals at zero and the receipt renderer hides them.
+     */
+    const rawSubtotal =
+        hasUnpricedItems
+            ? 0
+            : pricedSubtotal;
+
+    const itemDiscountTotal =
+        hasUnpricedItems
+            ? 0
+            : roundMoney(
+                cart.reduce(
+                    (
+                        total,
+                        item,
+                    ) =>
+                        total
+                        + Math.max(
+                            0,
+                            Number(
+                                item.discount,
+                            ),
+                        ),
+                    0,
+                ),
+            );
+
+    const discount =
+        hasUnpricedItems
+            ? 0
+            : roundMoney(
+                Math.max(
+                    0,
+                    saleDiscount,
+                ),
+            );
+
+    const grandTotal =
+        roundMoney(
+            Math.max(
+                0,
+                rawSubtotal
+                - itemDiscountTotal
+                - discount,
+            ),
+        );
+
+    const submittedTotal =
+        roundMoney(
+            values.payments.reduce(
+                (
+                    total,
+                    payment,
+                ) =>
+                    total
+                    + Number(
+                        payment.amount
+                        ?? 0,
+                    ),
+                0,
+            ),
+        );
+
+    const singleFullCash =
+        values.settlement_type
+        === 'full'
+        && values.payments.length
+        === 1
+        && values.payments[0]
+            .payment_method
+        === 'cash';
+
+    const changeAmount =
+        singleFullCash
+            ? roundMoney(
+                Math.max(
+                    0,
+                    submittedTotal
+                    - grandTotal,
+                ),
+            )
+            : 0;
+
+    const paidAmount =
+        values.settlement_type
+            === 'due'
+            ? 0
+            : values.settlement_type
+                === 'full'
+                ? grandTotal
+                : roundMoney(
+                    Math.min(
+                        grandTotal,
+                        submittedTotal,
+                    ),
+                );
+
+    const dueAmount =
+        roundMoney(
+            Math.max(
+                0,
+                grandTotal
+                - paidAmount,
+            ),
+        );
+
+    const paymentMethod =
+        values.payments.length === 0
+            ? null
+            : values.payments.length === 1
+                ? values.payments[0]
+                    .payment_method
+                : 'mixed';
+
+    const paymentStatus =
+        dueAmount <= 0.01
+            ? 'paid'
+            : paidAmount > 0.01
+                ? 'partial'
+                : 'due';
+
+    const payments:
+        SaleReceipt['payments'] =
+        values.payments.map(
+            (
+                payment,
+                index,
+            ) => {
+                const tenderedAmount =
+                    roundMoney(
+                        Number(
+                            payment.amount
+                            ?? 0,
+                        ),
+                    );
+
+                const appliedAmount =
+                    singleFullCash
+                        && index === 0
+                        ? grandTotal
+                        : tenderedAmount;
+
+                return {
+                    id:
+                        -(index + 1),
+
+                    payment_method:
+                        payment.payment_method,
+
+                    payment_type:
+                        'initial_payment',
+
+                    amount:
+                        appliedAmount,
+
+                    received_amount:
+                        tenderedAmount,
+
+                    amount_received:
+                        tenderedAmount,
+
+                    change_amount:
+                        singleFullCash
+                            && index === 0
+                            ? changeAmount
+                            : 0,
+
+                    reference_number:
+                        payment
+                            .reference_number
+                            .trim()
+                        || null,
+
+                    notes:
+                        payment.notes
+                            .trim()
+                        || null,
+
+                    created_by:
+                        null,
+
+                    created_at:
+                        createdAt,
+                };
+            },
+        );
+
+    const trainingNotice =
+        'TRAINING / PRACTICE ONLY — this bill was not saved as a real sale and no stock, payment, due, cash-register or report records were changed.';
+
+    const userNotes =
+        values.notes.trim();
+
+    return {
+        id:
+            -Date.now(),
+
+        is_training:
+            true,
+
+        has_unpriced_items:
+            hasUnpricedItems,
+
+        sale_number:
+            createTrainingSaleNumber(),
+
+        sale_date:
+            createdAt,
+
+        subtotal:
+            rawSubtotal,
+
+        item_discount_total:
+            itemDiscountTotal,
+
+        discount,
+
+        grand_total:
+            grandTotal,
+
+        paid_amount:
+            paidAmount,
+
+        amount_received:
+            values.settlement_type
+                === 'due'
+                ? 0
+                : submittedTotal,
+
+        due_amount:
+            dueAmount,
+
+        due_date:
+            values.due_date.trim()
+            || null,
+
+        change_amount:
+            changeAmount,
+
+        gross_profit:
+            null,
+
+        net_profit:
+            null,
+
+        payment_status:
+            paymentStatus,
+
+        settlement_type:
+            values.settlement_type,
+
+        payment_method:
+            paymentMethod,
+
+        customer:
+            context.customer,
+
+        notes:
+            userNotes !== ''
+                ? `${userNotes}\n\n${trainingNotice}`
+                : trainingNotice,
+
+        items_count:
+            cart.length,
+
+        total_quantity:
+            normaliseQuantity(
+                cart.reduce(
+                    (
+                        total,
+                        item,
+                    ) =>
+                        total
+                        + Number(
+                            item.quantity,
+                        ),
+                    0,
+                ),
+            ),
+
+        created_by:
+            null,
+
+        created_at:
+            createdAt,
+
+        updated_at:
+            createdAt,
+
+        items:
+            cart.map(
+                (
+                    item,
+                    index,
+                ) => {
+                    const variant =
+                        item.variant
+                        ?? null;
+
+                    const productVariantId =
+                        item.product_variant_id
+                        ?? variant?.id
+                        ?? null;
+
+                    const priceAvailable =
+                        item
+                            .price_available
+                        !== false;
+
+                    const lineTotal =
+                        priceAvailable
+                            ? roundMoney(
+                                Math.max(
+                                    0,
+                                    (
+                                        Number(
+                                            item.quantity,
+                                        )
+                                        * Number(
+                                            item.selling_price,
+                                        )
+                                    )
+                                    - Number(
+                                        item.discount,
+                                    ),
+                                ),
+                            )
+                            : 0;
+
+                    return {
+                        id:
+                            -(index + 1),
+
+                        product_id:
+                            item.product_id,
+
+                        price_available:
+                            priceAvailable,
+
+                        product_variant_id:
+                            productVariantId,
+
+                        variant,
+
+                        stock_batch_id:
+                            item.stock_batch_id,
+
+                        quantity:
+                            item.quantity,
+
+                        returned_quantity:
+                            0,
+
+                        remaining_returnable_quantity:
+                            item.quantity,
+
+                        sale_unit:
+                            item.sale_unit,
+
+                        conversion_factor:
+                            item.conversion_factor,
+
+                        stock_quantity:
+                            item.stock_quantity,
+
+                        returned_stock_quantity:
+                            0,
+
+                        remaining_returnable_stock_quantity:
+                            item.stock_quantity,
+
+                        purchase_cost:
+                            null,
+
+                        selling_price:
+                            item.selling_price,
+
+                        discount:
+                            item.discount,
+
+                        line_total:
+                            lineTotal,
+
+                        gross_profit:
+                            null,
+
+                        product: {
+                            id:
+                                item.product_id,
+
+                            name:
+                                item.product_name,
+
+                            unit:
+                                item.product_unit
+                                || item.primary_unit
+                                || item.unit,
+
+                            sku:
+                                item.product_sku
+                                ?? null,
+
+                            barcode:
+                                item.product_barcode
+                                ?? null,
+                        },
+
+                        batch: {
+                            id:
+                                item.stock_batch_id,
+
+                            product_variant_id:
+                                productVariantId,
+
+                            variant,
+
+                            batch_code:
+                                item.batch_code,
+
+                            batch_number:
+                                item.batch_number,
+
+                            is_dual_unit:
+                                item.is_dual_unit,
+
+                            stock_unit:
+                                item.stock_unit,
+
+                            secondary_unit:
+                                item.secondary_unit
+                                ?? null,
+
+                            conversion_factor:
+                                item.conversion_factor,
+
+                            primary_selling_price:
+                                item.primary_selling_price
+                                ?? item.selling_price,
+
+                            secondary_selling_price:
+                                item.secondary_selling_price
+                                ?? null,
+
+                            available_quantity:
+                                item.available_stock_quantity,
+
+                            expiry_date:
+                                item.expiry_date,
+                        },
+                    };
+                },
+            ),
+
+        payments,
+    };
 }
 
 function getProductStockUnit(
@@ -3833,11 +4378,6 @@ export default function PosPage({
     >(null);
 
     const [
-        isTrainingBillOpen,
-        setIsTrainingBillOpen,
-    ] = useState(false);
-
-    const [
         isClearCartConfirming,
         setIsClearCartConfirming,
     ] = useState(false);
@@ -4219,19 +4759,15 @@ export default function PosPage({
                                          * availability while the API refresh
                                          * is in flight.
                                          */
-                                        if (
-                                            !catalogMode
-                                        ) {
-                                            setCart(
-                                                (
+                                        setCart(
+                                            (
+                                                current,
+                                            ) =>
+                                                applyRealtimeStockEventToCart(
                                                     current,
-                                                ) =>
-                                                    applyRealtimeStockEventToCart(
-                                                        current,
-                                                        event,
-                                                    ),
-                                            );
-                                        }
+                                                    event,
+                                                ),
+                                        );
 
                                         /*
                                          * Re-fetch the current filtered POS
@@ -4359,8 +4895,8 @@ export default function PosPage({
             false,
         );
 
-        setIsTrainingBillOpen(
-            false,
+        setReceipt(
+            null,
         );
 
         setPaymentError('');
@@ -4472,6 +5008,54 @@ export default function PosPage({
             - safeSaleDiscount,
         );
 
+    const hasUnpricedItems =
+        useMemo(
+            () =>
+                cart.some(
+                    (
+                        item,
+                    ) =>
+                        item
+                            .price_available
+                        === false,
+                ),
+            [
+                cart,
+            ],
+        );
+
+    /*
+     * If even one Training Mode item has no allocated price, the complete
+     * sale amount is unknown. PaymentModal still lets the trainee choose a
+     * payment method, but it runs with a zero amount and the receipt hides
+     * all monetary totals rather than pretending the item costs Rs. 0.00.
+     */
+    const paymentGrandTotal =
+        catalogMode
+            && hasUnpricedItems
+            ? 0
+            : grandTotal;
+
+    useEffect(() => {
+        if (
+            catalogMode
+            && hasUnpricedItems
+            && saleDiscount !== '0'
+        ) {
+            /*
+             * A complete total is unknown while any training item is
+             * unpriced, so a sale-level monetary discount is not meaningful.
+             */
+            setSaleDiscount(
+                '0',
+            );
+        }
+    }, [
+        catalogMode,
+        hasUnpricedItems,
+        saleDiscount,
+    ]);
+
     const openProductFromKeyboard =
         (
             product:
@@ -4545,7 +5129,7 @@ export default function PosPage({
             if (
                 selectedProduct
                 || isPaymentOpen
-                || isTrainingBillOpen
+                || receipt
             ) {
                 return;
             }
@@ -4779,7 +5363,8 @@ export default function PosPage({
             );
 
         if (
-            newQuantity
+            !catalogMode
+            && newQuantity
             > maximumSaleQuantity
             + 0.0001
         ) {
@@ -4820,7 +5405,8 @@ export default function PosPage({
             );
 
         if (
-            totalRequiredStock
+            !catalogMode
+            && totalRequiredStock
             > availableStockQuantity
             + 0.0001
         ) {
@@ -4881,8 +5467,55 @@ export default function PosPage({
                             product_id:
                                 product.id,
 
+                            price_available:
+                                saleOption
+                                    .price_available
+                                ?? (
+                                    Number(
+                                        saleOption
+                                            .selling_price
+                                        ?? 0,
+                                    ) > 0
+                                ),
+
+                            is_training_virtual_batch:
+                                Boolean(
+                                    batch
+                                        .is_training_virtual,
+                                ),
+
                             product_name:
                                 product.name,
+
+                            product_unit:
+                                product.unit,
+
+                            product_sku:
+                                product.sku,
+
+                            product_barcode:
+                                product.barcode,
+
+                            product_variant_id:
+                                batch.product_variant_id
+                                ?? batch.variant
+                                    ?.id
+                                ?? null,
+
+                            variant:
+                                batch.variant
+                                ?? (
+                                    product.variants
+                                    ?? []
+                                ).find(
+                                    (
+                                        variant,
+                                    ) =>
+                                        variant.id
+                                        === batch
+                                            .product_variant_id,
+                                )
+                                ?? null,
 
                             primary_unit:
                                 batch.primary_unit
@@ -4898,6 +5531,9 @@ export default function PosPage({
                                 || product.stock_unit
                                 || product.unit,
 
+                            secondary_unit:
+                                batch.secondary_unit,
+
                             is_dual_unit:
                                 Boolean(
                                     batch
@@ -4906,6 +5542,29 @@ export default function PosPage({
 
                             conversion_factor:
                                 conversionFactor,
+
+                            primary_selling_price:
+                                Number(
+                                    batch
+                                        .primary_selling_price
+                                    ?? batch
+                                        .selling_price
+                                    ?? saleOption
+                                        .selling_price,
+                                ),
+
+                            secondary_selling_price:
+                                batch
+                                    .secondary_selling_price
+                                    !== null
+                                    && batch
+                                        .secondary_selling_price
+                                    !== undefined
+                                    ? Number(
+                                        batch
+                                            .secondary_selling_price,
+                                    )
+                                    : null,
 
                             stock_quantity:
                                 calculateStockQuantity(
@@ -4936,192 +5595,6 @@ export default function PosPage({
                                     saleOption
                                         .selling_price,
                                 ),
-
-                            quantity:
-                                normaliseQuantity(
-                                    quantity,
-                                ),
-
-                            discount:
-                                0,
-                        },
-                    ],
-            );
-        }
-
-        setSelectedProduct(
-            null,
-        );
-
-        refocusSearch();
-    };
-
-    const addTrainingItemToCart = (
-        product: PosProduct,
-        option: PosTrainingOption,
-        quantity: number,
-    ): void => {
-        setCartError('');
-
-        if (
-            !Number.isFinite(
-                quantity,
-            )
-            || quantity <= 0
-        ) {
-            setCartError(
-                'Quantity must be greater than zero.',
-            );
-
-            return;
-        }
-
-        const virtualBatchId =
-            getTrainingVirtualBatchId(
-                product.id,
-                option.key,
-            );
-
-        const existingItem =
-            cart.find(
-                (
-                    item,
-                ) =>
-                    isSameCartItem(
-                        item,
-                        virtualBatchId,
-                        option.unit,
-                    ),
-            );
-
-        const newQuantity =
-            normaliseQuantity(
-                (
-                    existingItem
-                        ?.quantity
-                    ?? 0
-                )
-                + quantity,
-            );
-
-        const conversionFactor =
-            Number.isFinite(
-                Number(
-                    option
-                        .conversion_factor,
-                ),
-            )
-                && Number(
-                    option
-                        .conversion_factor,
-                ) > 0
-                ? Number(
-                    option
-                        .conversion_factor,
-                )
-                : 1;
-
-        const productName =
-            option.variant_name
-                ? `${product.name} - ${option.variant_name}`
-                : product.name;
-
-        if (existingItem) {
-            setCart(
-                (
-                    current,
-                ) =>
-                    current.map(
-                        (
-                            item,
-                        ) =>
-                            isSameCartItem(
-                                item,
-                                virtualBatchId,
-                                option.unit,
-                            )
-                                ? {
-                                    ...item,
-
-                                    quantity:
-                                        newQuantity,
-
-                                    stock_quantity:
-                                        calculateStockQuantity(
-                                            newQuantity,
-                                            conversionFactor,
-                                        ),
-                                }
-                                : item,
-                    ),
-            );
-        } else {
-            setCart(
-                (
-                    current,
-                ) => [
-                        ...current,
-
-                        {
-                            stock_batch_id:
-                                virtualBatchId,
-
-                            product_id:
-                                product.id,
-
-                            product_name:
-                                productName,
-
-                            primary_unit:
-                                option.primary_unit
-                                || product.primary_unit
-                                || product.unit
-                                || option.unit,
-
-                            sale_unit:
-                                option.unit,
-
-                            stock_unit:
-                                option.stock_unit
-                                || option.unit,
-
-                            is_dual_unit:
-                                option.is_dual_unit,
-
-                            conversion_factor:
-                                conversionFactor,
-
-                            stock_quantity:
-                                calculateStockQuantity(
-                                    quantity,
-                                    conversionFactor,
-                                ),
-
-                            unit:
-                                option.unit,
-
-                            batch_code:
-                                'TRAINING',
-
-                            batch_number:
-                                null,
-
-                            expiry_date:
-                                null,
-
-                            /*
-                             * Training quantities are intentionally not tied
-                             * to available stock. These values keep the shared
-                             * cart UI type-safe; no backend sale is submitted.
-                             */
-                            available_quantity:
-                                Number.MAX_SAFE_INTEGER,
-
-                            available_stock_quantity:
-                                Number.MAX_SAFE_INTEGER,
-
-                            selling_price:
-                                0,
 
                             quantity:
                                 normaliseQuantity(
@@ -5193,7 +5666,8 @@ export default function PosPage({
         }
 
         if (
-            quantity
+            !catalogMode
+            && quantity
             > item.available_quantity
             + 0.0001
         ) {
@@ -5236,7 +5710,8 @@ export default function PosPage({
             );
 
         if (
-            totalRequiredStock
+            !catalogMode
+            && totalRequiredStock
             > item
                 .available_stock_quantity
             + 0.0001
@@ -5304,6 +5779,18 @@ export default function PosPage({
             );
 
         if (!item) {
+            return;
+        }
+
+        if (
+            item
+                .price_available
+            === false
+        ) {
+            setCartError(
+                `${item.product_name} does not have an allocated price, so an item discount cannot be applied.`,
+            );
+
             return;
         }
 
@@ -5410,7 +5897,7 @@ export default function PosPage({
 
             setPaymentError('');
 
-            setIsTrainingBillOpen(
+            setIsPaymentOpen(
                 false,
             );
 
@@ -5461,39 +5948,6 @@ export default function PosPage({
             }
 
             if (
-                catalogMode
-            ) {
-                const invalidTrainingItem =
-                    cart.find(
-                        (
-                            item,
-                        ) =>
-                            !Number.isFinite(
-                                item.quantity,
-                            )
-                            || item.quantity <= 0,
-                    );
-
-                if (
-                    invalidTrainingItem
-                ) {
-                    setCartError(
-                        `Enter a valid quantity for ${invalidTrainingItem.product_name}.`,
-                    );
-
-                    return;
-                }
-
-                setCartError('');
-
-                setIsTrainingBillOpen(
-                    true,
-                );
-
-                return;
-            }
-
-            if (
                 !Number.isFinite(
                     saleDiscountValue,
                 )
@@ -5531,7 +5985,8 @@ export default function PosPage({
                         }
 
                         if (
-                            item.quantity
+                            !catalogMode
+                            && item.quantity
                             > item
                                 .available_quantity
                             + 0.0001
@@ -5555,6 +6010,17 @@ export default function PosPage({
                             < 0
                         ) {
                             return true;
+                        }
+
+                        if (
+                            item
+                                .price_available
+                            === false
+                        ) {
+                            return (
+                                item.discount
+                                > 0
+                            );
                         }
 
                         return (
@@ -5604,13 +6070,57 @@ export default function PosPage({
         async (
             values:
                 CompleteSaleValues,
+
+            context:
+                PaymentModalSubmitContext,
         ): Promise<void> => {
             if (
-                catalogMode
-                || !token
+                !token
                 || cart.length === 0
                 || isSubmitting
             ) {
+                return;
+            }
+
+            /*
+             * =====================================================
+             * TRAINING BILLING
+             * =====================================================
+             *
+             * Use the SAME cart, prices, discounts, customer selection,
+             * settlement rules, split-payment UI and receipt UI as New Sale.
+             *
+             * The only difference is persistence:
+             * do NOT call completePosSale(), therefore no Sale, SalePayment,
+             * customer due, stock movement, cash-register or report record is
+             * created and stock is never deducted.
+             */
+            if (catalogMode) {
+                const trainingReceipt =
+                    createTrainingReceipt(
+                        cart,
+                        {
+                            ...values,
+
+                            discount:
+                                saleDiscountValue,
+                        },
+                        saleDiscountValue,
+                        context,
+                    );
+
+                setReceipt(
+                    trainingReceipt,
+                );
+
+                setIsPaymentOpen(
+                    false,
+                );
+
+                clearCart();
+
+                refocusSearch();
+
                 return;
             }
 
@@ -5721,7 +6231,22 @@ export default function PosPage({
                     </div>
                 </header>
 
-               
+                {catalogMode && (
+                    <div className="training-page-notice">
+                        <strong>
+                            Training Mode
+                        </strong>
+
+                        <span>
+                            This screen now uses the same selling workflow as
+                            New Sale: real batches, variants, selling units,
+                            prices, discounts, customers, payment methods and
+                            receipt printing. Completing here remains a
+                            simulation, so no sale is saved and no stock,
+                            payment, due, cash-register or report record changes.
+                        </span>
+                    </div>
+                )}
 
                 {pageError && (
                     <div
@@ -6109,61 +6634,40 @@ export default function PosPage({
                                         </div>
 
                                         <div className="product-meta">
-                                            {catalogMode ? (
-                                                <>
-                                                    <div className="meta-box price">
-                                                        <span>
-                                                            Training Bill
-                                                        </span>
+                                            <div className="meta-box price">
+                                                <span>
+                                                    Selling Price
+                                                </span>
 
-                                                        <strong>
-                                                            No Price
-                                                        </strong>
-                                                    </div>
+                                                <strong>
+                                                    {getProductPriceLabel(
+                                                        product,
+                                                    )}
+                                                </strong>
+                                            </div>
 
-                                                    <div className="meta-box">
-                                                        <span>
-                                                            Stock Status
-                                                        </span>
+                                            <div className="meta-box">
+                                                <span>
+                                                    Available
+                                                </span>
 
-                                                        <strong
-                                                            className={
-                                                                `catalog-stock-status ${catalogStatus}`
-                                                            }
-                                                        >
-                                                            {
-                                                                catalogStatusLabel
-                                                            }
-                                                        </strong>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div className="meta-box price">
-                                                        <span>
-                                                            Selling Price
-                                                        </span>
-
-                                                        <strong>
-                                                            {getProductPriceLabel(
-                                                                product,
-                                                            )}
-                                                        </strong>
-                                                    </div>
-
-                                                    <div className="meta-box">
-                                                        <span>
-                                                            Available
-                                                        </span>
-
-                                                        <strong>
-                                                            {getProductAvailableLabel(
-                                                                product,
-                                                            )}
-                                                        </strong>
-                                                    </div>
-                                                </>
-                                            )}
+                                                <strong
+                                                    className={
+                                                        catalogMode
+                                                            ? `catalog-stock-status ${catalogStatus}`
+                                                            : undefined
+                                                    }
+                                                    title={
+                                                        catalogMode
+                                                            ? catalogStatusLabel
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {getProductAvailableLabel(
+                                                        product,
+                                                    )}
+                                                </strong>
+                                            </div>
                                         </div>
                                     </button>
                                 );
@@ -6277,9 +6781,7 @@ export default function PosPage({
                         </span>
 
                         <h2 className="cart-title">
-                            {catalogMode
-                                ? 'Practice Cart'
-                                : 'Cart'}
+                            Cart
                         </h2>
                     </div>
 
@@ -6318,9 +6820,7 @@ export default function PosPage({
                             </strong>
 
                             <span>
-                                {catalogMode
-                                    ? 'Select any catalogue product and unit to create a price-free training bill. Real stock will not be deducted.'
-                                    : 'Select a product, stock batch and selling unit to start this sale.'}
+                                Select a product, stock batch and selling unit to start this sale.
                             </span>
                         </div>
                     ) : (
@@ -6382,19 +6882,13 @@ export default function PosPage({
                                                 </strong>
 
                                                 <span className="batch">
-                                                    {catalogMode
-                                                        ? 'Training item • no stock deduction'
-                                                        : (
-                                                            <>
-                                                                Batch:
-                                                                {' '}
+                                                    Batch:
+                                                    {' '}
 
-                                                                {item
-                                                                    .batch_number
-                                                                    || item
-                                                                        .batch_code}
-                                                            </>
-                                                        )}
+                                                    {item
+                                                        .batch_number
+                                                        || item
+                                                            .batch_code}
                                                 </span>
 
                                                 <div className="sale-unit-row">
@@ -6436,9 +6930,8 @@ export default function PosPage({
                                                         }
                                                     </span>
 
-                                                    {!catalogMode
-                                                        && item
-                                                            .is_dual_unit && (
+                                                    {item
+                                                        .is_dual_unit && (
                                                             <span className="stock-usage">
                                                                 {formatQuantity(
                                                                     item
@@ -6489,93 +6982,78 @@ export default function PosPage({
                                         </header>
 
                                         <div className="cart-meta">
-                                            {catalogMode ? (
-                                                <>
-                                                    <div className="meta-box">
-                                                        <span>
-                                                            Unit
-                                                        </span>
+                                            <div className="meta-box">
+                                                <span>
+                                                    Unit Price
+                                                </span>
 
-                                                        <strong>
-                                                            {item
-                                                                .sale_unit}
-                                                        </strong>
-                                                    </div>
+                                                <strong>
+                                                    {item
+                                                        .price_available
+                                                        === false
+                                                        ? 'Price Not Set'
+                                                        : (
+                                                            <>
+                                                                {currencyFormatter.format(
+                                                                    item
+                                                                        .selling_price,
+                                                                )}
+                                                                {' / '}
 
-                                                    <div className="meta-box">
-                                                        <span>
-                                                            Price
-                                                        </span>
+                                                                {
+                                                                    item
+                                                                        .sale_unit
+                                                                }
+                                                            </>
+                                                        )}
+                                                </strong>
+                                            </div>
 
-                                                        <strong>
-                                                            Not Used
-                                                        </strong>
-                                                    </div>
+                                            <div className="meta-box">
+                                                <span>
+                                                    Available
+                                                </span>
 
-                                                    <div className="meta-box">
-                                                        <span>
-                                                            Stock Effect
-                                                        </span>
+                                                <strong>
+                                                    {catalogMode
+                                                        ? (
+                                                            item
+                                                                .is_training_virtual_batch
+                                                                ? 'No Purchase Batch'
+                                                                : `${formatQuantity(
+                                                                    item
+                                                                        .available_quantity,
+                                                                )} ${item.sale_unit} • Training has no stock limit`
+                                                        )
+                                                        : (
+                                                            <>
+                                                                {formatQuantity(
+                                                                    item
+                                                                        .available_quantity,
+                                                                )}
+                                                                {' '}
 
-                                                        <strong>
-                                                            None
-                                                        </strong>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div className="meta-box">
-                                                        <span>
-                                                            Unit Price
-                                                        </span>
+                                                                {
+                                                                    item
+                                                                        .sale_unit
+                                                                }
+                                                            </>
+                                                        )}
+                                                </strong>
+                                            </div>
 
-                                                        <strong>
-                                                            {currencyFormatter.format(
-                                                                item
-                                                                    .selling_price,
-                                                            )}
-                                                            {' / '}
+                                            <div className="meta-box">
+                                                <span>
+                                                    Expiry
+                                                </span>
 
-                                                            {
-                                                                item
-                                                                    .sale_unit
-                                                            }
-                                                        </strong>
-                                                    </div>
-
-                                                    <div className="meta-box">
-                                                        <span>
-                                                            Available
-                                                        </span>
-
-                                                        <strong>
-                                                            {formatQuantity(
-                                                                item
-                                                                    .available_quantity,
-                                                            )}
-                                                            {' '}
-
-                                                            {
-                                                                item
-                                                                    .sale_unit
-                                                            }
-                                                        </strong>
-                                                    </div>
-
-                                                    <div className="meta-box">
-                                                        <span>
-                                                            Expiry
-                                                        </span>
-
-                                                        <strong>
-                                                            {formatExpiryDate(
-                                                                item
-                                                                    .expiry_date,
-                                                            )}
-                                                        </strong>
-                                                    </div>
-                                                </>
-                                            )}
+                                                <strong>
+                                                    {formatExpiryDate(
+                                                        item
+                                                            .expiry_date,
+                                                    )}
+                                                </strong>
+                                            </div>
                                         </div>
 
                                         <div className="quantity-row">
@@ -6707,8 +7185,10 @@ export default function PosPage({
                                             </button>
 
                                             <strong className="line-total">
-                                                {catalogMode
-                                                    ? 'No Price'
+                                                {item
+                                                    .price_available
+                                                    === false
+                                                    ? 'Price Not Set'
                                                     : currencyFormatter.format(
                                                         Math.max(
                                                             0,
@@ -6718,47 +7198,54 @@ export default function PosPage({
                                             </strong>
                                         </div>
 
-                                        {!catalogMode && (
-                                            <label className="discount-row">
-                                                <span>
-                                                    Item Discount
-                                                    (LKR)
-                                                </span>
+                                        <label className="discount-row">
+                                            <span>
+                                                Item Discount
+                                                (LKR)
+                                            </span>
 
-                                                <input
-                                                    type="number"
-                                                    className="number-input"
-                                                    min="0"
-                                                    max={
-                                                        item.quantity
+                                            <input
+                                                type="number"
+                                                className="number-input"
+                                                min="0"
+                                                max={
+                                                    item
+                                                        .price_available
+                                                        === false
+                                                        ? 0
+                                                        : item.quantity
                                                         * item
                                                             .selling_price
-                                                    }
-                                                    step="0.01"
-                                                    value={
+                                                }
+                                                step="0.01"
+                                                value={
+                                                    item
+                                                        .discount
+                                                }
+                                                disabled={
+                                                    item
+                                                        .price_available
+                                                    === false
+                                                }
+                                                onChange={(
+                                                    event,
+                                                ) => {
+                                                    updateItemDiscount(
                                                         item
-                                                            .discount
-                                                    }
-                                                    onChange={(
-                                                        event,
-                                                    ) => {
-                                                        updateItemDiscount(
-                                                            item
-                                                                .stock_batch_id,
+                                                            .stock_batch_id,
 
-                                                            item
-                                                                .sale_unit,
+                                                        item
+                                                            .sale_unit,
 
-                                                            Number(
-                                                                event
-                                                                    .target
-                                                                    .value,
-                                                            ),
-                                                        );
-                                                    }}
-                                                />
-                                            </label>
-                                        )}
+                                                        Number(
+                                                            event
+                                                                .target
+                                                                .value,
+                                                        ),
+                                                    );
+                                                }}
+                                            />
+                                        </label>
                                     </article>
                                 );
                             },
@@ -6767,92 +7254,94 @@ export default function PosPage({
                 </div>
 
                 <div className="cart-summary">
-                    {catalogMode ? (
-                        <div className="training-summary">
-                            <strong>
-                                Training / Practice Bill
-                            </strong>
+                    <label className="sale-discount">
+                        <span>
+                            Sale Discount
+                            (LKR)
+                        </span>
 
-                            <span>
-                                Prices, payment and stock deduction are disabled.
-                                This bill will not be recorded as a real sale.
-                            </span>
-                        </div>
-                    ) : (
-                        <>
-                            <label className="sale-discount">
-                                <span>
-                                    Sale Discount
-                                    (LKR)
-                                </span>
+                        <input
+                            type="number"
+                            className="number-input"
+                            min="0"
+                            max={
+                                subtotal
+                            }
+                            step="0.01"
+                            value={
+                                saleDiscount
+                            }
+                            disabled={
+                                catalogMode
+                                && hasUnpricedItems
+                            }
+                            onChange={(
+                                event,
+                            ) => {
+                                setSaleDiscount(
+                                    event
+                                        .target
+                                        .value,
+                                );
 
-                                <input
-                                    type="number"
-                                    className="number-input"
-                                    min="0"
-                                    max={
-                                        subtotal
-                                    }
-                                    step="0.01"
-                                    value={
-                                        saleDiscount
-                                    }
-                                    onChange={(
-                                        event,
-                                    ) => {
-                                        setSaleDiscount(
-                                            event
-                                                .target
-                                                .value,
-                                        );
+                                setCartError(
+                                    '',
+                                );
+                            }}
+                        />
+                    </label>
 
-                                        setCartError(
-                                            '',
-                                        );
-                                    }}
-                                />
-                            </label>
+                    <div className="summary-row">
+                        <span>
+                            Items Total
+                        </span>
 
-                            <div className="summary-row">
-                                <span>
-                                    Items Total
-                                </span>
+                        <strong>
+                            {catalogMode
+                                && hasUnpricedItems
+                                ? 'Price Not Set'
+                                : currencyFormatter.format(
+                                    subtotal,
+                                )}
+                        </strong>
+                    </div>
 
-                                <strong>
-                                    {currencyFormatter.format(
-                                        subtotal,
-                                    )}
-                                </strong>
-                            </div>
+                    <div className="summary-row">
+                        <span>
+                            Sale Discount
+                        </span>
 
-                            <div className="summary-row">
-                                <span>
-                                    Sale Discount
-                                </span>
+                        <strong>
+                            {catalogMode
+                                && hasUnpricedItems
+                                ? 'Not Applicable'
+                                : (
+                                    <>
+                                        -
+                                        {' '}
 
-                                <strong>
-                                    -
-                                    {' '}
+                                        {currencyFormatter.format(
+                                            safeSaleDiscount,
+                                        )}
+                                    </>
+                                )}
+                        </strong>
+                    </div>
 
-                                    {currencyFormatter.format(
-                                        safeSaleDiscount,
-                                    )}
-                                </strong>
-                            </div>
+                    <div className="grand-total">
+                        <span>
+                            Amount Due
+                        </span>
 
-                            <div className="grand-total">
-                                <span>
-                                    Amount Due
-                                </span>
-
-                                <strong>
-                                    {currencyFormatter.format(
-                                        grandTotal,
-                                    )}
-                                </strong>
-                            </div>
-                        </>
-                    )}
+                        <strong>
+                            {catalogMode
+                                && hasUnpricedItems
+                                ? 'Price Not Set'
+                                : currencyFormatter.format(
+                                    grandTotal,
+                                )}
+                        </strong>
+                    </div>
 
                     <button
                         type="button"
@@ -6868,11 +7357,9 @@ export default function PosPage({
                     >
                         <Icon name="receipt" />
 
-                        {catalogMode
-                            ? 'Create Training Bill'
-                            : isSubmitting
-                                ? 'Processing Sale...'
-                                : 'Proceed to Payment'}
+                        {isSubmitting
+                            ? 'Processing Sale...'
+                            : 'Proceed to Payment'}
                     </button>
 
                     {cart.length > 0 && (
@@ -6934,119 +7421,88 @@ export default function PosPage({
                 </div>
             </aside>
 
-            {catalogMode ? (
-                <TrainingProductSelectionModal
-                    product={
-                        selectedProduct
-                    }
-                    onClose={() => {
-                        setSelectedProduct(
-                            null,
-                        );
+            <BatchSelectionModal
+                product={
+                    selectedProduct
+                }
+                trainingMode={
+                    catalogMode
+                }
+                onClose={() => {
+                    setSelectedProduct(
+                        null,
+                    );
 
-                        refocusSearch();
-                    }}
-                    onAdd={
-                        addTrainingItemToCart
-                    }
-                />
-            ) : (
-                <BatchSelectionModal
-                    product={
-                        selectedProduct
-                    }
-                    onClose={() => {
-                        setSelectedProduct(
-                            null,
-                        );
+                    refocusSearch();
+                }}
+                onAdd={
+                    addBatchToCart
+                }
+            />
 
-                        refocusSearch();
-                    }}
-                    onAdd={
-                        addBatchToCart
-                    }
-                />
-            )}
-
-            {catalogMode ? (
-                <TrainingBillModal
-                    isOpen={
-                        isTrainingBillOpen
-                    }
-                    cart={
-                        cart
-                    }
-                    onClose={() => {
-                        setIsTrainingBillOpen(
+            <PaymentModal
+                isOpen={
+                    isPaymentOpen
+                }
+                grandTotal={
+                    paymentGrandTotal
+                }
+                discount={
+                    catalogMode
+                        && hasUnpricedItems
+                        ? 0
+                        : safeSaleDiscount
+                }
+                allowZeroAmountPayment={
+                    catalogMode
+                    && hasUnpricedItems
+                }
+                pricingUnavailable={
+                    catalogMode
+                    && hasUnpricedItems
+                }
+                isSubmitting={
+                    isSubmitting
+                }
+                errorMessage={
+                    paymentError
+                }
+                onClose={() => {
+                    if (
+                        !isSubmitting
+                    ) {
+                        setIsPaymentOpen(
                             false,
                         );
 
-                        refocusSearch();
-                    }}
-                    onFinish={() => {
-                        setIsTrainingBillOpen(
-                            false,
+                        setPaymentError(
+                            '',
                         );
+                    }
+                }}
+                onSubmit={(
+                    values,
+                    context,
+                ) => {
+                    void submitSale(
+                        values,
+                        context,
+                    );
+                }}
+            />
 
-                        clearCart();
+            <SaleReceiptModal
+                receipt={
+                    receipt
+                }
+                onClose={() => {
+                    setReceipt(
+                        null,
+                    );
 
-                        refocusSearch();
-                    }}
-                />
-            ) : (
-                <>
-                    <PaymentModal
-                        isOpen={
-                            isPaymentOpen
-                        }
-                        grandTotal={
-                            grandTotal
-                        }
-                        discount={
-                            safeSaleDiscount
-                        }
-                        isSubmitting={
-                            isSubmitting
-                        }
-                        errorMessage={
-                            paymentError
-                        }
-                        onClose={() => {
-                            if (
-                                !isSubmitting
-                            ) {
-                                setIsPaymentOpen(
-                                    false,
-                                );
-
-                                setPaymentError(
-                                    '',
-                                );
-                            }
-                        }}
-                        onSubmit={(
-                            values,
-                        ) => {
-                            void submitSale(
-                                values,
-                            );
-                        }}
-                    />
-
-                    <SaleReceiptModal
-                        receipt={
-                            receipt
-                        }
-                        onClose={() => {
-                            setReceipt(
-                                null,
-                            );
-
-                            refocusSearch();
-                        }}
-                    />
-                </>
-            )}
+                    refocusSearch();
+                }}
+            />
         </div>
     );
 }

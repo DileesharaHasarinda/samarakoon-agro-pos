@@ -27,6 +27,16 @@ import type {
 interface BatchSelectionModalProps {
     product: PosProduct | null;
 
+    /*
+     * Training Mode keeps the exact New Sale UI/flow, but allows:
+     * - zero-stock batches,
+     * - never-purchased products/variants through a virtual batch,
+     * - products without an allocated selling price.
+     *
+     * Real New Sale keeps all existing stock/price restrictions.
+     */
+    trainingMode?: boolean;
+
     onClose: () => void;
 
     onAdd: (
@@ -771,6 +781,659 @@ function batchesForVariant(
         );
 }
 
+function hasAllocatedPrice(
+    value:
+        number
+        | string
+        | null
+        | undefined,
+): boolean {
+    const numeric =
+        Number(
+            value,
+        );
+
+    return (
+        Number.isFinite(
+            numeric,
+        )
+        && numeric > 0
+    );
+}
+
+function exactTrainingPrice(
+    product:
+        PosProduct,
+    variant:
+        PosVariantView
+        | null,
+): {
+    price: number;
+    available: boolean;
+} {
+    const minimum =
+        variant
+            ?.minimum_price
+        ?? product
+            .minimum_price;
+
+    const maximum =
+        variant
+            ?.maximum_price
+        ?? product
+            .maximum_price;
+
+    if (
+        !hasAllocatedPrice(
+            minimum,
+        )
+    ) {
+        return {
+            price:
+                0,
+
+            available:
+                false,
+        };
+    }
+
+    const minimumValue =
+        Number(
+            minimum,
+        );
+
+    if (
+        maximum === null
+        || maximum === undefined
+        || !Number.isFinite(
+            Number(
+                maximum,
+            ),
+        )
+        || Math.abs(
+            Number(
+                maximum,
+            )
+            - minimumValue,
+        ) < 0.005
+    ) {
+        return {
+            price:
+                minimumValue,
+
+            available:
+                true,
+        };
+    }
+
+    /*
+     * A price range cannot identify the exact selling price for a
+     * never-purchased virtual batch, so do not guess.
+     */
+    return {
+        price:
+            0,
+
+        available:
+            false,
+    };
+}
+
+function isLikelyDecimalUnit(
+    unit:
+        string,
+): boolean {
+    const normalised =
+        unit
+            .trim()
+            .toLowerCase();
+
+    return [
+        'kg',
+        'g',
+        'gram',
+        'grams',
+        'l',
+        'litre',
+        'liter',
+        'litres',
+        'liters',
+        'ml',
+    ].includes(
+        normalised,
+    );
+}
+
+function createTrainingVirtualBatches(
+    product:
+        PosProduct,
+): PosStockBatch[] {
+    const variants =
+        getProductVariants(
+            product,
+        );
+
+    const trainingOptions =
+        product
+            .training_options
+        ?? [];
+
+    type TrainingGroup = {
+        variant:
+        PosVariantView
+        | null;
+
+        options:
+        typeof trainingOptions;
+    };
+
+    const groups:
+        TrainingGroup[] = [];
+
+    if (
+        variants.length > 0
+    ) {
+        variants.forEach(
+            (
+                variant,
+            ) => {
+                groups.push({
+                    variant,
+
+                    options:
+                        trainingOptions
+                            .filter(
+                                (
+                                    option,
+                                ) =>
+                                    option
+                                        .variant_id
+                                    === variant.id,
+                            ),
+                });
+            },
+        );
+    } else {
+        groups.push({
+            variant:
+                null,
+
+            options:
+                trainingOptions
+                    .filter(
+                        (
+                            option,
+                        ) =>
+                            option
+                                .variant_id
+                            === null
+                            || option
+                                .variant_id
+                            === undefined,
+                    ),
+        });
+    }
+
+    return groups.map(
+        (
+            group,
+            groupIndex,
+        ) => {
+            const variant =
+                group.variant;
+
+            const primaryUnit =
+                String(
+                    group
+                        .options[0]
+                        ?.primary_unit
+                    ?? variant
+                        ?.package_unit
+                    ?? product
+                        .primary_unit
+                    ?? product
+                        .unit
+                    ?? 'Unit',
+                )
+                    .trim()
+                || 'Unit';
+
+            const stockUnit =
+                String(
+                    group
+                        .options[0]
+                        ?.stock_unit
+                    ?? variant
+                        ?.stock_unit
+                    ?? product
+                        .stock_unit
+                    ?? primaryUnit,
+                )
+                    .trim()
+                || primaryUnit;
+
+            const dualOption =
+                group
+                    .options
+                    .find(
+                        (
+                            option,
+                        ) =>
+                            option
+                                .is_dual_unit,
+                    );
+
+            const isDualUnit =
+                Boolean(
+                    dualOption,
+                );
+
+            const conversionFactor =
+                Math.max(
+                    1,
+
+                    Number(
+                        dualOption
+                            ?.conversion_factor
+                        ?? 1,
+                    ),
+                );
+
+            const secondaryOption =
+                group
+                    .options
+                    .find(
+                        (
+                            option,
+                        ) =>
+                            normaliseUnit(
+                                option.unit,
+                            )
+                            !== normaliseUnit(
+                                primaryUnit,
+                            ),
+                    );
+
+            const secondaryUnit =
+                secondaryOption
+                    ?.unit
+                ?? (
+                    isDualUnit
+                        ? stockUnit
+                        : null
+                );
+
+            const price =
+                exactTrainingPrice(
+                    product,
+                    variant,
+                );
+
+            const sourceOptions =
+                group
+                    .options
+                    .length > 0
+                    ? group.options
+                    : [
+                        {
+                            key:
+                                'primary',
+
+                            label:
+                                primaryUnit,
+
+                            unit:
+                                primaryUnit,
+
+                            primary_unit:
+                                primaryUnit,
+
+                            stock_unit:
+                                stockUnit,
+
+                            variant_id:
+                                variant
+                                    ?.id
+                                ?? null,
+
+                            variant_name:
+                                variant
+                                    ? variantName(
+                                        variant,
+                                    )
+                                    : null,
+
+                            is_dual_unit:
+                                false,
+
+                            conversion_factor:
+                                1,
+                        },
+                    ];
+
+            const saleOptions:
+                PosSaleOption[] =
+                sourceOptions
+                    .map(
+                        (
+                            option,
+                        ): PosSaleOption => {
+                            const optionUnit =
+                                String(
+                                    option.unit
+                                    || primaryUnit,
+                                )
+                                    .trim()
+                                || primaryUnit;
+
+                            const isSecondary =
+                                isDualUnit
+                                && normaliseUnit(
+                                    optionUnit,
+                                )
+                                !== normaliseUnit(
+                                    primaryUnit,
+                                );
+
+                            return {
+                                key:
+                                    isSecondary
+                                        ? 'secondary'
+                                        : 'primary',
+
+                                label:
+                                    String(
+                                        option.label
+                                        || optionUnit,
+                                    ),
+
+                                unit:
+                                    optionUnit,
+
+                                price_available:
+                                    price.available,
+
+                                selling_price:
+                                    price.price,
+
+                                purchase_cost:
+                                    0,
+
+                                conversion_factor:
+                                    isSecondary
+                                        ? 1
+                                        : Math.max(
+                                            1,
+                                            Number(
+                                                option
+                                                    .conversion_factor
+                                                ?? conversionFactor,
+                                            ),
+                                        ),
+
+                                stock_quantity_per_unit:
+                                    isSecondary
+                                        ? 1
+                                        : Math.max(
+                                            1,
+                                            Number(
+                                                option
+                                                    .conversion_factor
+                                                ?? conversionFactor,
+                                            ),
+                                        ),
+
+                                /*
+                                 * Real stock is zero because this virtual
+                                 * batch exists only for Training Mode.
+                                 * Training Mode bypasses the stock maximum.
+                                 */
+                                available_quantity:
+                                    0,
+
+                                available_stock_quantity:
+                                    0,
+
+                                stock_unit:
+                                    String(
+                                        option
+                                            .stock_unit
+                                        || stockUnit,
+                                    ),
+
+                                quantity_step:
+                                    isSecondary
+                                        || isLikelyDecimalUnit(
+                                            optionUnit,
+                                        )
+                                        ? 0.001
+                                        : 1,
+
+                                allow_decimal_quantity:
+                                    isSecondary
+                                    || isLikelyDecimalUnit(
+                                        optionUnit,
+                                    ),
+                            };
+                        },
+                    )
+                    .filter(
+                        (
+                            option,
+                            index,
+                            all,
+                        ) =>
+                            all.findIndex(
+                                (
+                                    candidate,
+                                ) =>
+                                    candidate.key
+                                    === option.key
+                                    && normaliseUnit(
+                                        candidate.unit,
+                                    )
+                                    === normaliseUnit(
+                                        option.unit,
+                                    ),
+                            )
+                            === index,
+                    );
+
+            const variantId =
+                variant
+                    ?.id
+                ?? null;
+
+            return {
+                id:
+                    -(
+                        product.id
+                        * 100_000
+                        + (
+                            variantId
+                            ?? groupIndex
+                            + 1
+                        )
+                        + 1
+                    ),
+
+                is_training_virtual:
+                    true,
+
+                product_variant_id:
+                    variantId,
+
+                variant:
+                    variant
+                        ? {
+                            id:
+                                variant.id,
+
+                            product_id:
+                                variant
+                                    .product_id
+                                ?? product.id,
+
+                            display_name:
+                                variantName(
+                                    variant,
+                                ),
+
+                            size_value:
+                                Number(
+                                    variant
+                                        .size_value
+                                    ?? 0,
+                                ),
+
+                            size_unit:
+                                String(
+                                    variant
+                                        .size_unit
+                                    ?? '',
+                                ),
+
+                            package_unit:
+                                String(
+                                    variant
+                                        .package_unit
+                                    ?? primaryUnit,
+                                ),
+
+                            sku:
+                                variant
+                                    .sku
+                                ?? null,
+
+                            barcode:
+                                variant
+                                    .barcode
+                                ?? null,
+
+                            is_active:
+                                variant
+                                    .is_active
+                                ?? true,
+
+                            sort_order:
+                                Number(
+                                    variant
+                                        .sort_order
+                                    ?? 0,
+                                ),
+
+                            stock_unit:
+                                String(
+                                    variant
+                                        .stock_unit
+                                    ?? stockUnit,
+                                ),
+
+                            total_available_quantity:
+                                0,
+
+                            minimum_price:
+                                variant
+                                    .minimum_price
+                                ?? null,
+
+                            maximum_price:
+                                variant
+                                    .maximum_price
+                                ?? null,
+
+                            batches_count:
+                                0,
+
+                            has_stock:
+                                false,
+                        }
+                        : null,
+
+                purchase_item_id:
+                    null,
+
+                batch_code:
+                    variantId
+                        ? `TRAINING-V${variantId}`
+                        : `TRAINING-P${product.id}`,
+
+                batch_number:
+                    null,
+
+                is_dual_unit:
+                    isDualUnit,
+
+                primary_unit:
+                    primaryUnit,
+
+                stock_unit:
+                    stockUnit,
+
+                secondary_unit:
+                    secondaryUnit,
+
+                conversion_factor:
+                    conversionFactor,
+
+                selling_price:
+                    price.price,
+
+                primary_selling_price:
+                    price.price,
+
+                secondary_selling_price:
+                    null,
+
+                unit_cost:
+                    0,
+
+                purchase_cost:
+                    0,
+
+                cost_price:
+                    0,
+
+                buying_price:
+                    0,
+
+                base_unit_cost:
+                    0,
+
+                received_quantity:
+                    0,
+
+                available_quantity:
+                    0,
+
+                available_stock_quantity:
+                    0,
+
+                available_primary_quantity:
+                    0,
+
+                loose_remainder_quantity:
+                    0,
+
+                manufactured_date:
+                    null,
+
+                expiry_date:
+                    null,
+
+                is_expired:
+                    false,
+
+                received_at:
+                    null,
+
+                sale_options:
+                    saleOptions,
+            };
+        },
+    );
+}
+
 /* =========================================================
    SALE OPTION HELPERS
    ========================================================= */
@@ -821,6 +1484,12 @@ function getFallbackSaleOption(
 
         unit:
             primaryUnit,
+
+        price_available:
+            hasAllocatedPrice(
+                batch
+                    .selling_price,
+            ),
 
         selling_price:
             Number(
@@ -903,6 +1572,14 @@ function getSaleOptions(
                 ) => ({
                     ...option,
 
+                    price_available:
+                        option
+                            .price_available
+                        ?? hasAllocatedPrice(
+                            option
+                                .selling_price,
+                        ),
+
                     selling_price:
                         Number(
                             option
@@ -965,6 +1642,7 @@ function hasSellableStock(
         PosProduct,
     batch:
         PosStockBatch,
+    trainingMode = false,
 ): boolean {
     if (
         isBatchExpired(
@@ -974,10 +1652,24 @@ function hasSellableStock(
         return false;
     }
 
-    return getSaleOptions(
-        product,
-        batch,
-    )
+    const options =
+        getSaleOptions(
+            product,
+            batch,
+        );
+
+    if (
+        trainingMode
+    ) {
+        /*
+         * Training Mode is allowed to use a non-expired historical batch
+         * even when its real available stock is zero. A frontend-only
+         * virtual batch also reaches this branch.
+         */
+        return options.length > 0;
+    }
+
+    return options
         .some(
             (
                 option,
@@ -993,9 +1685,16 @@ function hasSellableStock(
 function createInitialQuantity(
     option:
         PosSaleOption | null,
+    trainingMode = false,
 ): string {
     if (!option) {
         return '';
+    }
+
+    if (
+        trainingMode
+    ) {
+        return '1';
     }
 
     const available =
@@ -2592,6 +3291,7 @@ const batchModalStyles = `
 
 export default function BatchSelectionModal({
     product,
+    trainingMode = false,
     onClose,
     onAdd,
 }: BatchSelectionModalProps) {
@@ -2717,30 +3417,89 @@ export default function BatchSelectionModal({
         );
 
     /* =====================================================
-       NON-EXPIRED SELLABLE BATCHES
+       BATCHES AVAILABLE FOR CURRENT MODE
        ===================================================== */
 
-    const allSellableBatches =
+    const allModeBatches =
         useMemo(
             () => {
                 if (!product) {
                     return [];
                 }
 
-                return product
-                    .batches
-                    .filter(
-                        (
-                            batch,
-                        ) =>
-                            hasSellableStock(
-                                product,
+                const realBatches =
+                    product
+                        .batches
+                        .filter(
+                            (
                                 batch,
-                            ),
+                            ) =>
+                                hasSellableStock(
+                                    product,
+                                    batch,
+                                    trainingMode,
+                                ),
+                        );
+
+                if (
+                    !trainingMode
+                ) {
+                    return realBatches;
+                }
+
+                const virtualBatches =
+                    createTrainingVirtualBatches(
+                        product,
                     );
+
+                if (
+                    !productHasVariants(
+                        product,
+                    )
+                ) {
+                    return realBatches.length > 0
+                        ? realBatches
+                        : virtualBatches;
+                }
+
+                /*
+                 * Variant products may have purchases for some variants and
+                 * no purchase at all for others. Add a virtual batch only for
+                 * the variants that do not have a usable non-expired real
+                 * batch.
+                 */
+                const missingVariantVirtualBatches =
+                    virtualBatches
+                        .filter(
+                            (
+                                virtualBatch,
+                            ) => {
+                                const variantId =
+                                    getBatchVariantId(
+                                        virtualBatch,
+                                    );
+
+                                return !realBatches
+                                    .some(
+                                        (
+                                            realBatch,
+                                        ) =>
+                                            getBatchVariantId(
+                                                realBatch,
+                                            )
+                                            === variantId,
+                                    );
+                            },
+                        );
+
+                return [
+                    ...realBatches,
+                    ...missingVariantVirtualBatches,
+                ];
             },
             [
                 product,
+                trainingMode,
             ],
         );
 
@@ -2748,7 +3507,14 @@ export default function BatchSelectionModal({
         useMemo(
             () =>
                 normaliseQuantity(
-                    allSellableBatches
+                    allModeBatches
+                        .filter(
+                            (
+                                batch,
+                            ) =>
+                                !batch
+                                    .is_training_virtual,
+                        )
                         .reduce(
                             (
                                 total,
@@ -2764,7 +3530,7 @@ export default function BatchSelectionModal({
                         ),
                 ),
             [
-                allSellableBatches,
+                allModeBatches,
             ],
         );
 
@@ -2787,7 +3553,7 @@ export default function BatchSelectionModal({
                 if (
                     !isVariantProduct
                 ) {
-                    return allSellableBatches;
+                    return allModeBatches;
                 }
 
                 /*
@@ -2807,25 +3573,22 @@ export default function BatchSelectionModal({
                  * Only batches belonging to
                  * selected variant.
                  */
-                return batchesForVariant(
-                    product,
-                    selectedVariantId,
-                )
+                return allModeBatches
                     .filter(
                         (
                             batch,
                         ) =>
-                            hasSellableStock(
-                                product,
+                            getBatchVariantId(
                                 batch,
-                            ),
+                            )
+                            === selectedVariantId,
                     );
             },
             [
                 product,
                 isVariantProduct,
                 selectedVariantId,
-                allSellableBatches,
+                allModeBatches,
             ],
         );
 
@@ -2836,16 +3599,7 @@ export default function BatchSelectionModal({
                     return [];
                 }
 
-                return visibleBatches
-                    .filter(
-                        (
-                            batch,
-                        ) =>
-                            hasSellableStock(
-                                product,
-                                batch,
-                            ),
-                    );
+                return visibleBatches;
             },
             [
                 product,
@@ -2901,19 +3655,22 @@ export default function BatchSelectionModal({
     const availableSaleOptions =
         useMemo(
             () =>
-                saleOptions
-                    .filter(
-                        (
-                            option,
-                        ) =>
-                            Number(
-                                option
-                                    .available_quantity
-                                ?? 0,
-                            ) > 0,
-                    ),
+                trainingMode
+                    ? saleOptions
+                    : saleOptions
+                        .filter(
+                            (
+                                option,
+                            ) =>
+                                Number(
+                                    option
+                                        .available_quantity
+                                    ?? 0,
+                                ) > 0,
+                        ),
             [
                 saleOptions,
+                trainingMode,
             ],
         );
 
@@ -3100,18 +3857,15 @@ export default function BatchSelectionModal({
                             (
                                 variant,
                             ) =>
-                                batchesForVariant(
-                                    product,
-                                    variant.id,
-                                )
+                                allModeBatches
                                     .some(
                                         (
                                             batch,
                                         ) =>
-                                            hasSellableStock(
-                                                product,
+                                            getBatchVariantId(
                                                 batch,
-                                            ),
+                                            )
+                                            === variant.id,
                                     ),
                         );
 
@@ -3135,17 +3889,8 @@ export default function BatchSelectionModal({
              * Keep previous batch-first flow.
              */
             const firstBatch =
-                product
-                    .batches
-                    .find(
-                        (
-                            batch,
-                        ) =>
-                            hasSellableStock(
-                                product,
-                                batch,
-                            ),
-                    );
+                allModeBatches[0]
+                ?? null;
 
             if (
                 firstBatch
@@ -3157,6 +3902,8 @@ export default function BatchSelectionModal({
         },
         [
             product,
+            allModeBatches,
+            trainingMode,
         ],
     );
 
@@ -3243,25 +3990,24 @@ export default function BatchSelectionModal({
              * batches.
              */
             const firstBatch =
-                batchesForVariant(
-                    product,
-                    variant.id,
-                )
+                allModeBatches
                     .find(
                         (
                             batch,
                         ) =>
-                            hasSellableStock(
-                                product,
+                            getBatchVariantId(
                                 batch,
-                            ),
+                            )
+                            === variant.id,
                     );
 
             if (
                 !firstBatch
             ) {
                 setErrorMessage(
-                    `${variantName(variant)} has no sellable stock.`,
+                    trainingMode
+                        ? `${variantName(variant)} could not be prepared for Training Mode.`
+                        : `${variantName(variant)} has no sellable stock.`,
                 );
 
                 return;
@@ -3337,18 +4083,15 @@ export default function BatchSelectionModal({
                         (
                             variant,
                         ) =>
-                            batchesForVariant(
-                                product,
-                                variant.id,
-                            )
+                            allModeBatches
                                 .some(
                                     (
                                         batch,
                                     ) =>
-                                        hasSellableStock(
-                                            product,
+                                        getBatchVariantId(
                                             batch,
-                                        ),
+                                        )
+                                        === variant.id,
                                 ),
                     );
 
@@ -3415,21 +4158,28 @@ export default function BatchSelectionModal({
                 return;
             }
 
-            const firstOption =
+            const batchOptions =
                 getSaleOptions(
                     product,
                     batch,
-                )
-                    .find(
-                        (
-                            option,
-                        ) =>
-                            Number(
-                                option
-                                    .available_quantity
-                                ?? 0,
-                            ) > 0,
-                    );
+                );
+
+            const firstOption =
+                trainingMode
+                    ? batchOptions[0]
+                    ?? null
+                    : batchOptions
+                        .find(
+                            (
+                                option,
+                            ) =>
+                                Number(
+                                    option
+                                        .available_quantity
+                                    ?? 0,
+                                ) > 0,
+                        )
+                    ?? null;
 
             if (
                 !firstOption
@@ -3478,7 +4228,8 @@ export default function BatchSelectionModal({
             }
 
             if (
-                Number(
+                !trainingMode
+                && Number(
                     option
                         .available_quantity
                     ?? 0,
@@ -3502,6 +4253,7 @@ export default function BatchSelectionModal({
             setQuantity(
                 createInitialQuantity(
                     option,
+                    trainingMode,
                 ),
             );
 
@@ -3545,14 +4297,19 @@ export default function BatchSelectionModal({
                 + amount;
 
             next =
-                Math.max(
-                    minimum,
-
-                    Math.min(
-                        maximum,
+                trainingMode
+                    ? Math.max(
+                        minimum,
                         next,
-                    ),
-                );
+                    )
+                    : Math.max(
+                        minimum,
+
+                        Math.min(
+                            maximum,
+                            next,
+                        ),
+                    );
 
             if (
                 !selectedSaleOption
@@ -3601,18 +4358,15 @@ export default function BatchSelectionModal({
                         (
                             variant,
                         ) =>
-                            batchesForVariant(
-                                product,
-                                variant.id,
-                            )
+                            allModeBatches
                                 .some(
                                     (
                                         batch,
                                     ) =>
-                                        hasSellableStock(
-                                            product,
+                                        getBatchVariantId(
                                             batch,
-                                        ),
+                                        )
+                                        === variant.id,
                                 ),
                     );
 
@@ -4003,7 +4757,8 @@ export default function BatchSelectionModal({
                 );
 
             if (
-                parsedQuantity
+                !trainingMode
+                && parsedQuantity
                 > maximum
                 + 0.0001
             ) {
@@ -4083,7 +4838,9 @@ export default function BatchSelectionModal({
                     <header className="bsm-header">
                         <div>
                             <span className="bsm-eyebrow">
-                                Add Product to Sale
+                                {trainingMode
+                                    ? 'Add Product to Training Bill'
+                                    : 'Add Product to Sale'}
                             </span>
 
                             <h2 className="bsm-title">
@@ -4252,22 +5009,19 @@ export default function BatchSelectionModal({
                                                     variant,
                                                 ) => {
                                                     const variantBatches =
-                                                        batchesForVariant(
-                                                            product,
-                                                            variant.id,
-                                                        );
-
-                                                    const sellableVariantBatches =
-                                                        variantBatches
+                                                        allModeBatches
                                                             .filter(
                                                                 (
                                                                     batch,
                                                                 ) =>
-                                                                    hasSellableStock(
-                                                                        product,
+                                                                    getBatchVariantId(
                                                                         batch,
-                                                                    ),
+                                                                    )
+                                                                    === variant.id,
                                                             );
+
+                                                    const sellableVariantBatches =
+                                                        variantBatches;
 
                                                     const sellable =
                                                         sellableVariantBatches
@@ -4467,11 +5221,13 @@ export default function BatchSelectionModal({
                                                 <Icon name="package" />
 
                                                 <strong>
-                                                    No Non-Expired Stock Available
+                                                    No Batch Available
                                                 </strong>
 
                                                 <span>
-                                                    No non-expired sellable stock batch is available for this selection.
+                                                    {trainingMode
+                                                        ? 'A Training Mode virtual batch will be used when no real purchase batch exists.'
+                                                        : 'No non-expired sellable stock batch is available for this selection.'}
                                                 </span>
                                             </div>
                                         ) : (
@@ -4545,17 +5301,25 @@ export default function BatchSelectionModal({
                                                                 <div className="bsm-batch-top">
                                                                     <div>
                                                                         <strong className="bsm-batch-code">
-                                                                            {
-                                                                                batch
-                                                                                    .batch_code
-                                                                            }
+                                                                            {batch
+                                                                                .is_training_virtual
+                                                                                ? 'Training — No Purchase Batch'
+                                                                                : batch
+                                                                                    .batch_code}
                                                                         </strong>
 
                                                                         <span className="bsm-batch-number">
-                                                                            Batch:
-                                                                            {' '}
-                                                                            {batch.batch_number
-                                                                                ?? 'Not specified'}
+                                                                            {batch
+                                                                                .is_training_virtual
+                                                                                ? 'No real stock batch exists for this catalogue item.'
+                                                                                : (
+                                                                                    <>
+                                                                                        Batch:
+                                                                                        {' '}
+                                                                                        {batch.batch_number
+                                                                                            ?? 'Not specified'}
+                                                                                    </>
+                                                                                )}
                                                                         </span>
 
                                                                         {batchVariant && (
@@ -4583,16 +5347,30 @@ export default function BatchSelectionModal({
                                                                         </span>
 
                                                                         <strong className="bsm-info-value">
-                                                                            {formatQuantity(
-                                                                                batch
-                                                                                    .available_quantity,
-                                                                            )}
+                                                                            {trainingMode
+                                                                                ? (
+                                                                                    batch
+                                                                                        .is_training_virtual
+                                                                                        ? 'No purchase history'
+                                                                                        : `${formatQuantity(
+                                                                                            batch
+                                                                                                .available_quantity,
+                                                                                        )} ${batch.stock_unit || primaryUnit} • no training limit`
+                                                                                )
+                                                                                : (
+                                                                                    <>
+                                                                                        {formatQuantity(
+                                                                                            batch
+                                                                                                .available_quantity,
+                                                                                        )}
 
-                                                                            {' '}
+                                                                                        {' '}
 
-                                                                            {batch
-                                                                                .stock_unit
-                                                                                || primaryUnit}
+                                                                                        {batch
+                                                                                            .stock_unit
+                                                                                            || primaryUnit}
+                                                                                    </>
+                                                                                )}
                                                                         </strong>
                                                                     </div>
 
@@ -4602,13 +5380,16 @@ export default function BatchSelectionModal({
                                                                         </span>
 
                                                                         <strong className="bsm-info-value">
-                                                                            {currencyFormatter.format(
-                                                                                Number(
-                                                                                    batch
-                                                                                        .purchase_cost
-                                                                                    ?? 0,
-                                                                                ),
-                                                                            )}
+                                                                            {batch
+                                                                                .is_training_virtual
+                                                                                ? 'Not Available'
+                                                                                : currencyFormatter.format(
+                                                                                    Number(
+                                                                                        batch
+                                                                                            .purchase_cost
+                                                                                        ?? 0,
+                                                                                    ),
+                                                                                )}
                                                                         </strong>
                                                                     </div>
 
@@ -4618,22 +5399,31 @@ export default function BatchSelectionModal({
                                                                         </span>
 
                                                                         <strong className="bsm-info-value">
-                                                                            {currencyFormatter.format(
-                                                                                Number(
-                                                                                    batch
-                                                                                        .selling_price
-                                                                                    ?? 0,
-                                                                                ),
-                                                                            )}
+                                                                            {hasAllocatedPrice(
+                                                                                batch
+                                                                                    .selling_price,
+                                                                            )
+                                                                                ? (
+                                                                                    <>
+                                                                                        {currencyFormatter.format(
+                                                                                            Number(
+                                                                                                batch
+                                                                                                    .selling_price
+                                                                                                ?? 0,
+                                                                                            ),
+                                                                                        )}
 
-                                                                            {' '}
+                                                                                        {' '}
 
-                                                                            /
-                                                                            {' '}
+                                                                                        /
+                                                                                        {' '}
 
-                                                                            {
-                                                                                primaryUnit
-                                                                            }
+                                                                                        {
+                                                                                            primaryUnit
+                                                                                        }
+                                                                                    </>
+                                                                                )
+                                                                                : 'Price Not Set'}
                                                                         </strong>
                                                                     </div>
 
@@ -4643,10 +5433,13 @@ export default function BatchSelectionModal({
                                                                         </span>
 
                                                                         <strong className="bsm-info-value">
-                                                                            {formatDate(
-                                                                                batch
-                                                                                    .expiry_date,
-                                                                            )}
+                                                                            {batch
+                                                                                .is_training_virtual
+                                                                                ? 'Not Applicable'
+                                                                                : formatDate(
+                                                                                    batch
+                                                                                        .expiry_date,
+                                                                                )}
                                                                         </strong>
                                                                     </div>
                                                                 </div>
@@ -4749,7 +5542,8 @@ export default function BatchSelectionModal({
                                                                         : 'bsm-unit-card'
                                                                 }
                                                                 disabled={
-                                                                    Number(
+                                                                    !trainingMode
+                                                                    && Number(
                                                                         option
                                                                             .available_quantity
                                                                         ?? 0,
@@ -4791,35 +5585,50 @@ export default function BatchSelectionModal({
                                                                             </strong>
 
                                                                             <span className="bsm-unit-price">
-                                                                                {currencyFormatter.format(
-                                                                                    Number(
-                                                                                        option
-                                                                                            .selling_price
-                                                                                        ?? 0,
-                                                                                    ),
-                                                                                )}
+                                                                                {option
+                                                                                    .price_available
+                                                                                    === false
+                                                                                    ? 'Price Not Set'
+                                                                                    : currencyFormatter.format(
+                                                                                        Number(
+                                                                                            option
+                                                                                                .selling_price
+                                                                                            ?? 0,
+                                                                                        ),
+                                                                                    )}
 
-                                                                                <small>
-                                                                                    {' '}
-                                                                                    /
-                                                                                    {' '}
-                                                                                    {
-                                                                                        option
-                                                                                            .unit
-                                                                                    }
-                                                                                </small>
+                                                                                {option
+                                                                                    .price_available
+                                                                                    !== false && (
+                                                                                        <small>
+                                                                                            {' '}
+                                                                                            /
+                                                                                            {' '}
+                                                                                            {
+                                                                                                option
+                                                                                                    .unit
+                                                                                            }
+                                                                                        </small>
+                                                                                    )}
                                                                             </span>
 
                                                                             <span className="bsm-unit-cost">
-                                                                                Cost:
-                                                                                {' '}
-                                                                                {currencyFormatter.format(
-                                                                                    Number(
-                                                                                        option
-                                                                                            .purchase_cost
-                                                                                        ?? 0,
-                                                                                    ),
-                                                                                )}
+                                                                                {selectedBatch
+                                                                                    .is_training_virtual
+                                                                                    ? 'Cost: Not Available'
+                                                                                    : (
+                                                                                        <>
+                                                                                            Cost:
+                                                                                            {' '}
+                                                                                            {currencyFormatter.format(
+                                                                                                Number(
+                                                                                                    option
+                                                                                                        .purchase_cost
+                                                                                                    ?? 0,
+                                                                                                ),
+                                                                                            )}
+                                                                                        </>
+                                                                                    )}
                                                                             </span>
                                                                         </div>
                                                                     </div>
@@ -4838,17 +5647,36 @@ export default function BatchSelectionModal({
                                                                         </span>
 
                                                                         <strong>
-                                                                            {formatQuantity(
-                                                                                option
-                                                                                    .available_quantity,
-                                                                            )}
+                                                                            {trainingMode
+                                                                                ? (
+                                                                                    <>
+                                                                                        {formatQuantity(
+                                                                                            option
+                                                                                                .available_quantity,
+                                                                                        )}
+                                                                                        {' '}
+                                                                                        {
+                                                                                            option
+                                                                                                .unit
+                                                                                        }
+                                                                                        {' • no training limit'}
+                                                                                    </>
+                                                                                )
+                                                                                : (
+                                                                                    <>
+                                                                                        {formatQuantity(
+                                                                                            option
+                                                                                                .available_quantity,
+                                                                                        )}
 
-                                                                            {' '}
+                                                                                        {' '}
 
-                                                                            {
-                                                                                option
-                                                                                    .unit
-                                                                            }
+                                                                                        {
+                                                                                            option
+                                                                                                .unit
+                                                                                        }
+                                                                                    </>
+                                                                                )}
                                                                         </strong>
                                                                     </div>
 
@@ -4901,13 +5729,17 @@ export default function BatchSelectionModal({
                                                                         </span>
 
                                                                         <strong>
-                                                                            {currencyFormatter.format(
-                                                                                Number(
-                                                                                    option
-                                                                                        .selling_price
-                                                                                    ?? 0,
-                                                                                ),
-                                                                            )}
+                                                                            {option
+                                                                                .price_available
+                                                                                === false
+                                                                                ? 'Price Not Set'
+                                                                                : currencyFormatter.format(
+                                                                                    Number(
+                                                                                        option
+                                                                                            .selling_price
+                                                                                        ?? 0,
+                                                                                    ),
+                                                                                )}
                                                                         </strong>
                                                                     </div>
                                                                 </div>
@@ -4960,22 +5792,37 @@ export default function BatchSelectionModal({
                                                     </span>
 
                                                     <span className="bsm-quantity-help">
-                                                        Maximum:
-                                                        {' '}
+                                                        {trainingMode
+                                                            ? (
+                                                                <>
+                                                                    Training Mode:
+                                                                    {' '}
 
-                                                        <strong>
-                                                            {formatQuantity(
-                                                                selectedSaleOption
-                                                                    .available_quantity,
+                                                                    <strong>
+                                                                        No stock limit
+                                                                    </strong>
+                                                                </>
+                                                            )
+                                                            : (
+                                                                <>
+                                                                    Maximum:
+                                                                    {' '}
+
+                                                                    <strong>
+                                                                        {formatQuantity(
+                                                                            selectedSaleOption
+                                                                                .available_quantity,
+                                                                        )}
+
+                                                                        {' '}
+
+                                                                        {
+                                                                            selectedSaleOption
+                                                                                .unit
+                                                                        }
+                                                                    </strong>
+                                                                </>
                                                             )}
-
-                                                            {' '}
-
-                                                            {
-                                                                selectedSaleOption
-                                                                    .unit
-                                                            }
-                                                        </strong>
                                                     </span>
                                                 </div>
 
@@ -5005,8 +5852,10 @@ export default function BatchSelectionModal({
                                                                 : 1
                                                         }
                                                         max={
-                                                            selectedSaleOption
-                                                                .available_quantity
+                                                            trainingMode
+                                                                ? undefined
+                                                                : selectedSaleOption
+                                                                    .available_quantity
                                                         }
                                                         step={
                                                             selectedSaleOption
@@ -5103,29 +5952,40 @@ export default function BatchSelectionModal({
 
                                                         {' '}
 
-                                                        {currencyFormatter.format(
-                                                            Number(
-                                                                selectedSaleOption
-                                                                    .selling_price
-                                                                ?? 0,
-                                                            ),
-                                                        )}
+                                                        {selectedSaleOption
+                                                            .price_available
+                                                            === false
+                                                            ? 'Price Not Set'
+                                                            : currencyFormatter.format(
+                                                                Number(
+                                                                    selectedSaleOption
+                                                                        .selling_price
+                                                                    ?? 0,
+                                                                ),
+                                                            )}
                                                     </span>
 
-                                                    <span className="bsm-total-cost">
-                                                        Cost Total:
-                                                        {' '}
+                                                    {!selectedBatch
+                                                        .is_training_virtual && (
+                                                            <span className="bsm-total-cost">
+                                                                Cost Total:
+                                                                {' '}
 
-                                                        {currencyFormatter.format(
-                                                            itemCostTotal,
+                                                                {currencyFormatter.format(
+                                                                    itemCostTotal,
+                                                                )}
+                                                            </span>
                                                         )}
-                                                    </span>
                                                 </div>
 
                                                 <strong className="bsm-total-value">
-                                                    {currencyFormatter.format(
-                                                        itemTotal,
-                                                    )}
+                                                    {selectedSaleOption
+                                                        .price_available
+                                                        === false
+                                                        ? 'Price Not Set'
+                                                        : currencyFormatter.format(
+                                                            itemTotal,
+                                                        )}
                                                 </strong>
                                             </div>
                                         )}
