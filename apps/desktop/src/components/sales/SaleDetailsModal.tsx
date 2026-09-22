@@ -1,5 +1,6 @@
 import {
     useEffect,
+    useState,
 } from 'react';
 
 import {
@@ -9,6 +10,9 @@ import {
 import type {
     SaleReceipt,
 } from '../../types/sale';
+
+import SaleReceiptModal
+    from '../pos/SaleReceiptModal';
 
 interface SaleDetailsModalProps {
     saleId: number | null;
@@ -1403,6 +1407,18 @@ export default function SaleDetailsModal({
     onClose,
     onRetry,
 }: SaleDetailsModalProps) {
+    const [
+        billSaleId,
+        setBillSaleId,
+    ] = useState<number | null>(
+        null,
+    );
+
+    const isBillOpen =
+        saleId !== null
+        && billSaleId === saleId
+        && sale !== null;
+
     useEffect(() => {
         if (
             saleId === null
@@ -1417,6 +1433,7 @@ export default function SaleDetailsModal({
             if (
                 event.key
                 === 'Escape'
+                && !isBillOpen
             ) {
                 onClose();
             }
@@ -1448,12 +1465,29 @@ export default function SaleDetailsModal({
     }, [
         saleId,
         onClose,
+        isBillOpen,
     ]);
 
     if (
         saleId === null
     ) {
         return null;
+    }
+
+    if (
+        isBillOpen
+        && sale
+    ) {
+        return (
+            <SaleReceiptModal
+                receipt={sale}
+                onClose={() => {
+                    setBillSaleId(
+                        null,
+                    );
+                }}
+            />
+        );
     }
 
     const hasProfitInformation =
@@ -2212,12 +2246,24 @@ export default function SaleDetailsModal({
 
                             <button
                                 type="button"
-                                className="sdm-button sdm-primary-button"
+                                className="sdm-button sdm-secondary-button"
                                 onClick={() => {
                                     window.print();
                                 }}
                             >
                                 Print Sale Details
+                            </button>
+
+                            <button
+                                type="button"
+                                className="sdm-button sdm-primary-button"
+                                onClick={() => {
+                                    setBillSaleId(
+                                        saleId,
+                                    );
+                                }}
+                            >
+                                Reprint / Download Bill
                             </button>
                         </footer>
                     )}
