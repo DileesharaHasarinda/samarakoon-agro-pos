@@ -155,7 +155,7 @@ function formatDate(
 }
 
 function paymentMethodName(
-    value: string,
+    value: string | null,
 ): string {
     switch (value) {
         case 'bank_transfer':
@@ -164,8 +164,17 @@ function paymentMethodName(
         case 'card':
             return 'Card';
 
-        default:
+        case 'cash':
             return 'Cash';
+
+        case 'mixed':
+            return 'Mixed Payment';
+
+        case 'cheque':
+            return 'Cheque';
+
+        default:
+            return 'On Due';
     }
 }
 
@@ -2943,6 +2952,7 @@ export default function ReportsPage() {
                         <option value="cash">Cash</option>
                         <option value="card">Card</option>
                         <option value="bank_transfer">Bank Transfer</option>
+                        <option value="cheque">Cheque</option>
                     </select>
                 </label>
 

@@ -56,6 +56,7 @@ class ReportController extends Controller
                     SalePayment::METHOD_CASH,
                     SalePayment::METHOD_CARD,
                     SalePayment::METHOD_BANK_TRANSFER,
+                    SalePayment::METHOD_CHEQUE,
                 ]),
             ],
 
