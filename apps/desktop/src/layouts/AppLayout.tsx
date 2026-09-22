@@ -466,6 +466,11 @@ const adminNavigation: NavigationSection[] = [
                 icon: 'package',
             },
             {
+                label: 'Product Units',
+                path: '/admin/product-units',
+                icon: 'package',
+            },
+            {
                 label: 'Inventory',
                 path: '/admin/inventory',
                 icon: 'inventory',

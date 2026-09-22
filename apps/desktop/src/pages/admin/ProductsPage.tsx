@@ -36,6 +36,10 @@ import {
     updateProduct,
 } from '../../services/productService';
 
+import {
+    getProductUnitOptions,
+} from '../../services/productUnitService';
+
 import type {
     Product,
     ProductCategory,
@@ -43,6 +47,10 @@ import type {
     ProductPaginationMeta,
     ProductVariantInput,
 } from '../../types/product';
+
+import type {
+    ProductUnitOption,
+} from '../../types/productUnit';
 
 /* =========================================================
    CONSTANTS
@@ -53,25 +61,6 @@ const PAGE_SIZE_OPTIONS = [
     20,
     50,
     100,
-] as const;
-
-const COMMON_UNITS = [
-    'Piece',
-    'Packet',
-    'Bag',
-    'Bottle',
-    'Box',
-    'Tin',
-    'Kilogram',
-    'Gram',
-    'Litre',
-    'Millilitre',
-    'Metre',
-    'Foot',
-    'Roll',
-    'Set',
-    'Pair',
-    'Dozen',
 ] as const;
 
 const VARIANT_SIZE_UNITS = [
@@ -117,23 +106,6 @@ interface SearchableSelectProps {
     onChange: (value: string) => void;
     onAdvance: () => void;
 }
-
-const COMMON_UNIT_OPTIONS:
-    SearchableSelectOption[] =
-    COMMON_UNITS.map(
-        (
-            unit,
-        ) => ({
-            value:
-                unit,
-
-            label:
-                unit,
-
-            searchText:
-                unit,
-        }),
-    );
 
 const VARIANT_SIZE_UNIT_OPTIONS:
     SearchableSelectOption[] =
@@ -2808,6 +2780,12 @@ export default function ProductsPage() {
         useState<ProductCategory[]>([]);
 
     const [
+        productUnits,
+        setProductUnits,
+    ] =
+        useState<ProductUnitOption[]>([]);
+
+    const [
         pagination,
         setPagination,
     ] =
@@ -2874,6 +2852,12 @@ export default function ProductsPage() {
         useState(true);
 
     const [
+        isProductUnitLoading,
+        setIsProductUnitLoading,
+    ] =
+        useState(true);
+
+    const [
         isSubmitting,
         setIsSubmitting,
     ] =
@@ -2920,6 +2904,121 @@ export default function ProductsPage() {
                 ),
             [
                 categories,
+            ],
+        );
+
+    const productUnitSearchOptions =
+        useMemo<
+            SearchableSelectOption[]
+        >(
+            () => {
+                const names =
+                    new Map<
+                        string,
+                        string
+                    >();
+
+                productUnits.forEach(
+                    (
+                        unit,
+                    ) => {
+                        names.set(
+                            unit.name
+                                .trim()
+                                .toLowerCase(),
+                            unit.name,
+                        );
+                    },
+                );
+
+                /*
+                 * Legacy safety:
+                 *
+                 * If this project already had products before the
+                 * Product Units module was introduced, keep the
+                 * currently selected unit visible while editing.
+                 *
+                 * The migration also imports existing product/package
+                 * unit strings into product_units automatically.
+                 */
+                [
+                    form.unit,
+                    ...form
+                        .variants
+                        .map(
+                            (
+                                variant,
+                            ) =>
+                                variant
+                                    .package_unit,
+                        ),
+                ]
+                    .map(
+                        (
+                            value,
+                        ) =>
+                            value.trim(),
+                    )
+                    .filter(
+                        Boolean,
+                    )
+                    .forEach(
+                        (
+                            value,
+                        ) => {
+                            const key =
+                                value.toLowerCase();
+
+                            if (
+                                !names.has(
+                                    key,
+                                )
+                            ) {
+                                names.set(
+                                    key,
+                                    value,
+                                );
+                            }
+                        },
+                    );
+
+                return Array
+                    .from(
+                        names.values(),
+                    )
+                    .sort(
+                        (
+                            first,
+                            second,
+                        ) =>
+                            first.localeCompare(
+                                second,
+                                undefined,
+                                {
+                                    sensitivity:
+                                        'base',
+                                },
+                            ),
+                    )
+                    .map(
+                        (
+                            unit,
+                        ) => ({
+                            value:
+                                unit,
+
+                            label:
+                                unit,
+
+                            searchText:
+                                unit,
+                        }),
+                    );
+            },
+            [
+                productUnits,
+                form.unit,
+                form.variants,
             ],
         );
 
@@ -3224,6 +3323,44 @@ export default function ProductsPage() {
             ],
         );
 
+    const loadProductUnits =
+        useCallback(
+            async (): Promise<void> => {
+                if (!token) {
+                    return;
+                }
+
+                setIsProductUnitLoading(
+                    true,
+                );
+
+                try {
+                    const response =
+                        await getProductUnitOptions(
+                            token,
+                        );
+
+                    setProductUnits(
+                        response.data,
+                    );
+                } catch (error) {
+                    setPageError(
+                        getErrorMessage(
+                            error,
+                            'Unable to load product units.',
+                        ),
+                    );
+                } finally {
+                    setIsProductUnitLoading(
+                        false,
+                    );
+                }
+            },
+            [
+                token,
+            ],
+        );
+
     useEffect(
         () => {
             void loadProducts();
@@ -3239,6 +3376,15 @@ export default function ProductsPage() {
         },
         [
             loadCategories,
+        ],
+    );
+
+    useEffect(
+        () => {
+            void loadProductUnits();
+        },
+        [
+            loadProductUnits,
         ],
     );
 
@@ -4031,13 +4177,14 @@ export default function ProductsPage() {
                                                         form.unit
                                                     }
                                                     options={
-                                                        COMMON_UNIT_OPTIONS
+                                                        productUnitSearchOptions
                                                     }
                                                     placeholder="Select unit"
                                                     searchPlaceholder="Search unit..."
-                                                    emptyMessage="No unit matches your search."
+                                                    emptyMessage="No Product Unit exists yet. Add it from the Product Units module."
                                                     disabled={
                                                         isSubmitting
+                                                        || isProductUnitLoading
                                                     }
                                                     ariaLabel="Select main product unit"
                                                     onChange={(unit) => {
@@ -4077,6 +4224,16 @@ export default function ProductsPage() {
                                                         );
                                                     }}
                                                 />
+
+                                                <small>
+                                                    Units are managed from the
+                                                    {' '}
+                                                    <strong>
+                                                        Product Units
+                                                    </strong>
+                                                    {' '}
+                                                    module.
+                                                </small>
                                             </label>
 
                                             <label className="pm-field">
@@ -4365,13 +4522,14 @@ export default function ProductsPage() {
                                                                                 .package_unit
                                                                         }
                                                                         options={
-                                                                            COMMON_UNIT_OPTIONS
+                                                                            productUnitSearchOptions
                                                                         }
                                                                         placeholder="Select"
                                                                         searchPlaceholder="Search package unit..."
-                                                                        emptyMessage="No package unit matches your search."
+                                                                        emptyMessage="No Product Unit exists yet. Add it from the Product Units module."
                                                                         disabled={
                                                                             isSubmitting
+                                                                            || isProductUnitLoading
                                                                         }
                                                                         ariaLabel={`Select package unit for variant ${index + 1}`}
                                                                         dataVariantIndex={
@@ -4544,6 +4702,7 @@ export default function ProductsPage() {
                                 className="pp-button pp-button-primary"
                                 disabled={
                                     isCategoryLoading
+                                    || isProductUnitLoading
                                 }
                                 onClick={
                                     openCreateForm

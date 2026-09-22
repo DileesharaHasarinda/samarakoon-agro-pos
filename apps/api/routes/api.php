@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\InventoryAlertController;
 use App\Http\Controllers\Api\OpeningInventoryController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\ProductUnitController;
 use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SaleController;
@@ -562,6 +563,14 @@ Route::prefix('v1')
                 );
 
                 Route::get(
+                    '/product-units/options',
+                    [
+                        ProductUnitController::class,
+                        'options',
+                    ],
+                );
+
+                Route::get(
                     '/products/options',
                     [
                         ProductController::class,
@@ -626,6 +635,13 @@ Route::prefix('v1')
                     'categories',
                     CategoryController::class,
                 );
+
+                Route::apiResource(
+                    'product-units',
+                    ProductUnitController::class,
+                )->except([
+                    'show',
+                ]);
 
                 Route::apiResource(
                     'products',

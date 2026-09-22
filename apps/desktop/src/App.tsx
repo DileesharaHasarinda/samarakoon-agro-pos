@@ -65,6 +65,9 @@ import InventoryPage
 import ProductsPage
     from './pages/admin/ProductsPage';
 
+import ProductUnitsPage
+    from './pages/admin/ProductUnitsPage';
+
 import PurchasesPage
     from './pages/admin/PurchasesPage';
 
@@ -255,6 +258,13 @@ export default function App() {
                         path="products"
                         element={
                             <ProductsPage />
+                        }
+                    />
+
+                    <Route
+                        path="product-units"
+                        element={
+                            <ProductUnitsPage />
                         }
                     />
 
