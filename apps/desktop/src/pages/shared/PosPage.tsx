@@ -2614,47 +2614,6 @@ const styles = `
         translateY(-2px) !important;
 }
 
-#agro-pos .product-card.keyboard-selected::after {
-    position: absolute !important;
-
-    right: 10px !important;
-    bottom: 10px !important;
-
-    display:
-        inline-flex !important;
-
-    align-items:
-        center !important;
-
-    min-height:
-        24px !important;
-
-    padding:
-        2px 7px !important;
-
-    color:
-        #175cd3 !important;
-
-    font-size:
-        10px !important;
-
-    font-weight:
-        850 !important;
-
-    content:
-        'Enter' !important;
-
-    background:
-        #eff8ff !important;
-
-    border:
-        1px solid
-        #b2ddff !important;
-
-    border-radius:
-        6px !important;
-}
-
 #agro-pos .product-card:hover {
     border-color:
         var(--green-700) !important;
