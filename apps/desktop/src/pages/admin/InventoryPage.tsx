@@ -6,6 +6,11 @@ import {
     useState,
 } from 'react';
 
+import type {
+    KeyboardEvent as ReactKeyboardEvent,
+    RefObject,
+} from 'react';
+
 import {
     createPortal,
 } from 'react-dom';
@@ -19,10 +24,29 @@ import {
 } from '../../lib/api';
 
 import {
+    createOpeningInventory,
     getStockProducts,
 } from '../../services/stockService';
 
+import {
+    getProductOptions,
+} from '../../services/productService';
+
+import {
+    getSupplierOptions,
+} from '../../services/supplierService';
+
 import type {
+    ProductOption,
+    ProductVariantOption,
+} from '../../types/product';
+
+import type {
+    SupplierOption,
+} from '../../types/supplier';
+
+import type {
+    OpeningInventoryInput,
     StockPaginationMeta,
     StockProduct,
 } from '../../types/stock';
@@ -64,6 +88,7 @@ type IconName =
     | 'chevron-right'
     | 'close'
     | 'layers'
+    | 'plus'
     | 'refresh'
     | 'search'
     | 'tag';
@@ -141,6 +166,13 @@ function Icon({
                 <svg {...props}>
                     <path d="m12 2 9 5-9 5-9-5 9-5Z" />
                     <path d="m3 12 9 5 9-5M3 17l9 5 9-5" />
+                </svg>
+            );
+
+        case 'plus':
+            return (
+                <svg {...props}>
+                    <path d="M12 5v14M5 12h14" />
                 </svg>
             );
 
@@ -281,6 +313,592 @@ function expiryStatus(
     return 'normal';
 }
 
+interface OpeningInventoryFormState {
+    supplier_id: string;
+    product_id: string;
+    product_variant_id: string;
+    purchase_cost: string;
+    selling_price: string;
+    available_quantity: string;
+    is_dual_unit: boolean;
+    conversion_factor: string;
+    secondary_unit: string;
+    secondary_selling_price: string;
+    loose_quantity: string;
+}
+
+interface OpeningSearchOption {
+    value: string;
+    label: string;
+    secondary?: string;
+    searchText?: string;
+}
+
+interface OpeningSearchableSelectProps {
+    value: string;
+    options: OpeningSearchOption[];
+    placeholder: string;
+    searchPlaceholder: string;
+    emptyMessage: string;
+    disabled?: boolean;
+    ariaLabel: string;
+    navKey: string;
+    triggerRef?: RefObject<HTMLButtonElement | null>;
+    onChange: (value: string) => void;
+    onAdvance: (navKey: string) => void;
+}
+
+function newOpeningInventoryForm(
+    supplierId = '',
+): OpeningInventoryFormState {
+    return {
+        supplier_id: supplierId,
+        product_id: '',
+        product_variant_id: '',
+        purchase_cost: '',
+        selling_price: '',
+        available_quantity: '',
+        is_dual_unit: false,
+        conversion_factor: '50',
+        secondary_unit: 'Kg',
+        secondary_selling_price: '',
+        loose_quantity: '0',
+    };
+}
+
+function activeVariants(
+    product: ProductOption | null,
+): ProductVariantOption[] {
+    if (!product) {
+        return [];
+    }
+
+    return product.variants.filter(
+        (variant) => variant.is_active,
+    );
+}
+
+function isBagUnit(
+    unit: string | null | undefined,
+): boolean {
+    const normalised = String(unit ?? '')
+        .trim()
+        .toLowerCase();
+
+    return normalised === 'bag'
+        || normalised === 'bags';
+}
+
+function OpeningSearchableSelect({
+    value,
+    options,
+    placeholder,
+    searchPlaceholder,
+    emptyMessage,
+    disabled = false,
+    ariaLabel,
+    navKey,
+    triggerRef,
+    onChange,
+    onAdvance,
+}: OpeningSearchableSelectProps) {
+    const rootRef =
+        useRef<HTMLDivElement | null>(null);
+
+    const searchInputRef =
+        useRef<HTMLInputElement | null>(null);
+
+    const optionButtonRefs =
+        useRef<Map<string, HTMLButtonElement>>(
+            new Map(),
+        );
+
+    const [isOpen, setIsOpen] =
+        useState(false);
+
+    const [searchQuery, setSearchQuery] =
+        useState('');
+
+    const [
+        highlightedIndex,
+        setHighlightedIndex,
+    ] = useState(0);
+
+    const selectedOption =
+        useMemo(
+            () =>
+                options.find(
+                    (option) =>
+                        option.value === value,
+                ) ?? null,
+            [options, value],
+        );
+
+    const filteredOptions =
+        useMemo(() => {
+            const query =
+                searchQuery
+                    .trim()
+                    .toLowerCase();
+
+            if (!query) {
+                return options;
+            }
+
+            return options.filter((option) => {
+                const searchValue = [
+                    option.label,
+                    option.secondary,
+                    option.searchText,
+                ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+
+                return searchValue.includes(query);
+            });
+        }, [options, searchQuery]);
+
+    /*
+     * Dropdown lifecycle.
+     *
+     * IMPORTANT:
+     * Do not depend on filteredOptions/searchQuery here.
+     *
+     * The old implementation re-ran this effect after every typed
+     * character because filteredOptions changed. It then called
+     * input.select(), which selected the whole search text again.
+     * Therefore the next character replaced the previous character.
+     *
+     * This effect now runs only when the dropdown itself opens/closes,
+     * or when the underlying option collection/selected value changes.
+     */
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        const selectedIndex =
+            options.findIndex(
+                (option) =>
+                    option.value === value,
+            );
+
+        setHighlightedIndex(
+            selectedIndex >= 0
+                ? selectedIndex
+                : 0,
+        );
+
+        const timer =
+            window.setTimeout(() => {
+                const input =
+                    searchInputRef.current;
+
+                if (!input) {
+                    return;
+                }
+
+                /*
+                 * Focus the search box without selecting the existing
+                 * text. Keeping the caret at the end means every new
+                 * character is appended normally.
+                 */
+                input.focus({
+                    preventScroll: true,
+                });
+
+                const caretPosition =
+                    input.value.length;
+
+                input.setSelectionRange(
+                    caretPosition,
+                    caretPosition,
+                );
+            }, 30);
+
+        const handleOutsideClick =
+            (event: MouseEvent): void => {
+                if (
+                    event.target instanceof Node
+                    && !rootRef.current
+                        ?.contains(event.target)
+                ) {
+                    setIsOpen(false);
+                    setSearchQuery('');
+                }
+            };
+
+        document.addEventListener(
+            'mousedown',
+            handleOutsideClick,
+        );
+
+        return () => {
+            window.clearTimeout(timer);
+
+            document.removeEventListener(
+                'mousedown',
+                handleOutsideClick,
+            );
+        };
+    }, [
+        isOpen,
+        options,
+        value,
+    ]);
+
+    /*
+     * Search results may change on every keystroke.
+     *
+     * Only reset the keyboard highlight here. Do not refocus or select
+     * the search input, otherwise normal multi-character typing breaks.
+     */
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        setHighlightedIndex(0);
+    }, [
+        searchQuery,
+        isOpen,
+    ]);
+
+    const closeDropdown = (): void => {
+        setIsOpen(false);
+        setSearchQuery('');
+    };
+
+    const chooseOption =
+        (
+            option: OpeningSearchOption,
+        ): void => {
+            onChange(option.value);
+            closeDropdown();
+
+            window.setTimeout(() => {
+                onAdvance(navKey);
+            }, 0);
+        };
+
+    const moveHighlight =
+        (
+            direction: number,
+        ): void => {
+            if (
+                filteredOptions.length
+                === 0
+            ) {
+                return;
+            }
+
+            setHighlightedIndex((current) => {
+                const next =
+                    (
+                        current
+                        + direction
+                        + filteredOptions.length
+                    )
+                    % filteredOptions.length;
+
+                const option =
+                    filteredOptions[next];
+
+                if (option) {
+                    window.setTimeout(() => {
+                        optionButtonRefs.current
+                            .get(option.value)
+                            ?.scrollIntoView({
+                                block: 'nearest',
+                            });
+                    }, 0);
+                }
+
+                return next;
+            });
+        };
+
+    const handleSearchKeyDown =
+        (
+            event:
+                ReactKeyboardEvent<
+                    HTMLInputElement
+                >,
+        ): void => {
+            if (
+                event.key
+                === 'ArrowDown'
+            ) {
+                event.preventDefault();
+                moveHighlight(1);
+                return;
+            }
+
+            if (
+                event.key
+                === 'ArrowUp'
+            ) {
+                event.preventDefault();
+                moveHighlight(-1);
+                return;
+            }
+
+            if (
+                event.key
+                === 'Enter'
+            ) {
+                event.preventDefault();
+
+                const option =
+                    filteredOptions[
+                    highlightedIndex
+                    ];
+
+                if (option) {
+                    chooseOption(option);
+                }
+
+                return;
+            }
+
+            if (
+                event.key
+                === 'Escape'
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+                closeDropdown();
+            }
+        };
+
+    return (
+        <div
+            ref={rootRef}
+            className={
+                isOpen
+                    ? 'oim-searchable-select is-open'
+                    : 'oim-searchable-select'
+            }
+        >
+            <button
+                ref={triggerRef}
+                type="button"
+                className={[
+                    'oim-searchable-trigger',
+                    selectedOption
+                        ? ''
+                        : 'placeholder',
+                ]
+                    .filter(Boolean)
+                    .join(' ')}
+                disabled={disabled}
+                aria-label={ariaLabel}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
+                data-oim-enter-nav="true"
+                data-oim-nav-key={navKey}
+                onClick={() => {
+                    setIsOpen(
+                        (current) => !current,
+                    );
+                }}
+                onKeyDown={(event) => {
+                    if (
+                        event.key === 'Enter'
+                        && !isOpen
+                        && selectedOption
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onAdvance(navKey);
+                        return;
+                    }
+
+                    if (
+                        (
+                            event.key === 'Enter'
+                            || event.key === 'ArrowDown'
+                            || event.key === ' '
+                        )
+                        && !isOpen
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setIsOpen(true);
+                        return;
+                    }
+
+                    if (
+                        event.key === 'Escape'
+                        && isOpen
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeDropdown();
+                    }
+                }}
+            >
+                <span className="oim-searchable-trigger-text">
+                    {selectedOption?.label
+                        ?? placeholder}
+                </span>
+
+                <span
+                    className={
+                        isOpen
+                            ? 'oim-searchable-chevron open'
+                            : 'oim-searchable-chevron'
+                    }
+                >
+                    <Icon
+                        name="chevron-right"
+                    />
+                </span>
+            </button>
+
+            {isOpen && (
+                <div className="oim-searchable-menu">
+                    <div className="oim-searchable-search-wrap">
+                        <span className="oim-searchable-search-icon">
+                            <Icon name="search" />
+                        </span>
+
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            className="oim-searchable-search-input"
+                            value={searchQuery}
+                            placeholder={
+                                searchPlaceholder
+                            }
+                            autoComplete="off"
+                            spellCheck={false}
+                            onChange={(event) => {
+                                setSearchQuery(
+                                    event.target.value,
+                                );
+                            }}
+                            onKeyDown={
+                                handleSearchKeyDown
+                            }
+                        />
+                    </div>
+
+                    <div
+                        className="oim-searchable-options"
+                        role="listbox"
+                        aria-label={ariaLabel}
+                    >
+                        {filteredOptions.length
+                            === 0 ? (
+                            <div className="oim-searchable-empty">
+                                <Icon name="search" />
+
+                                <strong>
+                                    No results found
+                                </strong>
+
+                                <span>
+                                    {emptyMessage}
+                                </span>
+                            </div>
+                        ) : (
+                            filteredOptions.map(
+                                (
+                                    option,
+                                    index,
+                                ) => {
+                                    const selected =
+                                        option.value
+                                        === value;
+
+                                    const highlighted =
+                                        index
+                                        === highlightedIndex;
+
+                                    return (
+                                        <button
+                                            ref={(node) => {
+                                                if (node) {
+                                                    optionButtonRefs
+                                                        .current
+                                                        .set(
+                                                            option.value,
+                                                            node,
+                                                        );
+                                                } else {
+                                                    optionButtonRefs
+                                                        .current
+                                                        .delete(
+                                                            option.value,
+                                                        );
+                                                }
+                                            }}
+                                            key={
+                                                option.value
+                                            }
+                                            type="button"
+                                            role="option"
+                                            aria-selected={
+                                                selected
+                                            }
+                                            className={[
+                                                'oim-searchable-option',
+                                                selected
+                                                    ? 'selected'
+                                                    : '',
+                                                highlighted
+                                                    ? 'highlighted'
+                                                    : '',
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' ')}
+                                            onMouseEnter={() => {
+                                                setHighlightedIndex(
+                                                    index,
+                                                );
+                                            }}
+                                            onMouseDown={(event) => {
+                                                event.preventDefault();
+                                            }}
+                                            onClick={() => {
+                                                chooseOption(option);
+                                            }}
+                                        >
+                                            <span className="oim-searchable-option-copy">
+                                                <strong>
+                                                    {option.label}
+                                                </strong>
+
+                                                {option.secondary && (
+                                                    <small>
+                                                        {option.secondary}
+                                                    </small>
+                                                )}
+                                            </span>
+
+                                            {selected && (
+                                                <span className="oim-searchable-selected">
+                                                    ✓
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                },
+                            )
+                        )}
+                    </div>
+
+                    <div className="oim-searchable-keyboard-help">
+                        Type to search • ↑ ↓ move • Enter select • Esc close
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 const inventoryStyles = `
 #inventory-page,
 #inventory-page *,
@@ -418,6 +1036,33 @@ const inventoryStyles = `
     gap: 8px !important;
 }
 
+#inventory-page .inv-opening-button {
+    display: inline-flex !important;
+    min-height: 36px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 7px 12px !important;
+    color: #ffffff !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+    background: var(--inv-green-700) !important;
+    border: 1px solid var(--inv-green-700) !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+}
+
+#inventory-page .inv-opening-button:hover {
+    background: var(--inv-green-800) !important;
+    border-color: var(--inv-green-800) !important;
+}
+
+#inventory-page .inv-opening-button svg {
+    width: 15px !important;
+    height: 15px !important;
+}
+
 #inventory-page .inv-total-badge {
     display: inline-flex !important;
     min-height: 36px !important;
@@ -462,6 +1107,21 @@ const inventoryStyles = `
     width: 18px !important;
     height: 18px !important;
     min-width: 18px !important;
+}
+
+#inventory-page .inv-success {
+    display: flex !important;
+    width: 100% !important;
+    min-height: 46px !important;
+    align-items: center !important;
+    gap: 9px !important;
+    padding: 10px 12px !important;
+    color: var(--inv-green-900) !important;
+    font-size: 13px !important;
+    font-weight: 650 !important;
+    background: var(--inv-green-50) !important;
+    border: 1px solid #86efac !important;
+    border-radius: 10px !important;
 }
 
 #inventory-page .inv-alert-text {
@@ -1293,6 +1953,692 @@ const inventoryStyles = `
 }
 
 /* =========================================================
+   OPENING INVENTORY MODAL
+   ========================================================= */
+
+#opening-inventory-modal,
+#opening-inventory-modal *,
+#opening-inventory-modal *::before,
+#opening-inventory-modal *::after {
+    box-sizing: border-box !important;
+}
+
+#opening-inventory-modal {
+    --oi-green-900: #14532d;
+    --oi-green-800: #166534;
+    --oi-green-700: #15803d;
+    --oi-green-50: #f0fdf4;
+    --oi-text: #101828;
+    --oi-text-secondary: #344054;
+    --oi-muted: #667085;
+    --oi-border: #d0d5dd;
+
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483647 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: var(--oi-text) !important;
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+}
+
+#opening-inventory-modal button,
+#opening-inventory-modal input,
+#opening-inventory-modal select {
+    font: inherit !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+}
+
+#opening-inventory-modal .oim-backdrop {
+    position: absolute !important;
+    inset: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 18px !important;
+    overflow: auto !important;
+    background: rgba(3, 18, 10, .74) !important;
+    backdrop-filter: blur(4px) !important;
+}
+
+#opening-inventory-modal .oim-dialog {
+    display: flex !important;
+    width: min(760px, 100%) !important;
+    max-height: calc(100dvh - 36px) !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+    border: 1px solid #cfd8d2 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 28px 80px rgba(0, 0, 0, .38) !important;
+}
+
+#opening-inventory-modal .oim-header {
+    display: flex !important;
+    min-height: 84px !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 16px !important;
+    padding: 15px 18px !important;
+    color: #ffffff !important;
+    background: linear-gradient(
+        135deg,
+        #052e16,
+        var(--oi-green-700)
+    ) !important;
+}
+
+#opening-inventory-modal .oim-kicker {
+    display: block !important;
+    margin-bottom: 2px !important;
+    color: #bbf7d0 !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    letter-spacing: .055em !important;
+    text-transform: uppercase !important;
+}
+
+#opening-inventory-modal .oim-title {
+    margin: 0 !important;
+    color: #ffffff !important;
+    font-size: 21px !important;
+    font-weight: 780 !important;
+    line-height: 1.25 !important;
+}
+
+#opening-inventory-modal .oim-close {
+    display: grid !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    place-items: center !important;
+    padding: 0 !important;
+    color: #ffffff !important;
+    background: rgba(255,255,255,.12) !important;
+    border: 1px solid rgba(255,255,255,.34) !important;
+    border-radius: 9px !important;
+    cursor: pointer !important;
+}
+
+#opening-inventory-modal .oim-close svg {
+    width: 18px !important;
+    height: 18px !important;
+}
+
+#opening-inventory-modal .oim-body {
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    padding: 17px !important;
+    overflow-y: auto !important;
+    background: #f5f8f6 !important;
+}
+
+#opening-inventory-modal .oim-info {
+    margin-bottom: 14px !important;
+    padding: 10px 12px !important;
+    color: #365314 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    background: #f7fee7 !important;
+    border: 1px solid #bef264 !important;
+    border-radius: 9px !important;
+}
+
+#opening-inventory-modal .oim-alert {
+    margin-bottom: 12px !important;
+    padding: 9px 11px !important;
+    font-size: 12px !important;
+    font-weight: 650 !important;
+    border-radius: 8px !important;
+}
+
+#opening-inventory-modal .oim-alert.error {
+    color: #b42318 !important;
+    background: #fef3f2 !important;
+    border: 1px solid #f3b5af !important;
+}
+
+#opening-inventory-modal .oim-alert.success {
+    color: #14532d !important;
+    background: #f0fdf4 !important;
+    border: 1px solid #86efac !important;
+}
+
+#opening-inventory-modal .oim-grid {
+    display: grid !important;
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr)) !important;
+    gap: 13px !important;
+}
+
+#opening-inventory-modal .oim-field {
+    display: grid !important;
+    min-width: 0 !important;
+    gap: 5px !important;
+}
+
+#opening-inventory-modal .oim-field.full {
+    grid-column: 1 / -1 !important;
+}
+
+#opening-inventory-modal .oim-label {
+    color: var(--oi-text-secondary) !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+}
+
+#opening-inventory-modal .oim-required {
+    color: #b42318 !important;
+}
+
+#opening-inventory-modal .oim-input,
+#opening-inventory-modal .oim-select {
+    width: 100% !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 11px !important;
+    color: var(--oi-text) !important;
+    font-size: 13.5px !important;
+    background: #ffffff !important;
+    border: 1px solid var(--oi-border) !important;
+    border-radius: 8px !important;
+    outline: none !important;
+}
+
+#opening-inventory-modal .oim-input:focus,
+#opening-inventory-modal .oim-select:focus {
+    border-color: var(--oi-green-700) !important;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, .12) !important;
+}
+
+#opening-inventory-modal .oim-input:disabled,
+#opening-inventory-modal .oim-select:disabled {
+    color: #98a2b3 !important;
+    background: #f2f4f7 !important;
+    cursor: not-allowed !important;
+}
+
+#opening-inventory-modal .oim-help {
+    color: var(--oi-muted) !important;
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+}
+
+#opening-inventory-modal .oim-preview {
+    grid-column: 1 / -1 !important;
+    display: grid !important;
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr)) !important;
+    gap: 1px !important;
+    overflow: hidden !important;
+    margin-top: 2px !important;
+    background: #d9e2dc !important;
+    border: 1px solid #d9e2dc !important;
+    border-radius: 9px !important;
+}
+
+#opening-inventory-modal .oim-preview-item {
+    min-width: 0 !important;
+    padding: 9px 11px !important;
+    background: #ffffff !important;
+}
+
+#opening-inventory-modal .oim-preview-item span {
+    display: block !important;
+    color: var(--oi-muted) !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+}
+
+#opening-inventory-modal .oim-preview-item strong {
+    display: block !important;
+    overflow: hidden !important;
+    margin-top: 2px !important;
+    color: var(--oi-text) !important;
+    font-size: 13px !important;
+    font-weight: 750 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#opening-inventory-modal .oim-footer {
+    display: flex !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding: 12px 16px !important;
+    background: #ffffff !important;
+    border-top: 1px solid #d0d5dd !important;
+}
+
+#opening-inventory-modal .oim-button {
+    display: inline-flex !important;
+    min-height: 38px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 7px 13px !important;
+    color: #344054 !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    background: #ffffff !important;
+    border: 1px solid #d0d5dd !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+}
+
+#opening-inventory-modal .oim-button.primary {
+    color: #ffffff !important;
+    background: var(--oi-green-700) !important;
+    border-color: var(--oi-green-700) !important;
+}
+
+#opening-inventory-modal .oim-button:hover:not(:disabled) {
+    background: #f8fafc !important;
+}
+
+#opening-inventory-modal .oim-button.primary:hover:not(:disabled) {
+    background: var(--oi-green-800) !important;
+    border-color: var(--oi-green-800) !important;
+}
+
+#opening-inventory-modal .oim-button:disabled {
+    opacity: .55 !important;
+    cursor: not-allowed !important;
+}
+
+@media (max-width: 700px) {
+    #opening-inventory-modal .oim-backdrop {
+        align-items: flex-end !important;
+        padding: 0 !important;
+    }
+
+    #opening-inventory-modal .oim-dialog {
+        width: 100% !important;
+        max-height: 96dvh !important;
+        border-radius: 16px 16px 0 0 !important;
+    }
+
+    #opening-inventory-modal .oim-grid,
+    #opening-inventory-modal .oim-preview {
+        grid-template-columns: 1fr !important;
+    }
+
+    #opening-inventory-modal .oim-field.full,
+    #opening-inventory-modal .oim-preview {
+        grid-column: auto !important;
+    }
+
+    #opening-inventory-modal .oim-footer {
+        align-items: stretch !important;
+        flex-direction: column-reverse !important;
+    }
+
+    #opening-inventory-modal .oim-button {
+        width: 100% !important;
+    }
+}
+
+
+/* =========================================================
+   OPENING INVENTORY — SEARCH + KEYBOARD + BAG/KG
+   ========================================================= */
+
+#opening-inventory-modal [data-oim-enter-nav="true"]:focus,
+#opening-inventory-modal [data-oim-enter-nav="true"]:focus-visible {
+    outline: none !important;
+    border-color: var(--oi-green-700) !important;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, .14) !important;
+}
+
+#opening-inventory-modal .oim-searchable-select {
+    position: relative !important;
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+#opening-inventory-modal .oim-searchable-select.is-open {
+    z-index: 900 !important;
+}
+
+#opening-inventory-modal .oim-searchable-trigger {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    padding: 0 10px !important;
+    color: var(--oi-text) !important;
+    font-size: 13.5px !important;
+    font-weight: 550 !important;
+    text-align: left !important;
+    background: #ffffff !important;
+    border: 1px solid var(--oi-border) !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+}
+
+#opening-inventory-modal .oim-searchable-trigger.placeholder {
+    color: var(--oi-muted) !important;
+}
+
+#opening-inventory-modal .oim-searchable-trigger-text {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#opening-inventory-modal .oim-searchable-chevron {
+    display: grid !important;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    place-items: center !important;
+    color: var(--oi-muted) !important;
+    transform: rotate(90deg) !important;
+    transition: transform .15s ease !important;
+}
+
+#opening-inventory-modal .oim-searchable-chevron.open {
+    transform: rotate(-90deg) !important;
+}
+
+#opening-inventory-modal .oim-searchable-chevron svg {
+    width: 16px !important;
+    height: 16px !important;
+}
+
+#opening-inventory-modal .oim-searchable-menu {
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    left: 0 !important;
+    z-index: 9999 !important;
+    width: 100% !important;
+    min-width: min(420px, 85vw) !important;
+    padding: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #b7c4ba !important;
+    border-radius: 11px !important;
+    box-shadow: 0 18px 45px rgba(16, 24, 40, .20) !important;
+}
+
+#opening-inventory-modal .oim-searchable-search-wrap {
+    position: relative !important;
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid #edf1ee !important;
+}
+
+#opening-inventory-modal .oim-searchable-search-icon {
+    position: absolute !important;
+    top: 12px !important;
+    left: 11px !important;
+    display: grid !important;
+    width: 18px !important;
+    height: 18px !important;
+    place-items: center !important;
+    color: var(--oi-muted) !important;
+    pointer-events: none !important;
+}
+
+#opening-inventory-modal .oim-searchable-search-icon svg {
+    width: 17px !important;
+    height: 17px !important;
+}
+
+#opening-inventory-modal .oim-searchable-search-input {
+    display: block !important;
+    width: 100% !important;
+    height: 42px !important;
+    padding: 0 12px 0 38px !important;
+    color: var(--oi-text) !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    background: #f9fbfa !important;
+    border: 1px solid var(--oi-border) !important;
+    border-radius: 8px !important;
+    outline: none !important;
+}
+
+#opening-inventory-modal .oim-searchable-search-input:focus {
+    border-color: var(--oi-green-700) !important;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, .12) !important;
+}
+
+#opening-inventory-modal .oim-searchable-options {
+    max-height: 260px !important;
+    margin-top: 7px !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin !important;
+}
+
+#opening-inventory-modal .oim-searchable-option {
+    display: flex !important;
+    width: 100% !important;
+    min-height: 47px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    padding: 8px 10px !important;
+    color: var(--oi-text-secondary) !important;
+    text-align: left !important;
+    background: #ffffff !important;
+    border: 1px solid transparent !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+}
+
+#opening-inventory-modal .oim-searchable-option.highlighted,
+#opening-inventory-modal .oim-searchable-option:hover {
+    background: var(--oi-green-50) !important;
+    border-color: #b8dfc3 !important;
+}
+
+#opening-inventory-modal .oim-searchable-option.selected {
+    color: var(--oi-green-900) !important;
+    background: #e9f8ee !important;
+    border-color: #8fc69e !important;
+}
+
+#opening-inventory-modal .oim-searchable-option-copy {
+    display: flex !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+}
+
+#opening-inventory-modal .oim-searchable-option-copy strong {
+    overflow: hidden !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+#opening-inventory-modal .oim-searchable-option-copy small {
+    color: var(--oi-muted) !important;
+    font-size: 10px !important;
+}
+
+#opening-inventory-modal .oim-searchable-selected {
+    display: grid !important;
+    width: 25px !important;
+    height: 25px !important;
+    min-width: 25px !important;
+    place-items: center !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    font-weight: 900 !important;
+    background: var(--oi-green-700) !important;
+    border-radius: 50% !important;
+}
+
+#opening-inventory-modal .oim-searchable-empty {
+    display: flex !important;
+    min-height: 96px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+    color: var(--oi-muted) !important;
+    text-align: center !important;
+}
+
+#opening-inventory-modal .oim-searchable-empty svg {
+    width: 22px !important;
+    height: 22px !important;
+    color: var(--oi-green-700) !important;
+}
+
+#opening-inventory-modal .oim-searchable-keyboard-help {
+    margin-top: 7px !important;
+    padding-top: 7px !important;
+    color: var(--oi-muted) !important;
+    font-size: 9px !important;
+    font-weight: 650 !important;
+    text-align: center !important;
+    border-top: 1px solid #edf1ee !important;
+}
+
+#opening-inventory-modal .oim-dual-card {
+    grid-column: 1 / -1 !important;
+    display: flex !important;
+    min-width: 0 !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 13px !important;
+    background: linear-gradient(135deg, #f0fdf4, #eff8ff) !important;
+    border: 1px solid #9fd4ae !important;
+    border-radius: 11px !important;
+}
+
+#opening-inventory-modal .oim-dual-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+}
+
+#opening-inventory-modal .oim-dual-title {
+    color: var(--oi-green-900) !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+}
+
+#opening-inventory-modal .oim-switch {
+    display: inline-flex !important;
+    min-height: 40px !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 6px 10px !important;
+    color: var(--oi-text-secondary) !important;
+    font-size: 12px !important;
+    font-weight: 750 !important;
+    background: #ffffff !important;
+    border: 1px solid #9fd4ae !important;
+    border-radius: 9px !important;
+    cursor: pointer !important;
+}
+
+#opening-inventory-modal .oim-switch input {
+    width: 19px !important;
+    height: 19px !important;
+    accent-color: var(--oi-green-700) !important;
+}
+
+#opening-inventory-modal .oim-dual-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 11px !important;
+}
+
+#opening-inventory-modal .oim-dual-preview {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+}
+
+#opening-inventory-modal .oim-dual-preview > div {
+    min-width: 0 !important;
+    padding: 9px 10px !important;
+    background: #ffffff !important;
+    border: 1px solid #c4ddcb !important;
+    border-radius: 8px !important;
+}
+
+#opening-inventory-modal .oim-dual-preview span {
+    display: block !important;
+    color: var(--oi-muted) !important;
+    font-size: 9px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+}
+
+#opening-inventory-modal .oim-dual-preview strong {
+    display: block !important;
+    margin-top: 2px !important;
+    color: var(--oi-text-secondary) !important;
+    font-size: 13px !important;
+    font-weight: 850 !important;
+}
+
+#opening-inventory-modal .oim-keyboard-note {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-right: auto !important;
+    color: var(--oi-muted) !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+}
+
+@media (max-width: 700px) {
+    #opening-inventory-modal .oim-dual-grid,
+    #opening-inventory-modal .oim-dual-preview {
+        grid-template-columns: 1fr !important;
+    }
+
+    #opening-inventory-modal .oim-dual-card {
+        grid-column: auto !important;
+    }
+
+    #opening-inventory-modal .oim-dual-header {
+        align-items: stretch !important;
+        flex-direction: column !important;
+    }
+
+    #opening-inventory-modal .oim-searchable-menu {
+        min-width: 100% !important;
+    }
+
+    #opening-inventory-modal .oim-keyboard-note {
+        margin-right: 0 !important;
+    }
+}
+
+/* =========================================================
    RESPONSIVE
    ========================================================= */
 
@@ -1489,7 +2835,10 @@ const inventoryStyles = `
     #inventory-page *::after,
     #inventory-details-modal *,
     #inventory-details-modal *::before,
-    #inventory-details-modal *::after {
+    #inventory-details-modal *::after,
+    #opening-inventory-modal *,
+    #opening-inventory-modal *::before,
+    #opening-inventory-modal *::after {
         transition: none !important;
         scroll-behavior: auto !important;
     }
@@ -1500,6 +2849,20 @@ export default function InventoryPage() {
     const {
         token,
     } = useAuth();
+
+    const openingInventoryFormRef =
+        useRef<
+            HTMLFormElement | null
+        >(
+            null,
+        );
+
+    const openingSupplierRef =
+        useRef<
+            HTMLButtonElement | null
+        >(
+            null,
+        );
 
     const searchInputRef =
         useRef<HTMLInputElement | null>(
@@ -1529,6 +2892,78 @@ export default function InventoryPage() {
             StockProduct | null
         >(
             null,
+        );
+
+    const [
+        isOpeningInventoryOpen,
+        setIsOpeningInventoryOpen,
+    ] =
+        useState(
+            false,
+        );
+
+    const [
+        openingInventoryForm,
+        setOpeningInventoryForm,
+    ] =
+        useState<OpeningInventoryFormState>(
+            newOpeningInventoryForm(),
+        );
+
+    const [
+        openingSuppliers,
+        setOpeningSuppliers,
+    ] =
+        useState<SupplierOption[]>(
+            [],
+        );
+
+    const [
+        openingProducts,
+        setOpeningProducts,
+    ] =
+        useState<ProductOption[]>(
+            [],
+        );
+
+    const [
+        isOpeningOptionsLoading,
+        setIsOpeningOptionsLoading,
+    ] =
+        useState(
+            false,
+        );
+
+    const [
+        isOpeningInventorySaving,
+        setIsOpeningInventorySaving,
+    ] =
+        useState(
+            false,
+        );
+
+    const [
+        openingInventoryError,
+        setOpeningInventoryError,
+    ] =
+        useState(
+            '',
+        );
+
+    const [
+        openingInventorySuccess,
+        setOpeningInventorySuccess,
+    ] =
+        useState(
+            '',
+        );
+
+    const [
+        pageSuccessMessage,
+        setPageSuccessMessage,
+    ] =
+        useState(
+            '',
         );
 
     const [
@@ -1606,6 +3041,913 @@ export default function InventoryPage() {
                 products,
             ],
         );
+
+    const openingSelectedProduct =
+        useMemo(
+            () =>
+                openingProducts.find(
+                    (
+                        product,
+                    ) =>
+                        product.id
+                        === Number(
+                            openingInventoryForm
+                                .product_id,
+                        ),
+                ) ?? null,
+            [
+                openingProducts,
+                openingInventoryForm
+                    .product_id,
+            ],
+        );
+
+    const openingProductVariants =
+        useMemo(
+            () =>
+                activeVariants(
+                    openingSelectedProduct,
+                ),
+            [
+                openingSelectedProduct,
+            ],
+        );
+
+    const openingSelectedVariant =
+        useMemo(
+            () =>
+                openingProductVariants.find(
+                    (
+                        variant,
+                    ) =>
+                        variant.id
+                        === Number(
+                            openingInventoryForm
+                                .product_variant_id,
+                        ),
+                ) ?? null,
+            [
+                openingProductVariants,
+                openingInventoryForm
+                    .product_variant_id,
+            ],
+        );
+
+    const openingPrimaryUnit =
+        openingSelectedVariant
+            ?.package_unit
+        || openingSelectedProduct
+            ?.unit
+        || 'Unit';
+
+    const openingIsBagProduct =
+        Boolean(
+            openingSelectedProduct,
+        )
+        && !openingSelectedProduct
+            ?.has_variants
+        && isBagUnit(
+            openingSelectedProduct
+                ?.unit,
+        );
+
+    const openingDualEnabled =
+        openingIsBagProduct
+        && openingInventoryForm
+            .is_dual_unit;
+
+    const openingPhysicalQuantity =
+        useMemo(
+            () => {
+                const mainQuantity =
+                    numberValue(
+                        openingInventoryForm
+                            .available_quantity,
+                    );
+
+                if (!openingDualEnabled) {
+                    return mainQuantity;
+                }
+
+                return (
+                    mainQuantity
+                    * numberValue(
+                        openingInventoryForm
+                            .conversion_factor,
+                    )
+                )
+                    + numberValue(
+                        openingInventoryForm
+                            .loose_quantity,
+                    );
+            },
+            [
+                openingDualEnabled,
+                openingInventoryForm
+                    .available_quantity,
+                openingInventoryForm
+                    .conversion_factor,
+                openingInventoryForm
+                    .loose_quantity,
+            ],
+        );
+
+    const openingCostPerKg =
+        openingDualEnabled
+            && numberValue(
+                openingInventoryForm
+                    .conversion_factor,
+            ) > 0
+            ? (
+                numberValue(
+                    openingInventoryForm
+                        .purchase_cost,
+                )
+                / numberValue(
+                    openingInventoryForm
+                        .conversion_factor,
+                )
+            )
+            : 0;
+
+    const openingSupplierSearchOptions =
+        useMemo<
+            OpeningSearchOption[]
+        >(
+            () =>
+                openingSuppliers.map(
+                    (
+                        supplier,
+                    ) => ({
+                        value:
+                            String(
+                                supplier.id,
+                            ),
+
+                        label:
+                            supplier.name,
+
+                        secondary:
+                            supplier.phone
+                                ? `Phone: ${supplier.phone}`
+                                : undefined,
+
+                        searchText:
+                            `${supplier.name} ${supplier.phone ?? ''} ${supplier.id}`,
+                    }),
+                ),
+            [
+                openingSuppliers,
+            ],
+        );
+
+    const openingProductSearchOptions =
+        useMemo<
+            OpeningSearchOption[]
+        >(
+            () =>
+                openingProducts.map(
+                    (
+                        product,
+                    ) => {
+                        const variantSearch =
+                            product
+                                .variants
+                                .map(
+                                    (
+                                        variant,
+                                    ) =>
+                                        [
+                                            variant.display_name,
+                                            variant.size_value,
+                                            variant.size_unit,
+                                            variant.package_unit,
+                                            variant.sku,
+                                            variant.barcode,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' '),
+                                )
+                                .join(' ');
+
+                        return {
+                            value:
+                                String(
+                                    product.id,
+                                ),
+
+                            label:
+                                product.name,
+
+                            secondary:
+                                `${product.category?.name ?? 'No category'} • ${product.unit}`
+                                + (
+                                    product.has_variants
+                                        ? ` • ${product.variants.length} variant${product.variants.length === 1 ? '' : 's'}`
+                                        : ''
+                                ),
+
+                            searchText:
+                                `${product.name} ${product.sku ?? ''} ${product.barcode ?? ''} ${product.unit} ${product.category?.name ?? ''} ${variantSearch}`,
+                        };
+                    },
+                ),
+            [
+                openingProducts,
+            ],
+        );
+
+    const openingVariantSearchOptions =
+        useMemo<
+            OpeningSearchOption[]
+        >(
+            () =>
+                openingProductVariants.map(
+                    (
+                        variant,
+                    ) => ({
+                        value:
+                            String(
+                                variant.id,
+                            ),
+
+                        label:
+                            variant.display_name,
+
+                        secondary:
+                            [
+                                variant.package_unit,
+                                variant.sku
+                                    ? `SKU: ${variant.sku}`
+                                    : '',
+                                variant.barcode
+                                    ? `Barcode: ${variant.barcode}`
+                                    : '',
+                            ]
+                                .filter(Boolean)
+                                .join(' • '),
+
+                        searchText:
+                            `${variant.display_name} ${variant.size_value} ${variant.size_unit} ${variant.package_unit} ${variant.sku ?? ''} ${variant.barcode ?? ''}`,
+                    }),
+                ),
+            [
+                openingProductVariants,
+            ],
+        );
+
+    const loadOpeningInventoryOptions =
+        useCallback(
+            async (): Promise<void> => {
+                if (!token) {
+                    return;
+                }
+
+                setIsOpeningOptionsLoading(
+                    true,
+                );
+
+                setOpeningInventoryError(
+                    '',
+                );
+
+                try {
+                    const [
+                        supplierResponse,
+                        productResponse,
+                    ] =
+                        await Promise.all([
+                            getSupplierOptions(
+                                token,
+                            ),
+
+                            getProductOptions(
+                                token,
+                            ),
+                        ]);
+
+                    setOpeningSuppliers(
+                        supplierResponse.data,
+                    );
+
+                    setOpeningProducts(
+                        productResponse.data,
+                    );
+                } catch (error) {
+                    setOpeningInventoryError(
+                        error
+                            instanceof ApiError
+                            ? error.message
+                            : 'Unable to load supplier and product options.',
+                    );
+                } finally {
+                    setIsOpeningOptionsLoading(
+                        false,
+                    );
+                }
+            },
+            [
+                token,
+            ],
+        );
+
+    const focusNextOpeningField =
+        (
+            currentNavKey:
+                string,
+        ): void => {
+            window.setTimeout(
+                () => {
+                    const form =
+                        openingInventoryFormRef
+                            .current;
+
+                    if (!form) {
+                        return;
+                    }
+
+                    const navigable =
+                        Array.from(
+                            form.querySelectorAll<
+                                HTMLElement
+                            >(
+                                '[data-oim-enter-nav="true"]',
+                            ),
+                        )
+                            .filter(
+                                (
+                                    element,
+                                ) => {
+                                    if (
+                                        element
+                                        instanceof HTMLButtonElement
+                                        || element
+                                        instanceof HTMLInputElement
+                                        || element
+                                        instanceof HTMLSelectElement
+                                    ) {
+                                        if (
+                                            element.disabled
+                                        ) {
+                                            return false;
+                                        }
+                                    }
+
+                                    return element
+                                        .getClientRects()
+                                        .length > 0;
+                                },
+                            );
+
+                    const currentIndex =
+                        navigable.findIndex(
+                            (
+                                element,
+                            ) =>
+                                element
+                                    .dataset
+                                    .oimNavKey
+                                === currentNavKey,
+                        );
+
+                    if (
+                        currentIndex < 0
+                    ) {
+                        return;
+                    }
+
+                    const nextElement =
+                        navigable[
+                        currentIndex
+                        + 1
+                        ];
+
+                    if (!nextElement) {
+                        return;
+                    }
+
+                    nextElement.focus({
+                        preventScroll:
+                            true,
+                    });
+
+                    nextElement.scrollIntoView({
+                        block:
+                            'nearest',
+
+                        inline:
+                            'nearest',
+
+                        behavior:
+                            'smooth',
+                    });
+
+                    if (
+                        nextElement
+                        instanceof HTMLInputElement
+                        && (
+                            nextElement.type
+                            === 'text'
+                            || nextElement.type
+                            === 'number'
+                        )
+                    ) {
+                        nextElement.select();
+                    }
+                },
+                0,
+            );
+        };
+
+    const handleOpeningFormKeyDown =
+        (
+            event:
+                ReactKeyboardEvent<
+                    HTMLFormElement
+                >,
+        ): void => {
+            if (
+                event.key !== 'Enter'
+                || event.defaultPrevented
+                || event.metaKey
+                || event.ctrlKey
+                || event.altKey
+            ) {
+                return;
+            }
+
+            const target =
+                event.target;
+
+            if (
+                !(target
+                    instanceof HTMLElement)
+            ) {
+                return;
+            }
+
+            if (
+                target.closest(
+                    '.oim-searchable-select',
+                )
+            ) {
+                return;
+            }
+
+            const navKey =
+                target
+                    .dataset
+                    .oimNavKey;
+
+            if (!navKey) {
+                return;
+            }
+
+            /*
+             * Keep native Enter behaviour on the final Submit button.
+             */
+            if (
+                target
+                instanceof HTMLButtonElement
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+
+            /*
+             * Enter toggles Bag/Kg checkbox then advances.
+             */
+            if (
+                target
+                instanceof HTMLInputElement
+                && target.type
+                === 'checkbox'
+            ) {
+                target.click();
+            }
+
+            focusNextOpeningField(
+                navKey,
+            );
+        };
+
+    const openOpeningInventory =
+        (): void => {
+            setSelectedProduct(
+                null,
+            );
+
+            setOpeningInventoryForm(
+                newOpeningInventoryForm(),
+            );
+
+            setOpeningInventoryError(
+                '',
+            );
+
+            setOpeningInventorySuccess(
+                '',
+            );
+
+            setPageSuccessMessage(
+                '',
+            );
+
+            setIsOpeningInventoryOpen(
+                true,
+            );
+
+            void loadOpeningInventoryOptions();
+        };
+
+    const closeOpeningInventory =
+        (): void => {
+            if (
+                isOpeningInventorySaving
+            ) {
+                return;
+            }
+
+            setIsOpeningInventoryOpen(
+                false,
+            );
+
+            setOpeningInventoryError(
+                '',
+            );
+
+            setOpeningInventorySuccess(
+                '',
+            );
+        };
+
+    const saveOpeningInventory =
+        async (
+            keepOpen:
+                boolean,
+        ): Promise<void> => {
+            if (
+                !token
+                || isOpeningInventorySaving
+            ) {
+                return;
+            }
+
+            const supplierId =
+                Number(
+                    openingInventoryForm
+                        .supplier_id,
+                );
+
+            const productId =
+                Number(
+                    openingInventoryForm
+                        .product_id,
+                );
+
+            const variantId =
+                openingInventoryForm
+                    .product_variant_id
+                    ? Number(
+                        openingInventoryForm
+                            .product_variant_id,
+                    )
+                    : null;
+
+            const purchaseCost =
+                Number(
+                    openingInventoryForm
+                        .purchase_cost,
+                );
+
+            const sellingPrice =
+                Number(
+                    openingInventoryForm
+                        .selling_price,
+                );
+
+            const mainQuantity =
+                Number(
+                    openingInventoryForm
+                        .available_quantity,
+                );
+
+            const conversionFactor =
+                Number(
+                    openingInventoryForm
+                        .conversion_factor,
+                );
+
+            const secondarySellingPrice =
+                Number(
+                    openingInventoryForm
+                        .secondary_selling_price,
+                );
+
+            const looseQuantity =
+                Number(
+                    openingInventoryForm
+                        .loose_quantity,
+                );
+
+            if (
+                !Number.isInteger(
+                    supplierId,
+                )
+                || supplierId <= 0
+            ) {
+                setOpeningInventoryError(
+                    'Please select a supplier.',
+                );
+
+                return;
+            }
+
+            if (
+                !Number.isInteger(
+                    productId,
+                )
+                || productId <= 0
+            ) {
+                setOpeningInventoryError(
+                    'Please select a product.',
+                );
+
+                return;
+            }
+
+            if (
+                openingSelectedProduct
+                    ?.has_variants
+                && (
+                    variantId === null
+                    || !Number.isInteger(
+                        variantId,
+                    )
+                    || variantId <= 0
+                )
+            ) {
+                setOpeningInventoryError(
+                    'Please select a product variant.',
+                );
+
+                return;
+            }
+
+            if (
+                !Number.isFinite(
+                    purchaseCost,
+                )
+                || purchaseCost <= 0
+            ) {
+                setOpeningInventoryError(
+                    'Cost must be greater than zero.',
+                );
+
+                return;
+            }
+
+            if (
+                !Number.isFinite(
+                    sellingPrice,
+                )
+                || sellingPrice <= 0
+            ) {
+                setOpeningInventoryError(
+                    'Selling price must be greater than zero.',
+                );
+
+                return;
+            }
+
+            if (
+                !Number.isFinite(
+                    mainQuantity,
+                )
+                || mainQuantity < 0
+            ) {
+                setOpeningInventoryError(
+                    openingDualEnabled
+                        ? 'Full Bag quantity cannot be negative.'
+                        : 'Available quantity must be greater than zero.',
+                );
+
+                return;
+            }
+
+            if (
+                !openingDualEnabled
+                && mainQuantity <= 0
+            ) {
+                setOpeningInventoryError(
+                    'Available quantity must be greater than zero.',
+                );
+
+                return;
+            }
+
+            if (openingDualEnabled) {
+                if (
+                    !Number.isFinite(
+                        conversionFactor,
+                    )
+                    || conversionFactor <= 0
+                ) {
+                    setOpeningInventoryError(
+                        'Weight in one Bag must be greater than zero.',
+                    );
+
+                    return;
+                }
+
+                if (
+                    !Number.isFinite(
+                        looseQuantity,
+                    )
+                    || looseQuantity < 0
+                ) {
+                    setOpeningInventoryError(
+                        'Loose Kg quantity cannot be negative.',
+                    );
+
+                    return;
+                }
+
+                if (
+                    mainQuantity <= 0
+                    && looseQuantity <= 0
+                ) {
+                    setOpeningInventoryError(
+                        'Enter at least one full Bag or a loose Kg quantity greater than zero.',
+                    );
+
+                    return;
+                }
+
+                if (
+                    !Number.isFinite(
+                        secondarySellingPrice,
+                    )
+                    || secondarySellingPrice <= 0
+                ) {
+                    setOpeningInventoryError(
+                        'Selling price for 1 Kg must be greater than zero.',
+                    );
+
+                    return;
+                }
+            }
+
+            const payload:
+                OpeningInventoryInput = {
+                supplier_id:
+                    supplierId,
+
+                product_id:
+                    productId,
+
+                product_variant_id:
+                    openingSelectedProduct
+                        ?.has_variants
+                        ? variantId
+                        : null,
+
+                purchase_cost:
+                    purchaseCost,
+
+                selling_price:
+                    sellingPrice,
+
+                available_quantity:
+                    mainQuantity,
+
+                is_dual_unit:
+                    openingDualEnabled,
+
+                conversion_factor:
+                    openingDualEnabled
+                        ? conversionFactor
+                        : null,
+
+                secondary_unit:
+                    openingDualEnabled
+                        ? 'Kg'
+                        : null,
+
+                secondary_selling_price:
+                    openingDualEnabled
+                        ? secondarySellingPrice
+                        : null,
+
+                loose_quantity:
+                    openingDualEnabled
+                        ? looseQuantity
+                        : 0,
+            };
+
+            setIsOpeningInventorySaving(
+                true,
+            );
+
+            setOpeningInventoryError(
+                '',
+            );
+
+            setOpeningInventorySuccess(
+                '',
+            );
+
+            try {
+                const response =
+                    await createOpeningInventory(
+                        token,
+                        payload,
+                    );
+
+                const created =
+                    response.data;
+
+                const variantLabel =
+                    created.variant
+                        ? ` - ${created.variant.display_name}`
+                        : '';
+
+                const quantityLabel =
+                    created.is_dual_unit
+                        ? (
+                            `${formatQuantity(
+                                created.entered_quantity,
+                            )} ${created.primary_unit}`
+                            + (
+                                created.loose_quantity > 0
+                                    ? ` + ${formatQuantity(
+                                        created.loose_quantity,
+                                    )} Kg loose`
+                                    : ''
+                            )
+                            + ` (${formatQuantity(
+                                created.available_quantity,
+                            )} Kg physical stock)`
+                        )
+                        : (
+                            `${formatQuantity(
+                                created.entered_quantity,
+                            )} ${created.primary_unit}`
+                        );
+
+                const successText =
+                    `${created.product.name}${variantLabel}: `
+                    + `${quantityLabel} opening stock added successfully.`;
+
+                await loadStock();
+
+                if (keepOpen) {
+                    setOpeningInventorySuccess(
+                        successText,
+                    );
+
+                    setOpeningInventoryForm(
+                        (
+                            current,
+                        ) =>
+                            newOpeningInventoryForm(
+                                current
+                                    .supplier_id,
+                            ),
+                    );
+
+                    window.setTimeout(
+                        () => {
+                            openingSupplierRef
+                                .current
+                                ?.focus();
+                        },
+                        40,
+                    );
+                } else {
+                    setPageSuccessMessage(
+                        successText,
+                    );
+
+                    setIsOpeningInventoryOpen(
+                        false,
+                    );
+                }
+            } catch (error) {
+                setOpeningInventoryError(
+                    error
+                        instanceof ApiError
+                        ? error.message
+                        : 'Unable to add opening inventory.',
+                );
+            } finally {
+                setIsOpeningInventorySaving(
+                    false,
+                );
+            }
+        };
+
 
     const loadStock =
         useCallback(
@@ -1815,6 +4157,88 @@ export default function InventoryPage() {
         ],
     );
 
+    useEffect(
+        () => {
+            if (
+                !isOpeningInventoryOpen
+            ) {
+                return;
+            }
+
+            const previousOverflow =
+                document.body
+                    .style
+                    .overflow;
+
+            const previouslyFocused =
+                document.activeElement
+                    instanceof HTMLElement
+                    ? document.activeElement
+                    : null;
+
+            document.body
+                .style
+                .overflow =
+                'hidden';
+
+            const focusTimer =
+                window.setTimeout(
+                    () => {
+                        openingSupplierRef
+                            .current
+                            ?.focus();
+                    },
+                    80,
+                );
+
+            const handleKeyDown =
+                (
+                    event:
+                        KeyboardEvent,
+                ): void => {
+                    if (
+                        event.key
+                        === 'Escape'
+                        && !isOpeningInventorySaving
+                    ) {
+                        event.preventDefault();
+
+                        setIsOpeningInventoryOpen(
+                            false,
+                        );
+                    }
+                };
+
+            window.addEventListener(
+                'keydown',
+                handleKeyDown,
+            );
+
+            return () => {
+                window.clearTimeout(
+                    focusTimer,
+                );
+
+                document.body
+                    .style
+                    .overflow =
+                    previousOverflow;
+
+                window.removeEventListener(
+                    'keydown',
+                    handleKeyDown,
+                );
+
+                previouslyFocused
+                    ?.focus();
+            };
+        },
+        [
+            isOpeningInventoryOpen,
+            isOpeningInventorySaving,
+        ],
+    );
+
     const clearSearch =
         (): void => {
             setSearch(
@@ -1833,6 +4257,892 @@ export default function InventoryPage() {
                 .current
                 ?.focus();
         };
+
+    const openingInventoryModal =
+        isOpeningInventoryOpen
+            && typeof document
+            !== 'undefined'
+            ? createPortal(
+                <div id="opening-inventory-modal">
+                    <style>
+                        {inventoryStyles}
+                    </style>
+
+                    <div
+                        className="oim-backdrop"
+                        role="presentation"
+                        onMouseDown={(event) => {
+                            if (
+                                event.target
+                                === event.currentTarget
+                                && !isOpeningInventorySaving
+                            ) {
+                                closeOpeningInventory();
+                            }
+                        }}
+                    >
+                        <form
+                            ref={
+                                openingInventoryFormRef
+                            }
+                            className="oim-dialog"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="opening-inventory-title"
+                            onKeyDown={
+                                handleOpeningFormKeyDown
+                            }
+                            onSubmit={(event) => {
+                                event.preventDefault();
+
+                                void saveOpeningInventory(
+                                    false,
+                                );
+                            }}
+                        >
+                            <header className="oim-header">
+                                <div>
+                                    <span className="oim-kicker">
+                                        Existing Stock Migration
+                                    </span>
+
+                                    <h2
+                                        id="opening-inventory-title"
+                                        className="oim-title"
+                                    >
+                                        Add Opening Inventory
+                                    </h2>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="oim-close"
+                                    aria-label="Close opening inventory"
+                                    disabled={
+                                        isOpeningInventorySaving
+                                    }
+                                    onClick={
+                                        closeOpeningInventory
+                                    }
+                                >
+                                    <Icon name="close" />
+                                </button>
+                            </header>
+
+                            <div className="oim-body">
+                                {/* <div className="oim-info">
+                                    Add stock that already exists in your shop.
+                                    No purchase, supplier due, supplier payment,
+                                    expense or cash transaction is created.
+                                    Cost is still used for inventory valuation
+                                    and future sale profit.
+                                </div> */}
+
+                                {openingInventoryError && (
+                                    <div className="oim-alert error">
+                                        {openingInventoryError}
+                                    </div>
+                                )}
+
+                                {openingInventorySuccess && (
+                                    <div className="oim-alert success">
+                                        {openingInventorySuccess}
+                                    </div>
+                                )}
+
+                                <div className="oim-grid">
+                                    {/* SUPPLIER */}
+
+                                    <div className="oim-field full">
+                                        <span className="oim-label">
+                                            Supplier
+                                            {' '}
+                                            <span className="oim-required">
+                                                *
+                                            </span>
+                                        </span>
+
+                                        <OpeningSearchableSelect
+                                            triggerRef={
+                                                openingSupplierRef
+                                            }
+                                            value={
+                                                openingInventoryForm
+                                                    .supplier_id
+                                            }
+                                            options={
+                                                openingSupplierSearchOptions
+                                            }
+                                            placeholder="Select a supplier"
+                                            searchPlaceholder="Search supplier name or phone..."
+                                            emptyMessage="No supplier matches your search."
+                                            disabled={
+                                                isOpeningOptionsLoading
+                                                || isOpeningInventorySaving
+                                            }
+                                            ariaLabel="Select supplier"
+                                            navKey="opening-supplier"
+                                            onChange={(
+                                                supplierId,
+                                            ) => {
+                                                setOpeningInventoryForm(
+                                                    (
+                                                        current,
+                                                    ) => ({
+                                                        ...current,
+
+                                                        supplier_id:
+                                                            supplierId,
+                                                    }),
+                                                );
+
+                                                setOpeningInventoryError(
+                                                    '',
+                                                );
+                                            }}
+                                            onAdvance={
+                                                focusNextOpeningField
+                                            }
+                                        />
+                                    </div>
+
+                                    {/* PRODUCT */}
+
+                                    <div className="oim-field full">
+                                        <span className="oim-label">
+                                            Product
+                                            {' '}
+                                            <span className="oim-required">
+                                                *
+                                            </span>
+                                        </span>
+
+                                        <OpeningSearchableSelect
+                                            value={
+                                                openingInventoryForm
+                                                    .product_id
+                                            }
+                                            options={
+                                                openingProductSearchOptions
+                                            }
+                                            placeholder="Select a product"
+                                            searchPlaceholder="Search product, SKU, barcode, category or unit..."
+                                            emptyMessage="No product matches your search."
+                                            disabled={
+                                                isOpeningOptionsLoading
+                                                || isOpeningInventorySaving
+                                            }
+                                            ariaLabel="Select product"
+                                            navKey="opening-product"
+                                            onChange={(
+                                                productId,
+                                            ) => {
+                                                const nextProduct =
+                                                    openingProducts.find(
+                                                        (
+                                                            product,
+                                                        ) =>
+                                                            String(
+                                                                product.id,
+                                                            )
+                                                            === productId,
+                                                    )
+                                                    ?? null;
+
+                                                setOpeningInventoryForm(
+                                                    (
+                                                        current,
+                                                    ) => ({
+                                                        ...current,
+
+                                                        product_id:
+                                                            productId,
+
+                                                        product_variant_id:
+                                                            '',
+
+                                                        purchase_cost:
+                                                            '',
+
+                                                        selling_price:
+                                                            '',
+
+                                                        available_quantity:
+                                                            '',
+
+                                                        is_dual_unit:
+                                                            false,
+
+                                                        conversion_factor:
+                                                            isBagUnit(
+                                                                nextProduct
+                                                                    ?.unit,
+                                                            )
+                                                                ? '50'
+                                                                : '1',
+
+                                                        secondary_unit:
+                                                            'Kg',
+
+                                                        secondary_selling_price:
+                                                            '',
+
+                                                        loose_quantity:
+                                                            '0',
+                                                    }),
+                                                );
+
+                                                setOpeningInventoryError(
+                                                    '',
+                                                );
+                                            }}
+                                            onAdvance={
+                                                focusNextOpeningField
+                                            }
+                                        />
+                                    </div>
+
+                                    {/* VARIANT */}
+
+                                    {openingSelectedProduct
+                                        ?.has_variants && (
+                                            <div className="oim-field full">
+                                                <span className="oim-label">
+                                                    Variant
+                                                    {' '}
+                                                    <span className="oim-required">
+                                                        *
+                                                    </span>
+                                                </span>
+
+                                                <OpeningSearchableSelect
+                                                    value={
+                                                        openingInventoryForm
+                                                            .product_variant_id
+                                                    }
+                                                    options={
+                                                        openingVariantSearchOptions
+                                                    }
+                                                    placeholder="Select package variant"
+                                                    searchPlaceholder="Search size, SKU or barcode..."
+                                                    emptyMessage="No variant matches your search."
+                                                    disabled={
+                                                        isOpeningInventorySaving
+                                                    }
+                                                    ariaLabel="Select product variant"
+                                                    navKey="opening-variant"
+                                                    onChange={(
+                                                        variantId,
+                                                    ) => {
+                                                        setOpeningInventoryForm(
+                                                            (
+                                                                current,
+                                                            ) => ({
+                                                                ...current,
+
+                                                                product_variant_id:
+                                                                    variantId,
+
+                                                                purchase_cost:
+                                                                    '',
+
+                                                                selling_price:
+                                                                    '',
+                                                            }),
+                                                        );
+
+                                                        setOpeningInventoryError(
+                                                            '',
+                                                        );
+                                                    }}
+                                                    onAdvance={
+                                                        focusNextOpeningField
+                                                    }
+                                                />
+                                            </div>
+                                        )}
+
+                                    {/* QUANTITY */}
+
+                                    <label className="oim-field full">
+                                        <span className="oim-label">
+                                            {openingDualEnabled
+                                                ? 'Available Full Bag Quantity'
+                                                : 'Available Quantity'}
+                                            {' '}
+                                            (
+                                            {openingPrimaryUnit}
+                                            )
+                                            {' '}
+                                            <span className="oim-required">
+                                                *
+                                            </span>
+                                        </span>
+
+                                        <input
+                                            type="number"
+                                            min={
+                                                openingDualEnabled
+                                                    ? '0'
+                                                    : '0.001'
+                                            }
+                                            step="0.001"
+                                            inputMode="decimal"
+                                            className="oim-input"
+                                            value={
+                                                openingInventoryForm
+                                                    .available_quantity
+                                            }
+                                            disabled={
+                                                isOpeningInventorySaving
+                                                || Boolean(
+                                                    openingSelectedProduct
+                                                        ?.has_variants
+                                                    && !openingSelectedVariant,
+                                                )
+                                            }
+                                            placeholder="0"
+                                            data-oim-enter-nav="true"
+                                            data-oim-nav-key="opening-quantity"
+                                            onChange={(event) => {
+                                                setOpeningInventoryForm(
+                                                    (
+                                                        current,
+                                                    ) => ({
+                                                        ...current,
+
+                                                        available_quantity:
+                                                            event
+                                                                .target
+                                                                .value,
+                                                    }),
+                                                );
+                                            }}
+                                        />
+
+                                        {openingDualEnabled && (
+                                            <small className="oim-help">
+                                                Enter only the number of full
+                                                Bags here. Existing loose Kg
+                                                stock is entered separately
+                                                below.
+                                            </small>
+                                        )}
+                                    </label>
+
+                                    {/* COST */}
+
+                                    <label className="oim-field">
+                                        <span className="oim-label">
+                                            Cost / 1
+                                            {' '}
+                                            {openingPrimaryUnit}
+                                            {' '}
+                                            <span className="oim-required">
+                                                *
+                                            </span>
+                                        </span>
+
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            inputMode="decimal"
+                                            className="oim-input"
+                                            value={
+                                                openingInventoryForm
+                                                    .purchase_cost
+                                            }
+                                            disabled={
+                                                isOpeningInventorySaving
+                                                || Boolean(
+                                                    openingSelectedProduct
+                                                        ?.has_variants
+                                                    && !openingSelectedVariant,
+                                                )
+                                            }
+                                            placeholder="0.00"
+                                            data-oim-enter-nav="true"
+                                            data-oim-nav-key="opening-cost"
+                                            onChange={(event) => {
+                                                setOpeningInventoryForm(
+                                                    (
+                                                        current,
+                                                    ) => ({
+                                                        ...current,
+
+                                                        purchase_cost:
+                                                            event
+                                                                .target
+                                                                .value,
+                                                    }),
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    {/* MAIN SELLING PRICE */}
+
+                                    <label className="oim-field">
+                                        <span className="oim-label">
+                                            Selling Price / 1
+                                            {' '}
+                                            {openingPrimaryUnit}
+                                            {' '}
+                                            <span className="oim-required">
+                                                *
+                                            </span>
+                                        </span>
+
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            inputMode="decimal"
+                                            className="oim-input"
+                                            value={
+                                                openingInventoryForm
+                                                    .selling_price
+                                            }
+                                            disabled={
+                                                isOpeningInventorySaving
+                                                || Boolean(
+                                                    openingSelectedProduct
+                                                        ?.has_variants
+                                                    && !openingSelectedVariant,
+                                                )
+                                            }
+                                            placeholder="0.00"
+                                            data-oim-enter-nav="true"
+                                            data-oim-nav-key="opening-selling-price"
+                                            onChange={(event) => {
+                                                setOpeningInventoryForm(
+                                                    (
+                                                        current,
+                                                    ) => ({
+                                                        ...current,
+
+                                                        selling_price:
+                                                            event
+                                                                .target
+                                                                .value,
+                                                    }),
+                                                );
+                                            }}
+                                        />
+                                    </label>
+
+                                    {/* BAG + KG */}
+
+                                    {openingIsBagProduct && (
+                                        <section className="oim-dual-card">
+                                            <header className="oim-dual-header">
+                                                <div>
+                                                    <strong className="oim-dual-title">
+                                                        Full Bag + Loose Kg Selling
+                                                    </strong>
+
+                                                    <div className="oim-help">
+                                                        Same Bag-to-Kg model
+                                                        used by Purchasing.
+                                                    </div>
+                                                </div>
+
+                                                <label className="oim-switch">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={
+                                                            openingInventoryForm
+                                                                .is_dual_unit
+                                                        }
+                                                        disabled={
+                                                            isOpeningInventorySaving
+                                                        }
+                                                        data-oim-enter-nav="true"
+                                                        data-oim-nav-key="opening-dual-unit"
+                                                        onChange={(event) => {
+                                                            const enabled =
+                                                                event
+                                                                    .target
+                                                                    .checked;
+
+                                                            setOpeningInventoryForm(
+                                                                (
+                                                                    current,
+                                                                ) => ({
+                                                                    ...current,
+
+                                                                    is_dual_unit:
+                                                                        enabled,
+
+                                                                    conversion_factor:
+                                                                        enabled
+                                                                            && !current
+                                                                                .conversion_factor
+                                                                            ? '50'
+                                                                            : current
+                                                                                .conversion_factor,
+
+                                                                    secondary_unit:
+                                                                        'Kg',
+
+                                                                    loose_quantity:
+                                                                        enabled
+                                                                            ? (
+                                                                                current
+                                                                                    .loose_quantity
+                                                                                || '0'
+                                                                            )
+                                                                            : '0',
+
+                                                                    secondary_selling_price:
+                                                                        enabled
+                                                                            ? current
+                                                                                .secondary_selling_price
+                                                                            : '',
+                                                                }),
+                                                            );
+                                                        }}
+                                                    />
+
+                                                    Enable Loose Kg Sales
+                                                </label>
+                                            </header>
+
+                                            {openingDualEnabled && (
+                                                <>
+                                                    <div className="oim-dual-grid">
+                                                        <label className="oim-field">
+                                                            <span className="oim-label">
+                                                                Weight in One Bag
+                                                                {' '}
+                                                                <span className="oim-required">
+                                                                    *
+                                                                </span>
+                                                            </span>
+
+                                                            <input
+                                                                type="number"
+                                                                min="0.001"
+                                                                step="0.001"
+                                                                inputMode="decimal"
+                                                                className="oim-input"
+                                                                value={
+                                                                    openingInventoryForm
+                                                                        .conversion_factor
+                                                                }
+                                                                disabled={
+                                                                    isOpeningInventorySaving
+                                                                }
+                                                                placeholder="Example: 50"
+                                                                data-oim-enter-nav="true"
+                                                                data-oim-nav-key="opening-conversion-factor"
+                                                                onChange={(event) => {
+                                                                    setOpeningInventoryForm(
+                                                                        (
+                                                                            current,
+                                                                        ) => ({
+                                                                            ...current,
+
+                                                                            conversion_factor:
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                        }),
+                                                                    );
+                                                                }}
+                                                            />
+                                                        </label>
+
+                                                        <label className="oim-field">
+                                                            <span className="oim-label">
+                                                                Loose Selling Unit
+                                                            </span>
+
+                                                            <select
+                                                                className="oim-select"
+                                                                value="Kg"
+                                                                disabled
+                                                            >
+                                                                <option value="Kg">
+                                                                    Kilogram — Kg
+                                                                </option>
+                                                            </select>
+                                                        </label>
+
+                                                        <label className="oim-field">
+                                                            <span className="oim-label">
+                                                                Existing Loose Quantity
+                                                                {' '}
+                                                                (Kg)
+                                                            </span>
+
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                step="0.001"
+                                                                inputMode="decimal"
+                                                                className="oim-input"
+                                                                value={
+                                                                    openingInventoryForm
+                                                                        .loose_quantity
+                                                                }
+                                                                disabled={
+                                                                    isOpeningInventorySaving
+                                                                }
+                                                                placeholder="0"
+                                                                data-oim-enter-nav="true"
+                                                                data-oim-nav-key="opening-loose-quantity"
+                                                                onChange={(event) => {
+                                                                    setOpeningInventoryForm(
+                                                                        (
+                                                                            current,
+                                                                        ) => ({
+                                                                            ...current,
+
+                                                                            loose_quantity:
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                        }),
+                                                                    );
+                                                                }}
+                                                            />
+
+                                                            <small className="oim-help">
+                                                                Example:
+                                                                3 full Bags
+                                                                + 12 Kg loose.
+                                                            </small>
+                                                        </label>
+
+                                                        <label className="oim-field">
+                                                            <span className="oim-label">
+                                                                Selling Price for 1 Kg
+                                                                {' '}
+                                                                <span className="oim-required">
+                                                                    *
+                                                                </span>
+                                                            </span>
+
+                                                            <input
+                                                                type="number"
+                                                                min="0.01"
+                                                                step="0.01"
+                                                                inputMode="decimal"
+                                                                className="oim-input"
+                                                                value={
+                                                                    openingInventoryForm
+                                                                        .secondary_selling_price
+                                                                }
+                                                                disabled={
+                                                                    isOpeningInventorySaving
+                                                                }
+                                                                placeholder="0.00"
+                                                                data-oim-enter-nav="true"
+                                                                data-oim-nav-key="opening-secondary-selling-price"
+                                                                onChange={(event) => {
+                                                                    setOpeningInventoryForm(
+                                                                        (
+                                                                            current,
+                                                                        ) => ({
+                                                                            ...current,
+
+                                                                            secondary_selling_price:
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                        }),
+                                                                    );
+                                                                }}
+                                                            />
+                                                        </label>
+                                                    </div>
+
+                                                    <div className="oim-dual-preview">
+                                                        <div>
+                                                            <span>
+                                                                Physical Stock
+                                                            </span>
+
+                                                            <strong>
+                                                                {formatQuantity(
+                                                                    openingPhysicalQuantity,
+                                                                )}
+                                                                {' '}
+                                                                Kg
+                                                            </strong>
+                                                        </div>
+
+                                                        <div>
+                                                            <span>
+                                                                Cost / Kg
+                                                            </span>
+
+                                                            <strong>
+                                                                {currencyFormatter.format(
+                                                                    Math.max(
+                                                                        0,
+                                                                        openingCostPerKg,
+                                                                    ),
+                                                                )}
+                                                            </strong>
+                                                        </div>
+
+                                                        <div>
+                                                            <span>
+                                                                Profit / Bag
+                                                            </span>
+
+                                                            <strong>
+                                                                {currencyFormatter.format(
+                                                                    numberValue(
+                                                                        openingInventoryForm
+                                                                            .selling_price,
+                                                                    )
+                                                                    - numberValue(
+                                                                        openingInventoryForm
+                                                                            .purchase_cost,
+                                                                    ),
+                                                                )}
+                                                            </strong>
+                                                        </div>
+
+                                                        <div>
+                                                            <span>
+                                                                Profit / Loose Kg
+                                                            </span>
+
+                                                            <strong>
+                                                                {currencyFormatter.format(
+                                                                    numberValue(
+                                                                        openingInventoryForm
+                                                                            .secondary_selling_price,
+                                                                    )
+                                                                    - openingCostPerKg,
+                                                                )}
+                                                            </strong>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </section>
+                                    )}
+
+                                    {/* SUMMARY */}
+
+                                    <div className="oim-preview">
+                                        <div className="oim-preview-item">
+                                            <span>
+                                                Product
+                                            </span>
+
+                                            <strong>
+                                                {openingSelectedProduct
+                                                    ?.name
+                                                    ?? 'Not selected'}
+                                            </strong>
+                                        </div>
+
+                                        <div className="oim-preview-item">
+                                            <span>
+                                                Variant
+                                            </span>
+
+                                            <strong>
+                                                {openingSelectedProduct
+                                                    ?.has_variants
+                                                    ? (
+                                                        openingSelectedVariant
+                                                            ?.display_name
+                                                        ?? 'Not selected'
+                                                    )
+                                                    : 'Standard'}
+                                            </strong>
+                                        </div>
+
+                                        <div className="oim-preview-item">
+                                            <span>
+                                                Stored Stock
+                                            </span>
+
+                                            <strong>
+                                                {openingDualEnabled
+                                                    ? (
+                                                        `${formatQuantity(
+                                                            openingPhysicalQuantity,
+                                                        )} Kg`
+                                                    )
+                                                    : (
+                                                        `${formatQuantity(
+                                                            openingInventoryForm
+                                                                .available_quantity,
+                                                        )} ${openingPrimaryUnit}`
+                                                    )}
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <footer className="oim-footer">
+                                {/* <span className="oim-keyboard-note">
+                                    Keyboard: Enter = next field • searchable
+                                    lists use ↑ ↓ + Enter • Esc = close
+                                </span> */}
+
+                                <button
+                                    type="button"
+                                    className="oim-button"
+                                    disabled={
+                                        isOpeningInventorySaving
+                                    }
+                                    onClick={
+                                        closeOpeningInventory
+                                    }
+                                >
+                                    Cancel
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className="oim-button"
+                                    disabled={
+                                        isOpeningInventorySaving
+                                        || isOpeningOptionsLoading
+                                    }
+                                    onClick={() => {
+                                        void saveOpeningInventory(
+                                            true,
+                                        );
+                                    }}
+                                >
+                                    {isOpeningInventorySaving
+                                        ? 'Saving...'
+                                        : 'Save & Add Another'}
+                                </button>
+
+                                <button
+                                    type="submit"
+                                    className="oim-button primary"
+                                    disabled={
+                                        isOpeningInventorySaving
+                                        || isOpeningOptionsLoading
+                                    }
+                                    data-oim-enter-nav="true"
+                                    data-oim-nav-key="opening-submit"
+                                >
+                                    {isOpeningInventorySaving
+                                        ? 'Saving...'
+                                        : 'Save Opening Stock'}
+                                </button>
+                            </footer>
+                        </form>
+                    </div>
+                </div>,
+                document.body,
+            )
+            : null;
 
     const detailsModal =
         selectedProduct
@@ -2236,6 +5546,18 @@ export default function InventoryPage() {
                     </div>
 
                     <div className="inv-header-meta">
+                        <button
+                            type="button"
+                            className="inv-opening-button"
+                            onClick={
+                                openOpeningInventory
+                            }
+                        >
+                            <Icon name="plus" />
+
+                            Add Opening Inventory
+                        </button>
+
                         <span className="inv-total-badge">
                             <Icon name="box" />
 
@@ -2249,6 +5571,15 @@ export default function InventoryPage() {
                         </span>
                     </div>
                 </header>
+
+                {pageSuccessMessage && (
+                    <div
+                        className="inv-success"
+                        role="status"
+                    >
+                        {pageSuccessMessage}
+                    </div>
+                )}
 
                 {errorMessage && (
                     <div
@@ -2584,6 +5915,8 @@ export default function InventoryPage() {
             </div>
 
             {detailsModal}
+
+            {openingInventoryModal}
         </>
     );
 }

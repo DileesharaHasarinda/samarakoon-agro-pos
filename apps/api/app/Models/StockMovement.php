@@ -13,6 +13,9 @@ class StockMovement extends Model
     public const TYPE_PURCHASE_RECEIPT =
     'purchase_receipt';
 
+    public const TYPE_OPENING_INVENTORY =
+    'opening_inventory';
+
     public const TYPE_SALE =
     'sale';
 

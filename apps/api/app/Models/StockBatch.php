@@ -11,6 +11,12 @@ class StockBatch extends Model
 {
     use HasFactory;
 
+    public const SOURCE_PURCHASE =
+    'purchase';
+
+    public const SOURCE_OPENING_INVENTORY =
+    'opening_inventory';
+
     /**
      * Mass assignable fields.
      *
@@ -56,6 +62,14 @@ class StockBatch extends Model
         'product_id',
         'product_variant_id',
         'purchase_item_id',
+
+        /*
+         * Opening inventory does not have a purchase item.
+         *
+         * supplier_id stores the supplier directly for that source.
+         */
+        'supplier_id',
+        'source_type',
 
         'batch_number',
 
@@ -169,6 +183,9 @@ class StockBatch extends Model
             'purchase_item_id' =>
             'integer',
 
+            'supplier_id' =>
+            'integer',
+
             'purchase_cost' =>
             'decimal:2',
 
@@ -248,6 +265,28 @@ class StockBatch extends Model
         return $this->belongsTo(
             PurchaseItem::class,
         );
+    }
+
+    /**
+     * Supplier stored directly on an opening-inventory batch.
+     *
+     * Normal purchase batches can keep this field null because
+     * their supplier remains available through:
+     *
+     * purchaseItem -> purchase -> supplier
+     */
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(
+            Supplier::class,
+            'supplier_id',
+        );
+    }
+
+    public function isOpeningInventory(): bool
+    {
+        return $this->source_type
+            === self::SOURCE_OPENING_INVENTORY;
     }
 
     /**

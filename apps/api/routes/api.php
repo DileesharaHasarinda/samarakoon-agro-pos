@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\DatabaseBackupController;
 use App\Http\Controllers\Api\ExpenseCategoryController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\InventoryAlertController;
+use App\Http\Controllers\Api\OpeningInventoryController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\PurchaseController;
@@ -590,6 +591,24 @@ Route::prefix('v1')
                     [
                         PurchaseController::class,
                         'receive',
+                    ],
+                );
+
+                /*
+                 * OPENING INVENTORY / EXISTING STOCK
+                 *
+                 * This endpoint creates stock directly without creating:
+                 * - a purchase
+                 * - a supplier payable
+                 * - a supplier payment
+                 * - an expense
+                 * - a cash transaction
+                 */
+                Route::post(
+                    '/opening-inventory',
+                    [
+                        OpeningInventoryController::class,
+                        'store',
                     ],
                 );
 

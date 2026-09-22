@@ -3537,14 +3537,14 @@ export default function ReportsPage() {
                                         Full Inventory by Variant and Price
                                     </h3>
 
-                                    <p>
+                                    {/* <p>
                                         Each variant is displayed separately.
                                         If the same variant has different purchase
                                         or sale prices, every unique price combination
                                         is displayed as a separate row. Only rows
                                         that still have current remaining inventory
                                         are shown.
-                                    </p>
+                                    </p> */}
                                 </div>
 
                                 <button

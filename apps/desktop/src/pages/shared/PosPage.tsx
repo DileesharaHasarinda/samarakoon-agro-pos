@@ -6195,15 +6195,6 @@ export default function PosPage({
                         <strong>
                             Training Mode
                         </strong>
-
-                        <span>
-                            This screen now uses the same selling workflow as
-                            New Sale: real batches, variants, selling units,
-                            prices, discounts, customers, payment methods and
-                            receipt printing. Completing here remains a
-                            simulation, so no sale is saved and no stock,
-                            payment, due, cash-register or report record changes.
-                        </span>
                     </div>
                 )}
 
