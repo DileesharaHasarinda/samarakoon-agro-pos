@@ -61,6 +61,7 @@ const COMMON_UNITS = [
     'Bag',
     'Bottle',
     'Box',
+    'Tin',
     'Kilogram',
     'Gram',
     'Litre',
@@ -4187,7 +4188,7 @@ export default function ProductsPage() {
                                                 <h3 className="pm-section-title">
                                                     3. Package Variants
                                                 </h3>
-                                                
+
                                             </div>
 
                                             <button

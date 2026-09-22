@@ -1033,6 +1033,550 @@ class ReportController extends Controller
             ->take(100)
             ->values();
 
+        /*
+         * =========================================================
+         * ALL-TIME FULL INVENTORY / PRICE HISTORY
+         * =========================================================
+         *
+         * This view is intentionally NOT limited by the report date range
+         * and NOT limited to batches with current available stock.
+         *
+         * Rows are separated by:
+         * product + exact variant + purchase cost + selling price +
+         * secondary selling price + units/conversion.
+         *
+         * Therefore a 100g variant with two historical price combinations
+         * is returned as two different rows.
+         */
+        $fullInventoryHistoryBatches =
+            DB::table('stock_batches')
+            ->join(
+                'products',
+                'products.id',
+                '=',
+                'stock_batches.product_id',
+            )
+            ->leftJoin(
+                'categories',
+                'categories.id',
+                '=',
+                'products.category_id',
+            )
+            ->leftJoin(
+                'product_variants',
+                'product_variants.id',
+                '=',
+                'stock_batches.product_variant_id',
+            )
+            ->get([
+                'stock_batches.id',
+                'stock_batches.product_id',
+                'stock_batches.product_variant_id',
+                'stock_batches.received_quantity',
+                'stock_batches.available_quantity',
+                'stock_batches.purchase_cost',
+                'stock_batches.selling_price',
+                'stock_batches.is_dual_unit',
+                'stock_batches.stock_unit',
+                'stock_batches.secondary_unit',
+                'stock_batches.conversion_factor',
+                'stock_batches.secondary_selling_price',
+
+                'products.name AS product_name',
+                'products.unit AS product_unit',
+
+                'product_variants.size_value AS variant_size_value',
+                'product_variants.size_unit AS variant_size_unit',
+                'product_variants.package_unit AS variant_package_unit',
+
+                'categories.id AS category_id',
+                'categories.name AS category_name',
+            ])
+            ->map(
+                function (
+                    object $batch,
+                ): array {
+                    $productUnit =
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->product_unit
+                                ?? null,
+                        )
+                        ?? 'Unit';
+
+                    $variantPackageUnit =
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->variant_package_unit
+                                ?? null,
+                        );
+
+                    $priceUnit =
+                        $variantPackageUnit
+                        ?? $productUnit;
+
+                    $secondaryUnit =
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->secondary_unit
+                                ?? null,
+                        );
+
+                    $storedStockUnit =
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->stock_unit
+                                ?? null,
+                        );
+
+                    $conversionFactor =
+                        max(
+                            1,
+                            (float) (
+                                $batch
+                                ->conversion_factor
+                                ?? 1
+                            ),
+                        );
+
+                    $isDualUnit =
+                        $this->inventoryBoolean(
+                            $batch
+                                ->is_dual_unit
+                                ?? false,
+                        )
+                        || (
+                            $secondaryUnit
+                            !== null
+                            && $conversionFactor > 1
+                        );
+
+                    $stockUnit =
+                        $this->resolveInventoryStockUnit(
+                            $priceUnit,
+                            $isDualUnit,
+                            $storedStockUnit,
+                            $secondaryUnit,
+                            $conversionFactor,
+                        );
+
+                    $variantId =
+                        $batch
+                        ->product_variant_id
+                        !== null
+                        ? (int) $batch
+                            ->product_variant_id
+                        : null;
+
+                    $variantName =
+                        'Standard';
+
+                    if (
+                        $variantId !== null
+                    ) {
+                        $variantSizeValue =
+                            $batch
+                            ->variant_size_value
+                            !== null
+                            ? $this->formatInventoryQuantity(
+                                (float) $batch
+                                    ->variant_size_value,
+                            )
+                            : '';
+
+                        $variantSizeUnit =
+                            $this->cleanInventoryUnit(
+                                $batch
+                                    ->variant_size_unit
+                                    ?? null,
+                            )
+                            ?? '';
+
+                        $variantName =
+                            trim(
+                                $variantSizeValue
+                                    . $variantSizeUnit,
+                            );
+
+                        if (
+                            $variantName === ''
+                        ) {
+                            $variantName =
+                                'Variant #'
+                                . $variantId;
+                        }
+                    }
+
+                    return [
+                        'batch_id' =>
+                        (int) $batch->id,
+
+                        'product_id' =>
+                        (int) $batch
+                            ->product_id,
+
+                        'product_name' =>
+                        (string) $batch
+                            ->product_name,
+
+                        'product_variant_id' =>
+                        $variantId,
+
+                        'variant_name' =>
+                        $variantName,
+
+                        'category_id' =>
+                        $batch
+                            ->category_id
+                            !== null
+                            ? (int) $batch
+                                ->category_id
+                            : 0,
+
+                        'category_name' =>
+                        $this->cleanInventoryUnit(
+                            $batch
+                                ->category_name
+                                ?? null,
+                        )
+                            ?? 'Uncategorized',
+
+                        'price_unit' =>
+                        $priceUnit,
+
+                        'stock_unit' =>
+                        $stockUnit,
+
+                        'secondary_unit' =>
+                        $secondaryUnit,
+
+                        'conversion_factor' =>
+                        round(
+                            $conversionFactor,
+                            6,
+                        ),
+
+                        'purchase_cost' =>
+                        $batch
+                            ->purchase_cost
+                            !== null
+                            ? round(
+                                (float) $batch
+                                    ->purchase_cost,
+                                4,
+                            )
+                            : null,
+
+                        'selling_price' =>
+                        $batch
+                            ->selling_price
+                            !== null
+                            ? round(
+                                (float) $batch
+                                    ->selling_price,
+                                4,
+                            )
+                            : null,
+
+                        'secondary_selling_price' =>
+                        $batch
+                            ->secondary_selling_price
+                            !== null
+                            ? round(
+                                (float) $batch
+                                    ->secondary_selling_price,
+                                4,
+                            )
+                            : null,
+
+                        'received_quantity' =>
+                        round(
+                            max(
+                                0,
+                                (float) (
+                                    $batch
+                                    ->received_quantity
+                                    ?? 0
+                                ),
+                            ),
+                            3,
+                        ),
+
+                        'available_quantity' =>
+                        round(
+                            max(
+                                0,
+                                (float) (
+                                    $batch
+                                    ->available_quantity
+                                    ?? 0
+                                ),
+                            ),
+                            3,
+                        ),
+                    ];
+                },
+            )
+            ->values();
+
+        $fullInventoryRows =
+            $fullInventoryHistoryBatches
+            ->groupBy(
+                function (
+                    array $batch,
+                ): string {
+                    $priceKey =
+                        static function (
+                            mixed $value,
+                        ): string {
+                            if (
+                                $value === null
+                            ) {
+                                return 'NULL';
+                            }
+
+                            return number_format(
+                                (float) $value,
+                                6,
+                                '.',
+                                '',
+                            );
+                        };
+
+                    return implode(
+                        '|',
+                        [
+                            (string) (
+                                $batch['product_id']
+                                ?? 0
+                            ),
+
+                            (string) (
+                                $batch['product_variant_id']
+                                ?? 0
+                            ),
+
+                            mb_strtolower(
+                                (string) (
+                                    $batch['price_unit']
+                                    ?? 'Unit'
+                                ),
+                            ),
+
+                            mb_strtolower(
+                                (string) (
+                                    $batch['stock_unit']
+                                    ?? 'Unit'
+                                ),
+                            ),
+
+                            $priceKey(
+                                $batch['purchase_cost']
+                                    ?? null,
+                            ),
+
+                            $priceKey(
+                                $batch['selling_price']
+                                    ?? null,
+                            ),
+
+                            $priceKey(
+                                $batch['secondary_selling_price']
+                                    ?? null,
+                            ),
+
+                            $priceKey(
+                                $batch['conversion_factor']
+                                    ?? 1,
+                            ),
+                        ],
+                    );
+                },
+            )
+            ->map(
+                function (
+                    Collection $batches,
+                    string $rowKey,
+                ): array {
+                    $first =
+                        $batches->first();
+
+                    return [
+                        'row_key' =>
+                        $rowKey,
+
+                        'product_id' =>
+                        (int) (
+                            $first['product_id']
+                            ?? 0
+                        ),
+
+                        'product_name' =>
+                        (string) (
+                            $first['product_name']
+                            ?? ''
+                        ),
+
+                        'product_variant_id' =>
+                        isset(
+                            $first['product_variant_id'],
+                        )
+                            && $first['product_variant_id']
+                            !== null
+                            ? (int) $first['product_variant_id']
+                            : null,
+
+                        'variant_name' =>
+                        (string) (
+                            $first['variant_name']
+                            ?? 'Standard'
+                        ),
+
+                        'category' => [
+                            'id' =>
+                            (int) (
+                                $first['category_id']
+                                ?? 0
+                            ),
+
+                            'name' =>
+                            (string) (
+                                $first['category_name']
+                                ?? 'Uncategorized'
+                            ),
+                        ],
+
+                        'price_unit' =>
+                        (string) (
+                            $first['price_unit']
+                            ?? 'Unit'
+                        ),
+
+                        'stock_unit' =>
+                        (string) (
+                            $first['stock_unit']
+                            ?? 'Unit'
+                        ),
+
+                        'secondary_unit' =>
+                        $first['secondary_unit']
+                            !== null
+                            ? (string) $first['secondary_unit']
+                            : null,
+
+                        'conversion_factor' =>
+                        (float) (
+                            $first['conversion_factor']
+                            ?? 1
+                        ),
+
+                        'purchase_cost' =>
+                        $first['purchase_cost']
+                            !== null
+                            ? (float) $first['purchase_cost']
+                            : null,
+
+                        'selling_price' =>
+                        $first['selling_price']
+                            !== null
+                            ? (float) $first['selling_price']
+                            : null,
+
+                        'secondary_selling_price' =>
+                        $first['secondary_selling_price']
+                            !== null
+                            ? (float) $first['secondary_selling_price']
+                            : null,
+
+                        'total_received_quantity' =>
+                        round(
+                            (float) $batches
+                                ->sum(
+                                    'received_quantity',
+                                ),
+                            3,
+                        ),
+
+                        'remaining_quantity' =>
+                        round(
+                            (float) $batches
+                                ->sum(
+                                    'available_quantity',
+                                ),
+                            3,
+                        ),
+
+                        'batch_count' =>
+                        $batches->count(),
+                    ];
+                },
+            )
+            /*
+             * Only keep exact variant / price combinations that still have
+             * physical stock in the current inventory.
+             *
+             * Example:
+             * Tomato Seeds | 100g | Cost 100 | Sale 230 | Remaining 0
+             *     -> hidden
+             *
+             * Tomato Seeds | 100g | Cost 150 | Sale 300 | Remaining 10
+             *     -> displayed
+             */
+            ->filter(
+                fn(
+                    array $row,
+                ): bool =>
+                (float) (
+                    $row['remaining_quantity']
+                    ?? 0
+                ) > 0.0001,
+            )
+            ->sortBy(
+                function (
+                    array $row,
+                ): string {
+                    return implode(
+                        '|',
+                        [
+                            mb_strtolower(
+                                (string) (
+                                    $row['product_name']
+                                    ?? ''
+                                ),
+                            ),
+
+                            mb_strtolower(
+                                (string) (
+                                    $row['variant_name']
+                                    ?? ''
+                                ),
+                            ),
+
+                            number_format(
+                                (float) (
+                                    $row['purchase_cost']
+                                    ?? 0
+                                ),
+                                6,
+                                '.',
+                                '',
+                            ),
+
+                            number_format(
+                                (float) (
+                                    $row['selling_price']
+                                    ?? 0
+                                ),
+                                6,
+                                '.',
+                                '',
+                            ),
+                        ],
+                    );
+                },
+            )
+            ->values();
+
         $businessToday =
             $businessNow
             ->toDateString();
@@ -1205,6 +1749,9 @@ class ReportController extends Controller
 
                     'products' =>
                     $inventoryRows,
+
+                    'full_history' =>
+                    $fullInventoryRows,
                 ],
 
                 'generated_at' =>
@@ -1426,9 +1973,9 @@ class ReportController extends Controller
             );
 
         return (
-                $fullPrimaryUnits
-                * $sellingPrice
-            )
+            $fullPrimaryUnits
+            * $sellingPrice
+        )
             + (
                 $looseQuantity
                 * $looseSellingPrice

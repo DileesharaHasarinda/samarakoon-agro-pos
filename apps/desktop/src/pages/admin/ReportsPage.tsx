@@ -7,6 +7,10 @@ import {
 } from 'react';
 
 import {
+    createPortal,
+} from 'react-dom';
+
+import {
     useAuth,
 } from '../../auth/AuthContext';
 
@@ -203,6 +207,1115 @@ type InventorySummaryRow =
         quantity_by_unit?: InventoryQuantityByUnit[];
         quantity_display?: string;
     };
+
+interface FullInventoryHistoryRow {
+    row_key: string;
+
+    product_id: number;
+
+    product_name: string;
+
+    product_variant_id: number | null;
+
+    variant_name: string;
+
+    category: {
+        id: number;
+        name: string;
+    };
+
+    price_unit: string;
+
+    stock_unit: string;
+
+    secondary_unit: string | null;
+
+    conversion_factor: number;
+
+    purchase_cost: number | null;
+
+    selling_price: number | null;
+
+    secondary_selling_price: number | null;
+
+    total_received_quantity: number;
+
+    remaining_quantity: number;
+
+    batch_count: number;
+}
+
+type InventoryWithFullHistory =
+    ReportOverviewData['inventory']
+    & {
+        full_history?: FullInventoryHistoryRow[];
+    };
+
+function allTimeInventoryRows(
+    report:
+        ReportOverviewData
+        | null,
+): FullInventoryHistoryRow[] {
+    if (!report) {
+        return [];
+    }
+
+    const inventory =
+        report
+            .inventory as InventoryWithFullHistory;
+
+    return Array.isArray(
+        inventory.full_history,
+    )
+        ? inventory
+            .full_history
+            .filter(
+                (
+                    row,
+                ) =>
+                    Number(
+                        row
+                            .remaining_quantity
+                        ?? 0,
+                    ) > 0.0001,
+            )
+        : [];
+}
+
+function optionalCurrency(
+    value:
+        number
+        | null,
+): string {
+    if (
+        value === null
+        || !Number.isFinite(
+            Number(
+                value,
+            ),
+        )
+    ) {
+        return 'Not set';
+    }
+
+    return currencyFormatter.format(
+        Number(
+            value,
+        ),
+    );
+}
+
+function triggerDownload(
+    blob: Blob,
+    fileName: string,
+): void {
+    const url =
+        URL.createObjectURL(
+            blob,
+        );
+
+    const anchor =
+        document.createElement(
+            'a',
+        );
+
+    anchor.href =
+        url;
+
+    anchor.download =
+        fileName;
+
+    anchor.style.display =
+        'none';
+
+    document.body.appendChild(
+        anchor,
+    );
+
+    anchor.click();
+
+    anchor.remove();
+
+    window.setTimeout(
+        () => {
+            URL.revokeObjectURL(
+                url,
+            );
+        },
+        1_000,
+    );
+}
+
+function xmlEscape(
+    value:
+        string
+        | number
+        | null,
+): string {
+    if (
+        value === null
+        || value === undefined
+    ) {
+        return '';
+    }
+
+    return String(
+        value,
+    )
+        .replace(
+            /&/g,
+            '&amp;',
+        )
+        .replace(
+            /</g,
+            '&lt;',
+        )
+        .replace(
+            />/g,
+            '&gt;',
+        )
+        .replace(
+            /"/g,
+            '&quot;',
+        )
+        .replace(
+            /'/g,
+            '&apos;',
+        );
+}
+
+function downloadFullInventoryExcel(
+    rows:
+        FullInventoryHistoryRow[],
+): void {
+    const createdDate =
+        businessDateKey();
+
+    const excelRows =
+        rows.map(
+            (
+                row,
+            ) => [
+                    row.product_name,
+                    row.variant_name,
+                    row.category.name,
+
+                    row.purchase_cost,
+
+                    row.selling_price,
+
+                    row.secondary_selling_price,
+
+                    row.price_unit,
+
+                    row.secondary_unit
+                    ?? '',
+
+                    row.total_received_quantity,
+
+                    row.stock_unit,
+
+                    row.remaining_quantity,
+
+                    row.stock_unit,
+
+                    row.batch_count,
+                ],
+        );
+
+    const headers = [
+        'Product',
+        'Variant',
+        'Category',
+        'Cost Per 1 Unit',
+        'Sale Price Per 1 Unit',
+        'Loose Sale Price',
+        'Price Unit',
+        'Loose Unit',
+        'All-Time Purchased',
+        'Purchased Stock Unit',
+        'Current Remaining',
+        'Remaining Stock Unit',
+        'Purchase Lots',
+    ];
+
+    const columnWidths = [
+        180,
+        90,
+        110,
+        110,
+        120,
+        110,
+        90,
+        80,
+        120,
+        110,
+        120,
+        110,
+        85,
+    ];
+
+    const numberIndexes =
+        new Set(
+            [
+                3,
+                4,
+                5,
+                8,
+                10,
+                12,
+            ],
+        );
+
+    const dataRowsXml =
+        excelRows
+            .map(
+                (
+                    row,
+                ) => `
+                    <Row>
+                        ${row
+                        .map(
+                            (
+                                value,
+                                index,
+                            ) => {
+                                if (
+                                    numberIndexes.has(
+                                        index,
+                                    )
+                                    && value !== null
+                                    && value !== ''
+                                    && Number.isFinite(
+                                        Number(
+                                            value,
+                                        ),
+                                    )
+                                ) {
+                                    return `
+                                            <Cell ss:StyleID="NumberCell">
+                                                <Data ss:Type="Number">${Number(
+                                        value,
+                                    )}</Data>
+                                            </Cell>
+                                        `;
+                                }
+
+                                return `
+                                        <Cell>
+                                            <Data ss:Type="String">${xmlEscape(
+                                    value,
+                                )}</Data>
+                                        </Cell>
+                                    `;
+                            },
+                        )
+                        .join('')}
+                    </Row>
+                `,
+            )
+            .join('');
+
+    const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook
+    xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+    xmlns:o="urn:schemas-microsoft-com:office:office"
+    xmlns:x="urn:schemas-microsoft-com:office:excel"
+    xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+    xmlns:html="http://www.w3.org/TR/REC-html40"
+>
+    <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+        <Author>Samarakoon Agro POS</Author>
+        <Title>All-Time Full Inventory</Title>
+        <Created>${new Date().toISOString()}</Created>
+    </DocumentProperties>
+
+    <Styles>
+        <Style ss:ID="Default" ss:Name="Normal">
+            <Alignment
+                ss:Vertical="Center"
+            />
+            <Font
+                ss:FontName="Calibri"
+                ss:Size="11"
+            />
+        </Style>
+
+        <Style ss:ID="Title">
+            <Font
+                ss:FontName="Calibri"
+                ss:Size="16"
+                ss:Bold="1"
+            />
+        </Style>
+
+        <Style ss:ID="Subtitle">
+            <Font
+                ss:FontName="Calibri"
+                ss:Size="10"
+                ss:Color="#667085"
+            />
+        </Style>
+
+        <Style ss:ID="Header">
+            <Alignment
+                ss:Horizontal="Center"
+                ss:Vertical="Center"
+                ss:WrapText="1"
+            />
+            <Font
+                ss:FontName="Calibri"
+                ss:Size="10"
+                ss:Bold="1"
+                ss:Color="#FFFFFF"
+            />
+            <Interior
+                ss:Color="#15803D"
+                ss:Pattern="Solid"
+            />
+            <Borders>
+                <Border
+                    ss:Position="Bottom"
+                    ss:LineStyle="Continuous"
+                    ss:Weight="1"
+                    ss:Color="#D0D5DD"
+                />
+            </Borders>
+        </Style>
+
+        <Style ss:ID="NumberCell">
+            <NumberFormat
+                ss:Format="0.00"
+            />
+        </Style>
+
+        <Style ss:ID="CurrencyCell">
+            <NumberFormat
+                ss:Format="&quot;LKR&quot; #,##0.00"
+            />
+        </Style>
+    </Styles>
+
+    <Worksheet ss:Name="Full Inventory">
+        <Table
+            ss:ExpandedColumnCount="${headers.length}"
+            ss:ExpandedRowCount="${excelRows.length + 4}"
+            x:FullColumns="1"
+            x:FullRows="1"
+        >
+            ${columnWidths
+            .map(
+                (
+                    width,
+                ) =>
+                    `<Column ss:AutoFitWidth="0" ss:Width="${width}" />`,
+            )
+            .join('')}
+
+            <Row ss:Height="24">
+                <Cell
+                    ss:StyleID="Title"
+                    ss:MergeAcross="${headers.length - 1}"
+                >
+                    <Data ss:Type="String">
+                        Samarakoon Agro POS - All-Time Full Inventory
+                    </Data>
+                </Cell>
+            </Row>
+
+            <Row>
+                <Cell
+                    ss:StyleID="Subtitle"
+                    ss:MergeAcross="${headers.length - 1}"
+                >
+                    <Data ss:Type="String">
+                        Generated ${xmlEscape(
+                createdDate,
+            )} - ${rows.length} variant / price rows
+                    </Data>
+                </Cell>
+            </Row>
+
+            <Row />
+
+            <Row ss:Height="28">
+                ${headers
+            .map(
+                (
+                    header,
+                ) => `
+                            <Cell ss:StyleID="Header">
+                                <Data ss:Type="String">${xmlEscape(
+                    header,
+                )}</Data>
+                            </Cell>
+                        `,
+            )
+            .join('')}
+            </Row>
+
+            ${dataRowsXml}
+        </Table>
+
+        <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+            <FreezePanes />
+            <FrozenNoSplit />
+            <SplitHorizontal>4</SplitHorizontal>
+            <TopRowBottomPane>4</TopRowBottomPane>
+            <ActivePane>2</ActivePane>
+            <ProtectObjects>False</ProtectObjects>
+            <ProtectScenarios>False</ProtectScenarios>
+        </WorksheetOptions>
+
+        <AutoFilter
+            x:Range="R4C1:R${excelRows.length + 4}C${headers.length}"
+            xmlns="urn:schemas-microsoft-com:office:excel"
+        />
+    </Worksheet>
+</Workbook>`;
+
+    triggerDownload(
+        new Blob(
+            [
+                '\uFEFF',
+                xml,
+            ],
+            {
+                type:
+                    'application/vnd.ms-excel;charset=utf-8',
+            },
+        ),
+        `samarakoon-all-time-inventory-${createdDate}.xls`,
+    );
+}
+
+function pdfSafeText(
+    value:
+        string
+        | number
+        | null,
+): string {
+    return String(
+        value
+        ?? '',
+    )
+        .normalize(
+            'NFKD',
+        )
+        .replace(
+            /[^\x20-\x7E]/g,
+            '?',
+        )
+        .replace(
+            /\\/g,
+            '\\\\',
+        )
+        .replace(
+            /\(/g,
+            '\\(',
+        )
+        .replace(
+            /\)/g,
+            '\\)',
+        );
+}
+
+function truncatePdfText(
+    value:
+        string,
+    maximumLength:
+        number,
+): string {
+    if (
+        value.length
+        <= maximumLength
+    ) {
+        return value;
+    }
+
+    return `${value.slice(
+        0,
+        Math.max(
+            1,
+            maximumLength - 3,
+        ),
+    )}...`;
+}
+
+interface PdfInventoryColumn {
+    key:
+    | 'product'
+    | 'variant'
+    | 'category'
+    | 'cost'
+    | 'sale'
+    | 'loose'
+    | 'purchased'
+    | 'remaining'
+    | 'lots';
+
+    title: string;
+
+    width: number;
+
+    maxChars: number;
+}
+
+function downloadFullInventoryPdf(
+    rows:
+        FullInventoryHistoryRow[],
+): void {
+    /*
+     * Dependency-free PDF export.
+     *
+     * This intentionally uses the standard PDF Helvetica fonts so the
+     * feature works without adding jspdf/html2canvas dependencies to the
+     * Electron renderer.
+     */
+    const pageWidth =
+        842;
+
+    const pageHeight =
+        595;
+
+    const marginX =
+        24;
+
+    const columns:
+        PdfInventoryColumn[] = [
+            /*
+             * Keep the SAME PDF font sizes.
+             *
+             * The previous PDF used narrow Cost/Sale columns with
+             * maxChars=15, so values such as:
+             *
+             * LKR 500.00 / Packet
+             *
+             * were shortened to:
+             *
+             * LKR 500.00 /...
+             *
+             * The widths below are redistributed across the same A4
+             * landscape page so the complete price unit remains visible.
+             */
+            {
+                key:
+                    'product',
+                title:
+                    'Product',
+                width:
+                    108,
+                maxChars:
+                    22,
+            },
+            {
+                key:
+                    'variant',
+                title:
+                    'Variant',
+                width:
+                    52,
+                maxChars:
+                    10,
+            },
+            {
+                key:
+                    'category',
+                title:
+                    'Category',
+                width:
+                    65,
+                maxChars:
+                    12,
+            },
+            {
+                key:
+                    'cost',
+                title:
+                    'Cost / Unit',
+                width:
+                    108,
+                maxChars:
+                    28,
+            },
+            {
+                key:
+                    'sale',
+                title:
+                    'Sale / Unit',
+                width:
+                    108,
+                maxChars:
+                    28,
+            },
+            {
+                key:
+                    'loose',
+                title:
+                    'Loose Price',
+                width:
+                    96,
+                maxChars:
+                    24,
+            },
+            {
+                key:
+                    'purchased',
+                title:
+                    'All-Time Purchased',
+                width:
+                    100,
+                maxChars:
+                    20,
+            },
+            {
+                key:
+                    'remaining',
+                title:
+                    'Current Remaining',
+                width:
+                    105,
+                maxChars:
+                    20,
+            },
+            {
+                key:
+                    'lots',
+                title:
+                    'Lots',
+                width:
+                    42,
+                maxChars:
+                    7,
+            },
+        ];
+
+    const rowHeight =
+        18;
+
+    const startY =
+        496;
+
+    const bottomY =
+        42;
+
+    const rowsPerPage =
+        Math.max(
+            1,
+            Math.floor(
+                (
+                    startY
+                    - bottomY
+                )
+                / rowHeight,
+            ),
+        );
+
+    const pageCount =
+        Math.max(
+            1,
+            Math.ceil(
+                rows.length
+                / rowsPerPage,
+            ),
+        );
+
+    const textCommand = (
+        x:
+            number,
+        y:
+            number,
+        size:
+            number,
+        value:
+            string,
+        bold = false,
+    ): string =>
+        `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x.toFixed(
+            2,
+        )} ${y.toFixed(
+            2,
+        )} Td (${pdfSafeText(
+            value,
+        )}) Tj ET\n`;
+
+    const lineCommand = (
+        x1:
+            number,
+        y1:
+            number,
+        x2:
+            number,
+        y2:
+            number,
+    ): string =>
+        `0.75 w 0.86 0.88 0.91 RG ${x1.toFixed(
+            2,
+        )} ${y1.toFixed(
+            2,
+        )} m ${x2.toFixed(
+            2,
+        )} ${y2.toFixed(
+            2,
+        )} l S\n`;
+
+    const cellValue = (
+        row:
+            FullInventoryHistoryRow,
+        key:
+            PdfInventoryColumn['key'],
+    ): string => {
+        switch (key) {
+            case 'product':
+                return row
+                    .product_name;
+
+            case 'variant':
+                return row
+                    .variant_name;
+
+            case 'category':
+                return row
+                    .category
+                    .name;
+
+            case 'cost':
+                return row
+                    .purchase_cost
+                    === null
+                    ? 'Not set'
+                    : `LKR ${Number(
+                        row
+                            .purchase_cost,
+                    ).toFixed(
+                        2,
+                    )} / ${row.price_unit}`;
+
+            case 'sale':
+                return row
+                    .selling_price
+                    === null
+                    ? 'Not set'
+                    : `LKR ${Number(
+                        row
+                            .selling_price,
+                    ).toFixed(
+                        2,
+                    )} / ${row.price_unit}`;
+
+            case 'loose':
+                return (
+                    row
+                        .secondary_unit
+                    && row
+                        .secondary_selling_price
+                    !== null
+                )
+                    ? `LKR ${Number(
+                        row
+                            .secondary_selling_price,
+                    ).toFixed(
+                        2,
+                    )} / ${row.secondary_unit}`
+                    : '-';
+
+            case 'purchased':
+                return `${formatQuantity(
+                    row
+                        .total_received_quantity,
+                )} ${row.stock_unit}`;
+
+            case 'remaining':
+                return `${formatQuantity(
+                    row
+                        .remaining_quantity,
+                )} ${row.stock_unit}`;
+
+            case 'lots':
+                return String(
+                    row
+                        .batch_count,
+                );
+
+            default:
+                return '';
+        }
+    };
+
+    const pageStreams:
+        string[] = [];
+
+    for (
+        let pageIndex = 0;
+        pageIndex < pageCount;
+        pageIndex += 1
+    ) {
+        const pageRows =
+            rows.slice(
+                pageIndex
+                * rowsPerPage,
+                (
+                    pageIndex
+                    + 1
+                )
+                * rowsPerPage,
+            );
+
+        let stream =
+            '';
+
+        stream += textCommand(
+            marginX,
+            562,
+            16,
+            'Samarakoon Agro POS - All-Time Full Inventory',
+            true,
+        );
+
+        stream += textCommand(
+            marginX,
+            546,
+            8.5,
+            `Generated: ${businessDateKey()} | Rows: ${rows.length} | Page ${pageIndex + 1} of ${pageCount}`,
+        );
+
+        stream += textCommand(
+            marginX,
+            532,
+            7.5,
+            'Rows are separated by exact product variant and historical price combination.',
+        );
+
+        stream += lineCommand(
+            marginX,
+            520,
+            pageWidth
+            - marginX,
+            520,
+        );
+
+        let x =
+            marginX;
+
+        columns.forEach(
+            (
+                column,
+            ) => {
+                stream += textCommand(
+                    x + 3,
+                    505,
+                    7.2,
+                    truncatePdfText(
+                        column.title,
+                        column.maxChars,
+                    ),
+                    true,
+                );
+
+                x +=
+                    column.width;
+            },
+        );
+
+        stream += lineCommand(
+            marginX,
+            499,
+            pageWidth
+            - marginX,
+            499,
+        );
+
+        let y =
+            startY - 14;
+
+        pageRows.forEach(
+            (
+                row,
+            ) => {
+                let cellX =
+                    marginX;
+
+                columns.forEach(
+                    (
+                        column,
+                    ) => {
+                        const value =
+                            cellValue(
+                                row,
+                                column.key,
+                            );
+
+                        stream += textCommand(
+                            cellX + 3,
+                            y,
+                            6.8,
+                            truncatePdfText(
+                                value,
+                                column.maxChars,
+                            ),
+                        );
+
+                        cellX +=
+                            column.width;
+                    },
+                );
+
+                stream += lineCommand(
+                    marginX,
+                    y - 5,
+                    pageWidth
+                    - marginX,
+                    y - 5,
+                );
+
+                y -=
+                    rowHeight;
+            },
+        );
+
+        pageStreams.push(
+            stream,
+        );
+    }
+
+    const objects:
+        string[] = [
+            '',
+        ];
+
+    objects[1] =
+        '<< /Type /Catalog /Pages 2 0 R >>';
+
+    const pageObjectNumbers =
+        pageStreams.map(
+            (
+                _stream,
+                index,
+            ) =>
+                5
+                + (
+                    index
+                    * 2
+                ),
+        );
+
+    objects[2] =
+        `<< /Type /Pages /Count ${pageStreams.length} /Kids [${pageObjectNumbers
+            .map(
+                (
+                    objectNumber,
+                ) =>
+                    `${objectNumber} 0 R`,
+            )
+            .join(
+                ' ',
+            )}] >>`;
+
+    objects[3] =
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+
+    objects[4] =
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>';
+
+    pageStreams.forEach(
+        (
+            stream,
+            index,
+        ) => {
+            const pageObject =
+                5
+                + (
+                    index
+                    * 2
+                );
+
+            const contentObject =
+                pageObject
+                + 1;
+
+            objects[
+                pageObject
+            ] =
+                `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObject} 0 R >>`;
+
+            objects[
+                contentObject
+            ] =
+                `<< /Length ${stream.length} >>\nstream\n${stream}endstream`;
+        },
+    );
+
+    const encoder =
+        new TextEncoder();
+
+    let pdf =
+        '%PDF-1.4\n';
+
+    const offsets:
+        number[] = [
+            0,
+        ];
+
+    for (
+        let index = 1;
+        index < objects.length;
+        index += 1
+    ) {
+        offsets[
+            index
+        ] =
+            encoder.encode(
+                pdf,
+            ).length;
+
+        pdf +=
+            `${index} 0 obj\n${objects[index]}\nendobj\n`;
+    }
+
+    const xrefOffset =
+        encoder.encode(
+            pdf,
+        ).length;
+
+    pdf +=
+        `xref\n0 ${objects.length}\n`;
+
+    pdf +=
+        '0000000000 65535 f \n';
+
+    for (
+        let index = 1;
+        index < objects.length;
+        index += 1
+    ) {
+        pdf +=
+            `${String(
+                offsets[
+                index
+                ],
+            ).padStart(
+                10,
+                '0',
+            )} 00000 n \n`;
+    }
+
+    pdf +=
+        `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+    triggerDownload(
+        new Blob(
+            [
+                pdf,
+            ],
+            {
+                type:
+                    'application/pdf',
+            },
+        ),
+        `samarakoon-all-time-inventory-${businessDateKey()}.pdf`,
+    );
+}
 
 function formatQuantity(
     value: number,
@@ -1107,6 +2220,336 @@ const reportsPageStyles = `
         background: var(--rp-white) !important;
     }
 
+    /* ---------- All-time full inventory modal ---------- */
+    .rp-full-inventory-backdrop,
+    .rp-full-inventory-backdrop * {
+        box-sizing: border-box !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    }
+
+    .rp-full-inventory-backdrop {
+        --fi-text: #111827;
+        --fi-text-secondary: #344054;
+        --fi-muted: #667085;
+        --fi-subtle: #98a2b3;
+        --fi-border: #e4e7ec;
+        --fi-border-strong: #d0d5dd;
+        --fi-bg: #f8fafc;
+        --fi-white: #ffffff;
+        --fi-green: #15803d;
+        --fi-green-dark: #166534;
+        --fi-blue: #2563eb;
+
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 2147483000 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100vw !important;
+        height: 100dvh !important;
+        margin: 0 !important;
+        padding: 18px !important;
+        background: rgba(15, 23, 42, 0.64) !important;
+        backdrop-filter: blur(5px) !important;
+    }
+
+    .rp-full-inventory-modal {
+        width: min(1460px, calc(100vw - 36px)) !important;
+        height: min(860px, calc(100dvh - 36px)) !important;
+        max-width: calc(100vw - 36px) !important;
+        max-height: calc(100dvh - 36px) !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        display: grid !important;
+        grid-template-rows: auto auto minmax(0, 1fr) !important;
+        overflow: hidden !important;
+        color: var(--fi-text-secondary) !important;
+        background: var(--fi-white) !important;
+        border: 1px solid var(--fi-border-strong) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 28px 90px rgba(15, 23, 42, 0.36) !important;
+    }
+
+    .rp-full-inventory-header {
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        gap: 18px !important;
+        min-width: 0 !important;
+        padding: 18px 20px !important;
+        background: var(--fi-bg) !important;
+        border-bottom: 1px solid var(--fi-border) !important;
+    }
+
+    .rp-full-inventory-header > div {
+        min-width: 0 !important;
+    }
+
+    .rp-full-inventory-header .rp-kicker {
+        display: block !important;
+        margin-bottom: 4px !important;
+        color: var(--fi-green) !important;
+        font-size: 11px !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.06em !important;
+        text-transform: uppercase !important;
+    }
+
+    .rp-full-inventory-header h3 {
+        margin: 0 !important;
+        color: var(--fi-text) !important;
+        font-size: 20px !important;
+        line-height: 1.25 !important;
+    }
+
+    .rp-full-inventory-header p {
+        max-width: 860px !important;
+        margin: 6px 0 0 !important;
+        color: var(--fi-muted) !important;
+        font-size: 12.5px !important;
+        line-height: 1.45 !important;
+    }
+
+    .rp-full-inventory-toolbar {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 12px !important;
+        min-width: 0 !important;
+        padding: 12px 20px !important;
+        background: var(--fi-white) !important;
+        border-bottom: 1px solid var(--fi-border) !important;
+    }
+
+    .rp-full-inventory-toolbar-left,
+    .rp-full-inventory-toolbar-right {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        gap: 9px !important;
+        min-width: 0 !important;
+    }
+
+    .rp-full-inventory-toolbar-left {
+        flex: 1 1 520px !important;
+    }
+
+    .rp-full-inventory-toolbar-right {
+        justify-content: flex-end !important;
+        flex: 0 1 auto !important;
+    }
+
+    .rp-full-inventory-search {
+        width: min(520px, 100%) !important;
+        min-width: 230px !important;
+        height: 40px !important;
+        padding: 0 12px !important;
+        color: var(--fi-text-secondary) !important;
+        font-size: 13px !important;
+        background: var(--fi-bg) !important;
+        border: 1px solid var(--fi-border-strong) !important;
+        border-radius: 8px !important;
+        outline: none !important;
+    }
+
+    .rp-full-inventory-search:focus {
+        border-color: var(--fi-blue) !important;
+        background: var(--fi-white) !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+    }
+
+    .rp-full-inventory-count {
+        color: var(--fi-muted) !important;
+        font-size: 12px !important;
+        font-weight: 650 !important;
+        white-space: nowrap !important;
+    }
+
+    .rp-full-inventory-action {
+        min-height: 38px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 7px !important;
+        padding: 7px 13px !important;
+        color: var(--fi-text-secondary) !important;
+        font-size: 12.5px !important;
+        font-weight: 750 !important;
+        white-space: nowrap !important;
+        background: var(--fi-white) !important;
+        border: 1px solid var(--fi-border-strong) !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        transition: 120ms ease !important;
+    }
+
+    .rp-full-inventory-action:hover {
+        background: var(--fi-bg) !important;
+        border-color: #98a2b3 !important;
+    }
+
+    .rp-full-inventory-action.primary {
+        color: #ffffff !important;
+        background: var(--fi-green) !important;
+        border-color: var(--fi-green) !important;
+    }
+
+    .rp-full-inventory-action.primary:hover {
+        background: var(--fi-green-dark) !important;
+        border-color: var(--fi-green-dark) !important;
+    }
+
+    .rp-full-inventory-body {
+        min-width: 0 !important;
+        min-height: 0 !important;
+        overflow: auto !important;
+        padding: 14px 18px 18px !important;
+        background: #fbfcfd !important;
+    }
+
+    .rp-full-inventory-table-shell {
+        width: 100% !important;
+        overflow: auto !important;
+        background: var(--fi-white) !important;
+        border: 1px solid var(--fi-border) !important;
+        border-radius: 10px !important;
+    }
+
+    .rp-full-inventory-table {
+        width: 100% !important;
+        min-width: 1240px !important;
+        border-collapse: collapse !important;
+        table-layout: auto !important;
+        font-size: 13px !important;
+        background: var(--fi-white) !important;
+    }
+
+    .rp-full-inventory-table thead {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 3 !important;
+    }
+
+    .rp-full-inventory-table thead th {
+        padding: 11px 13px !important;
+        color: var(--fi-muted) !important;
+        font-size: 10.5px !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.035em !important;
+        text-align: left !important;
+        text-transform: uppercase !important;
+        white-space: nowrap !important;
+        background: #f8fafc !important;
+        border-bottom: 1px solid var(--fi-border) !important;
+    }
+
+    .rp-full-inventory-table tbody td {
+        padding: 11px 13px !important;
+        color: var(--fi-text-secondary) !important;
+        vertical-align: middle !important;
+        white-space: nowrap !important;
+        background: var(--fi-white) !important;
+        border-bottom: 1px solid #eef1f4 !important;
+    }
+
+    .rp-full-inventory-table tbody tr:hover td {
+        background: #f9fafb !important;
+    }
+
+    .rp-full-inventory-table tbody tr:last-child td {
+        border-bottom: none !important;
+    }
+
+    .rp-full-inventory-table td strong {
+        display: block !important;
+        color: var(--fi-text) !important;
+        font-weight: 700 !important;
+    }
+
+    .rp-full-inventory-table td small {
+        display: block !important;
+        margin-top: 2px !important;
+        color: var(--fi-subtle) !important;
+        font-size: 11px !important;
+    }
+
+    .rp-full-inventory-table .rp-table-state {
+        padding: 38px 16px !important;
+        color: var(--fi-subtle) !important;
+        text-align: center !important;
+    }
+
+    .rp-variant-pill {
+        display: inline-flex !important;
+        align-items: center !important;
+        min-height: 25px !important;
+        padding: 3px 8px !important;
+        color: #1d4ed8 !important;
+        font-size: 11.5px !important;
+        font-weight: 750 !important;
+        background: #eff6ff !important;
+        border: 1px solid #bfdbfe !important;
+        border-radius: 999px !important;
+    }
+
+    .rp-price-cell strong {
+        display: block !important;
+    }
+
+    .rp-price-cell small {
+        display: block !important;
+        margin-top: 2px !important;
+        color: var(--fi-subtle) !important;
+    }
+
+    .rp-history-note {
+        margin: 10px 2px 0 !important;
+        color: var(--fi-muted) !important;
+        font-size: 11.5px !important;
+        line-height: 1.45 !important;
+    }
+
+    @media (max-width: 860px) {
+        .rp-full-inventory-backdrop {
+            padding: 8px !important;
+        }
+
+        .rp-full-inventory-modal {
+            width: calc(100vw - 16px) !important;
+            height: calc(100dvh - 16px) !important;
+            max-width: calc(100vw - 16px) !important;
+            max-height: calc(100dvh - 16px) !important;
+            border-radius: 12px !important;
+        }
+
+        .rp-full-inventory-header {
+            padding: 14px !important;
+        }
+
+        .rp-full-inventory-toolbar {
+            padding: 10px 14px !important;
+        }
+
+        .rp-full-inventory-toolbar-left,
+        .rp-full-inventory-toolbar-right {
+            width: 100% !important;
+        }
+
+        .rp-full-inventory-toolbar-right {
+            justify-content: flex-start !important;
+        }
+
+        .rp-full-inventory-search {
+            width: 100% !important;
+        }
+
+        .rp-full-inventory-body {
+            padding: 10px !important;
+        }
+    }
+
     /* ---------- Print ---------- */
     @media print {
         #sapo-reports-page .rp-filter-card,
@@ -1160,6 +2603,16 @@ export default function ReportsPage() {
     const [paymentStatus, setPaymentStatus] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
+
+    const [
+        isFullInventoryOpen,
+        setIsFullInventoryOpen,
+    ] = useState(false);
+
+    const [
+        fullInventorySearch,
+        setFullInventorySearch,
+    ] = useState('');
 
     const requestIdRef =
         useRef(
@@ -1287,6 +2740,118 @@ export default function ReportsPage() {
     useEffect(() => {
         void loadReport();
     }, [loadReport]);
+
+    useEffect(() => {
+        if (!isFullInventoryOpen) {
+            return;
+        }
+
+        const previousOverflow =
+            document.body
+                .style
+                .overflow;
+
+        document.body
+            .style
+            .overflow =
+            'hidden';
+
+        const handleKeyDown = (
+            event:
+                KeyboardEvent,
+        ): void => {
+            if (
+                event.key
+                === 'Escape'
+            ) {
+                setIsFullInventoryOpen(
+                    false,
+                );
+            }
+        };
+
+        window.addEventListener(
+            'keydown',
+            handleKeyDown,
+        );
+
+        return () => {
+            document.body
+                .style
+                .overflow =
+                previousOverflow;
+
+            window.removeEventListener(
+                'keydown',
+                handleKeyDown,
+            );
+        };
+    }, [
+        isFullInventoryOpen,
+    ]);
+
+    const fullInventoryRows =
+        allTimeInventoryRows(
+            report,
+        );
+
+    const filteredFullInventoryRows =
+        useMemo(
+            () => {
+                const search =
+                    fullInventorySearch
+                        .trim()
+                        .toLowerCase();
+
+                if (
+                    search === ''
+                ) {
+                    return fullInventoryRows;
+                }
+
+                return fullInventoryRows
+                    .filter(
+                        (
+                            row,
+                        ) =>
+                            [
+                                row.product_name,
+                                row.variant_name,
+                                row.category.name,
+                                row.price_unit,
+                                row.stock_unit,
+                                row.purchase_cost,
+                                row.selling_price,
+                                row.secondary_selling_price,
+                            ]
+                                .filter(
+                                    (
+                                        value,
+                                    ) =>
+                                        value
+                                        !== null
+                                        && value
+                                        !== undefined,
+                                )
+                                .some(
+                                    (
+                                        value,
+                                    ) =>
+                                        String(
+                                            value,
+                                        )
+                                            .toLowerCase()
+                                            .includes(
+                                                search,
+                                            ),
+                                ),
+                    );
+            },
+            [
+                fullInventoryRows,
+                fullInventorySearch,
+            ],
+        );
 
     const chartMaximum = useMemo(
         () => {
@@ -1783,7 +3348,7 @@ export default function ReportsPage() {
                                                 .summary
                                                 .retail_value,
                                         )}
-                                    </strong>                                  
+                                    </strong>
                                 </article>
 
                                 <article>
@@ -1824,6 +3389,22 @@ export default function ReportsPage() {
                                             Inventory is a live current-stock snapshot and is not limited by the selected sales-report date range.
                                         </small>
                                     </div>
+
+                                    <button
+                                        type="button"
+                                        className="rp-primary-button"
+                                        onClick={() => {
+                                            setFullInventorySearch(
+                                                '',
+                                            );
+
+                                            setIsFullInventoryOpen(
+                                                true,
+                                            );
+                                        }}
+                                    >
+                                        View All-Time Full Inventory
+                                    </button>
                                 </header>
 
                                 <div className="rp-table-container">
@@ -1922,6 +3503,361 @@ export default function ReportsPage() {
                     )}
                 </>
             ) : null}
+            {isFullInventoryOpen
+                ? createPortal(
+                    <div
+                        className="rp-full-inventory-backdrop"
+                        role="presentation"
+                        onMouseDown={(
+                            event,
+                        ) => {
+                            if (
+                                event.target
+                                === event.currentTarget
+                            ) {
+                                setIsFullInventoryOpen(
+                                    false,
+                                );
+                            }
+                        }}
+                    >
+                        <section
+                            className="rp-full-inventory-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="All-time full inventory"
+                        >
+                            <header className="rp-full-inventory-header">
+                                <div>
+                                    <span className="rp-kicker">
+                                        All-time stock history
+                                    </span>
+
+                                    <h3>
+                                        Full Inventory by Variant and Price
+                                    </h3>
+
+                                    <p>
+                                        Each variant is displayed separately.
+                                        If the same variant has different purchase
+                                        or sale prices, every unique price combination
+                                        is displayed as a separate row. Only rows
+                                        that still have current remaining inventory
+                                        are shown.
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="rp-full-inventory-action"
+                                    onClick={() => {
+                                        setIsFullInventoryOpen(
+                                            false,
+                                        );
+                                    }}
+                                >
+                                    Close
+                                </button>
+                            </header>
+
+                            <div className="rp-full-inventory-toolbar">
+                                <div className="rp-full-inventory-toolbar-left">
+                                    <input
+                                        type="search"
+                                        className="rp-full-inventory-search"
+                                        value={
+                                            fullInventorySearch
+                                        }
+                                        placeholder="Search product, variant, category, unit or price"
+                                        autoFocus
+                                        onChange={(
+                                            event,
+                                        ) => {
+                                            setFullInventorySearch(
+                                                event
+                                                    .target
+                                                    .value,
+                                            );
+                                        }}
+                                    />
+
+                                    <span className="rp-full-inventory-count">
+                                        Showing
+                                        {' '}
+                                        {
+                                            filteredFullInventoryRows
+                                                .length
+                                        }
+                                        {' '}
+                                        of
+                                        {' '}
+                                        {
+                                            fullInventoryRows
+                                                .length
+                                        }
+                                        {' '}
+                                        variant / price rows
+                                    </span>
+                                </div>
+
+                                <div className="rp-full-inventory-toolbar-right">
+                                    <button
+                                        type="button"
+                                        className="rp-full-inventory-action"
+                                        disabled={
+                                            filteredFullInventoryRows
+                                                .length
+                                            === 0
+                                        }
+                                        onClick={() => {
+                                            downloadFullInventoryExcel(
+                                                filteredFullInventoryRows,
+                                            );
+                                        }}
+                                    >
+                                        Download Excel
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        className="rp-full-inventory-action primary"
+                                        disabled={
+                                            filteredFullInventoryRows
+                                                .length
+                                            === 0
+                                        }
+                                        onClick={() => {
+                                            downloadFullInventoryPdf(
+                                                filteredFullInventoryRows,
+                                            );
+                                        }}
+                                    >
+                                        Download PDF
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="rp-full-inventory-body">
+                                <div className="rp-full-inventory-table-shell">
+                                    <table className="rp-full-inventory-table">
+                                        <thead>
+                                            <tr>
+                                                <th>
+                                                    Product
+                                                </th>
+
+                                                <th>
+                                                    Variant
+                                                </th>
+
+                                                <th>
+                                                    Category
+                                                </th>
+
+                                                <th>
+                                                    Cost / 1 Unit
+                                                </th>
+
+                                                <th>
+                                                    Sale Price / 1 Unit
+                                                </th>
+
+                                                <th>
+                                                    Loose Sale Price
+                                                </th>
+
+                                                <th>
+                                                    All-Time Purchased
+                                                </th>
+
+                                                <th>
+                                                    Current Remaining
+                                                </th>
+
+                                                <th>
+                                                    Purchase Lots
+                                                </th>
+                                            </tr>
+                                        </thead>
+
+                                        <tbody>
+                                            {filteredFullInventoryRows.length
+                                                === 0 ? (
+                                                <tr>
+                                                    <td
+                                                        colSpan={
+                                                            9
+                                                        }
+                                                        className="rp-table-state"
+                                                    >
+                                                        No matching all-time inventory rows found.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                filteredFullInventoryRows
+                                                    .map(
+                                                        (
+                                                            row,
+                                                        ) => (
+                                                            <tr
+                                                                key={
+                                                                    row
+                                                                        .row_key
+                                                                }
+                                                            >
+                                                                <td>
+                                                                    <strong>
+                                                                        {
+                                                                            row
+                                                                                .product_name
+                                                                        }
+                                                                    </strong>
+
+                                                                    <small>
+                                                                        Price unit:
+                                                                        {' '}
+                                                                        {
+                                                                            row
+                                                                                .price_unit
+                                                                        }
+                                                                    </small>
+                                                                </td>
+
+                                                                <td>
+                                                                    <span className="rp-variant-pill">
+                                                                        {
+                                                                            row
+                                                                                .variant_name
+                                                                        }
+                                                                    </span>
+                                                                </td>
+
+                                                                <td>
+                                                                    {
+                                                                        row
+                                                                            .category
+                                                                            .name
+                                                                    }
+                                                                </td>
+
+                                                                <td className="rp-price-cell">
+                                                                    <strong>
+                                                                        {optionalCurrency(
+                                                                            row
+                                                                                .purchase_cost,
+                                                                        )}
+                                                                    </strong>
+
+                                                                    <small>
+                                                                        per 1
+                                                                        {' '}
+                                                                        {
+                                                                            row
+                                                                                .price_unit
+                                                                        }
+                                                                    </small>
+                                                                </td>
+
+                                                                <td className="rp-price-cell">
+                                                                    <strong>
+                                                                        {optionalCurrency(
+                                                                            row
+                                                                                .selling_price,
+                                                                        )}
+                                                                    </strong>
+
+                                                                    <small>
+                                                                        per 1
+                                                                        {' '}
+                                                                        {
+                                                                            row
+                                                                                .price_unit
+                                                                        }
+                                                                    </small>
+                                                                </td>
+
+                                                                <td className="rp-price-cell">
+                                                                    {row
+                                                                        .secondary_unit
+                                                                        ? (
+                                                                            <>
+                                                                                <strong>
+                                                                                    {optionalCurrency(
+                                                                                        row
+                                                                                            .secondary_selling_price,
+                                                                                    )}
+                                                                                </strong>
+
+                                                                                <small>
+                                                                                    per 1
+                                                                                    {' '}
+                                                                                    {
+                                                                                        row
+                                                                                            .secondary_unit
+                                                                                    }
+                                                                                </small>
+                                                                            </>
+                                                                        )
+                                                                        : (
+                                                                            <span>
+                                                                                —
+                                                                            </span>
+                                                                        )}
+                                                                </td>
+
+                                                                <td>
+                                                                    {formatQuantity(
+                                                                        row
+                                                                            .total_received_quantity,
+                                                                    )}
+                                                                    {' '}
+                                                                    {
+                                                                        row
+                                                                            .stock_unit
+                                                                    }
+                                                                </td>
+
+                                                                <td>
+                                                                    {formatQuantity(
+                                                                        row
+                                                                            .remaining_quantity,
+                                                                    )}
+                                                                    {' '}
+                                                                    {
+                                                                        row
+                                                                            .stock_unit
+                                                                    }
+                                                                </td>
+
+                                                                <td>
+                                                                    {
+                                                                        row
+                                                                            .batch_count
+                                                                    }
+                                                                </td>
+                                                            </tr>
+                                                        ),
+                                                    )
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <p className="rp-history-note">
+                                    The table is grouped by exact product,
+                                    exact variant, purchase cost, selling price,
+                                    secondary selling price and unit conversion.
+                                    Rows with zero current remaining inventory are
+                                    hidden. PDF and Excel export only the currently
+                                    visible/search-filtered rows.
+                                </p>
+                            </div>
+                        </section>
+                    </div>,
+                    document.body,
+                )
+                : null}
+
         </div>
     );
 }
