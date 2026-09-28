@@ -1,6 +1,7 @@
 import {
     useCallback,
     useEffect,
+    useRef,
     useState,
 } from 'react';
 
@@ -2234,6 +2235,11 @@ export default function SalesHistoryPage() {
         user,
     } = useAuth();
 
+    const searchInputRef =
+        useRef<HTMLInputElement | null>(
+            null,
+        );
+
     useEffect(
         () => {
             const shellContent =
@@ -2261,6 +2267,38 @@ export default function SalesHistoryPage() {
 
                 shellContent.scrollTop =
                     previousScrollTop;
+            };
+        },
+        [],
+    );
+
+    useEffect(
+        () => {
+            const handleSearchShortcut =
+                (event: KeyboardEvent): void => {
+                    if (
+                        event.key !== 'F1'
+                    ) {
+                        return;
+                    }
+
+                    event.preventDefault();
+
+                    searchInputRef
+                        .current
+                        ?.focus();
+                };
+
+            window.addEventListener(
+                'keydown',
+                handleSearchShortcut,
+            );
+
+            return () => {
+                window.removeEventListener(
+                    'keydown',
+                    handleSearchShortcut,
+                );
             };
         },
         [],
@@ -2733,6 +2771,23 @@ export default function SalesHistoryPage() {
             setSaleDetailsError(
                 '',
             );
+
+            /*
+             * Reset only the sales-history search when the
+             * details window is closed. Date/payment filters
+             * remain unchanged.
+             */
+            setSearchInput(
+                '',
+            );
+
+            setAppliedSearch(
+                '',
+            );
+
+            setPage(
+                1,
+            );
         };
 
     const openReturnModal =
@@ -3161,6 +3216,9 @@ export default function SalesHistoryPage() {
                             </span>
 
                             <input
+                                ref={
+                                    searchInputRef
+                                }
                                 type="search"
                                 className="shp-input shp-search-input"
                                 value={
