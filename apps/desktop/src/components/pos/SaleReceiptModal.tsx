@@ -87,6 +87,7 @@ const SOFTWARE_CREDIT =
 interface SaleReceiptModalProps {
     receipt: SaleReceipt | null;
     onClose: () => void;
+    onPrintSuccess?: () => void;
 }
 
 type NumericValue =
@@ -4491,6 +4492,7 @@ const styles = `
 export default function SaleReceiptModal({
     receipt,
     onClose,
+    onPrintSuccess,
 }: SaleReceiptModalProps) {
     const { token } = useAuth();
 
@@ -5238,6 +5240,8 @@ export default function SaleReceiptModal({
                                 }
                             }
 
+                            onPrintSuccess?.();
+
                             return;
                         }
 
@@ -5257,7 +5261,11 @@ export default function SaleReceiptModal({
                                 result.error
                                 ?? 'Printing failed. Check that the printer is online and try again.',
                             );
+
+                            return;
                         }
+
+                        onPrintSuccess?.();
 
                         return;
                     }
@@ -5359,7 +5367,11 @@ export default function SaleReceiptModal({
                             result.error
                             ?? 'Printing failed. Check that the printer is online and try again.',
                         );
+
+                        return;
                     }
+
+                    onPrintSuccess?.();
                 } catch (error) {
                     setPrintError(
                         error instanceof Error
@@ -5377,6 +5389,7 @@ export default function SaleReceiptModal({
                 isPrinting,
                 isLoadingDevicePrinter,
                 receiptUsesUnicodeRendering,
+                onPrintSuccess,
             ],
         );
 

@@ -4174,6 +4174,13 @@ export default function PosPage({
             null,
         );
 
+    const openPaymentRef =
+        useRef<() => void>(
+            () => {
+                return;
+            },
+        );
+
     const productCardRefs =
         useRef<
             Map<
@@ -6025,6 +6032,81 @@ export default function PosPage({
             );
         };
 
+    openPaymentRef.current =
+        openPayment;
+
+    useEffect(() => {
+        const handlePosShortcut = (
+            event: KeyboardEvent,
+        ): void => {
+            const key =
+                event.key;
+
+            if (key === 'F1') {
+                /*
+                 * F1 behaves like clicking the product-search field.
+                 * Do not move focus behind an open modal/receipt.
+                 */
+                event.preventDefault();
+
+                if (
+                    selectedProduct
+                    || isPaymentOpen
+                    || receipt
+                ) {
+                    return;
+                }
+
+                searchInputRef
+                    .current
+                    ?.focus();
+
+                return;
+            }
+
+            if (key !== 'F4') {
+                return;
+            }
+
+            /*
+             * F4 behaves like clicking "Proceed to Payment".
+             * Keep the same disabled/modal rules as the button.
+             */
+            event.preventDefault();
+
+            if (
+                selectedProduct
+                || isPaymentOpen
+                || receipt
+                || isSubmitting
+                || cart.length === 0
+            ) {
+                return;
+            }
+
+            openPaymentRef
+                .current();
+        };
+
+        window.addEventListener(
+            'keydown',
+            handlePosShortcut,
+        );
+
+        return () => {
+            window.removeEventListener(
+                'keydown',
+                handlePosShortcut,
+            );
+        };
+    }, [
+        selectedProduct,
+        isPaymentOpen,
+        receipt,
+        isSubmitting,
+        cart.length,
+    ]);
+
     const submitSale =
         async (
             values:
@@ -7297,8 +7379,7 @@ export default function PosPage({
                         type="button"
                         className="payment-button"
                         disabled={
-                            cart.length
-                            === 0
+                            cart.length === 0
                             || isSubmitting
                         }
                         onClick={
@@ -7309,7 +7390,7 @@ export default function PosPage({
 
                         {isSubmitting
                             ? 'Processing Sale...'
-                            : 'Proceed to Payment'}
+                            : 'Proceed to Payment (F4)'}
                     </button>
 
                     {cart.length > 0 && (
@@ -7451,6 +7532,17 @@ export default function PosPage({
                     );
 
                     refocusSearch();
+                }}
+                onPrintSuccess={() => {
+                    /*
+                     * A completed print means this sale is finished at the
+                     * counter. Close the receipt and prepare a clean New Sale.
+                     */
+                    setReceipt(
+                        null,
+                    );
+
+                    clearSearch();
                 }}
             />
         </div>
