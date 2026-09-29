@@ -5578,7 +5578,12 @@ export default function PosPage({
             null,
         );
 
-        refocusSearch();
+        /*
+         * Product was successfully added to the cart. Clear the
+         * previous search/filter and return focus to the search field
+         * so the cashier can immediately search or scan the next item.
+         */
+        clearSearch();
     };
 
     const updateCartQuantity = (
